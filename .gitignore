@@ -1,0 +1,18 @@
+node_modules
+dist
+dist-ssr
+*.local
+.DS_Store
+
+# Secrets. Supabase keys land here next — a key committed once stays in the
+# history even after it is deleted, so this goes in before the file exists.
+.env
+.env.*
+!.env.example
+
+# Build and tool caches
+.vite
+*.log
+
+# Contracts downloaded from the running app while testing
+*.contract.json

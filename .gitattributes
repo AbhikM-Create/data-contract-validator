@@ -1,0 +1,11 @@
+# Normalise line endings in the repository to LF. Without this, a commit made
+# on Windows and one made on macOS or CI show every line of a file as changed,
+# which buries real diffs and makes blame useless.
+* text=auto eol=lf
+
+# Binary files must never be line-ending converted.
+*.png binary
+*.jpg binary
+*.ico binary
+*.woff binary
+*.woff2 binary

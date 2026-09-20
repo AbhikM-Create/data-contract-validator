@@ -1,0 +1,75 @@
+:root {
+  color-scheme: light;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  margin: 0;
+  background: #f4f6f8;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+[tabindex]:focus-visible {
+  outline: 2px solid #1f6f8b;
+  outline-offset: 2px;
+}
+
+p {
+  margin: 0;
+}
+
+/* The two layouts that must change shape on a narrow screen. Everything else
+   is auto-fit grids that reflow on their own. */
+
+.staircase-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  align-items: start;
+}
+
+.contracts-layout {
+  display: grid;
+  grid-template-columns: minmax(190px, 220px) minmax(0, 1fr);
+  gap: 20px;
+  align-items: start;
+}
+
+@media (max-width: 760px) {
+  /* A descent across four columns becomes four unreadable slivers on a phone,
+     so the steps stack and the indent carries the descent instead. */
+  .staircase-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .staircase-step {
+    margin-top: 0 !important;
+  }
+
+  .staircase-step:nth-child(2) { margin-left: 14px; }
+  .staircase-step:nth-child(3) { margin-left: 28px; }
+  .staircase-step:nth-child(4) { margin-left: 42px; }
+
+  /* The riser is drawn for a left-to-right descent; stacked, the indent
+     carries the descent and a vertical stub would point at nothing. */
+  .staircase-riser { display: none; }
+
+  .contracts-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .contracts-facets {
+    position: static !important;
+    display: flex;
+    flex-wrap: wrap;
+  }
+}
