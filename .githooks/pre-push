@@ -1,0 +1,36 @@
+#!/bin/sh
+#
+# Runs what CI runs, before the push leaves the machine.
+#
+# This is not branch protection — a server rule the repository enforces on
+# everyone. GitHub Free does not offer that on private repositories, so this
+# stands in: it catches the same mistake (pushing a broken main) at the only
+# other point where it can be caught.
+#
+# It is honest about its limits: it protects this clone only, and `--no-verify`
+# skips it. That is a deliberate escape hatch, not an oversight — a hook you
+# cannot bypass in an emergency is a hook people delete.
+#
+# Enabled with:  git config core.hooksPath .githooks
+
+set -e
+
+echo "pre-push: running lint, tests and build (same as CI)…"
+
+if ! npm run lint --silent; then
+  echo "pre-push: LINT FAILED — push aborted." >&2
+  exit 1
+fi
+
+if ! npm test --silent; then
+  echo "pre-push: TESTS FAILED — push aborted." >&2
+  exit 1
+fi
+
+if ! npm run build --silent; then
+  echo "pre-push: BUILD FAILED — push aborted." >&2
+  exit 1
+fi
+
+echo "pre-push: all green."
+exit 0
