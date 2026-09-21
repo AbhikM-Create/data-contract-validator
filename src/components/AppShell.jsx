@@ -1,11 +1,12 @@
+import { isConfigured, signOut } from '../lib/supabase.js'
 import { ROUTES, go } from '../routes.js'
-import { colors, mono, sans } from '../theme.js'
+import { colors, ghostButton, mono, sans } from '../theme.js'
 
-// The frame every screen sits in: brand, the three destinations, and the trust
-// line. The trust line is part of the chrome rather than one screen's copy,
-// because the claim it makes is true on every screen and a reader should never
-// have to go looking for it.
-export default function AppShell({ route, children }) {
+// The frame every screen sits in: brand, the three destinations, the account,
+// and the trust line. The trust line is part of the chrome rather than one
+// screen's copy, because the claim it makes is true on every screen and a
+// reader should never have to go looking for it.
+export default function AppShell({ route, user, authLoading, children }) {
   const onLanding = route === 'home'
 
   return (
@@ -61,6 +62,32 @@ export default function AppShell({ route, children }) {
               )
             })}
           </nav>
+
+          {isConfigured && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, paddingLeft: 10, borderLeft: `1px solid ${colors.panelEdge}` }}>
+              {/* Nothing is claimed about the account until the session has
+                  actually been restored — showing "Sign in" to someone who is
+                  signed in reads as having been logged out. */}
+              {authLoading ? (
+                <span style={{ fontFamily: sans, fontSize: 12.5, color: colors.faint }}>…</span>
+              ) : user ? (
+                <>
+                  <span
+                    title={user.email}
+                    style={{
+                      fontFamily: sans, fontSize: 12.5, color: colors.mute, maxWidth: 170,
+                      overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                    }}
+                  >
+                    {user.email}
+                  </span>
+                  <button onClick={() => signOut()} style={ghostButton}>Sign out</button>
+                </>
+              ) : (
+                <button onClick={() => go('signin')} style={ghostButton}>Sign in</button>
+              )}
+            </div>
+          )}
         </div>
       </header>
 

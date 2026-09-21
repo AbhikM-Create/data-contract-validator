@@ -10,7 +10,9 @@ export const ROUTES = [
   { id: 'history', label: 'History', blurb: 'Runs you have saved' },
 ]
 
-const IDS = new Set([...ROUTES.map((route) => route.id), 'home'])
+// Reachable but not a destination: signing in is something you do on the way to
+// somewhere else, so it gets a URL without taking a place in the nav.
+const IDS = new Set([...ROUTES.map((route) => route.id), 'home', 'signin'])
 
 function readHash() {
   const raw = window.location.hash.replace(/^#\/?/, '').split('?')[0].trim()

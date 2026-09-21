@@ -6,10 +6,12 @@ import { contractToJson, parseContractFile } from './lib/contractFile.js'
 import { parseCsv, parseCsvFile } from './lib/parseCsv.js'
 import { ruleKey } from './lib/rules.js'
 import { DEFAULT_THRESHOLDS, validate } from './lib/validate.js'
+import { useAuth } from './lib/useAuth.js'
 import { go, useRoute } from './routes.js'
 import ContractsScreen from './screens/ContractsScreen.jsx'
 import HistoryScreen from './screens/HistoryScreen.jsx'
 import LandingScreen from './screens/LandingScreen.jsx'
+import SignInScreen from './screens/SignInScreen.jsx'
 import ValidateScreen from './screens/ValidateScreen.jsx'
 
 // The shell owns the session: the contract being authored and the files being
@@ -17,6 +19,7 @@ import ValidateScreen from './screens/ValidateScreen.jsx'
 // already loaded when you arrive at Validate.
 export default function App() {
   const route = useRoute()
+  const { user, loading: authLoading } = useAuth()
 
   const [baseline, setBaseline] = useState(null)
   const [candidate, setCandidate] = useState(null)
@@ -92,7 +95,7 @@ export default function App() {
   }
 
   return (
-    <AppShell route={route}>
+    <AppShell route={route} user={user} authLoading={authLoading}>
       {route === 'home' && <LandingScreen onLoadSample={loadSample} />}
 
       {route === 'contracts' && (
@@ -136,6 +139,8 @@ export default function App() {
       )}
 
       {route === 'history' && <HistoryScreen />}
+
+      {route === 'signin' && <SignInScreen user={user} />}
     </AppShell>
   )
 }
