@@ -39,7 +39,7 @@ export default function LandingScreen({ onLoadSample }) {
         <Staircase
           layers={EXAMPLE_LAYERS}
           title="What the report tells you"
-          note="An example — revenue arriving 83× too large"
+          note="An example — salaries arriving 83× too large"
         />
       </section>
 

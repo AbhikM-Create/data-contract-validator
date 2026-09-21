@@ -139,5 +139,6 @@ function caption(layers, firstFailure, passedAbove) {
   }
   const names = passedAbove.map((layer) => layer.label)
   const joined = names.length === 1 ? names[0] : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`
-  return `${joined} ${names.length === 1 ? 'passed' : 'all passed'}, and ${lead.label} is where the file stopped. A check that looked only at ${names[0].toLowerCase()} would have called this file fine.`
+  const verb = names.length === 1 ? 'passed' : names.length === 2 ? 'both passed' : 'all passed'
+  return `${joined} ${verb}, and ${lead.label} is where the file stopped. A check that looked only at ${names[0].toLowerCase()} would have called this file fine.`
 }

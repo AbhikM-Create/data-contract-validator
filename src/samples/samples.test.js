@@ -18,39 +18,75 @@ function run(id) {
   expect(baseline.errors).toEqual([])
   expect(candidate.errors).toEqual([])
   const result = validate(inferContract(baseline.rows), candidate.rows)
-  return Object.fromEntries(result.layers.map((layer) => [layer.id, layer.status]).concat([['status', result.status], ['result', result]]))
+  return {
+    ...Object.fromEntries(result.layers.map((layer) => [layer.id, layer.status])),
+    status: result.status,
+    result,
+  }
 }
+
+const layers = ({ schema, semantics, freshness, distribution }) => ({ schema, semantics, freshness, distribution })
 
 describe('sample pairs', () => {
   it('clean: every layer passes', () => {
-    const { status, schema, semantics, freshness, distribution } = run('clean')
-    expect({ schema, semantics, freshness, distribution }).toEqual({
-      schema: 'PASS', semantics: 'PASS', freshness: 'PASS', distribution: 'PASS',
-    })
-    expect(status).toBe('PASS')
+    const outcome = run('clean')
+    expect(layers(outcome)).toEqual({ schema: 'PASS', semantics: 'PASS', freshness: 'PASS', distribution: 'PASS' })
+    expect(outcome.status).toBe('PASS')
   })
 
-  it('distribution break: only the bottom layer objects, and it names revenue_usd', () => {
-    const { schema, semantics, freshness, distribution, result } = run('distribution')
-    expect({ schema, semantics, freshness, distribution }).toEqual({
-      schema: 'PASS', semantics: 'PASS', freshness: 'PASS', distribution: 'FAIL',
-    })
-    expect(result.headline.layerLabel).toBe('Distribution')
-    expect(result.violations.every((v) => v.column === 'revenue_usd')).toBe(true)
-    expect(result.violations.map((v) => v.code)).toContain('central-shift')
+  it('unknown grade: semantics catches it, and schema does not', () => {
+    const outcome = run('valueset')
+    expect(layers(outcome)).toEqual({ schema: 'PASS', semantics: 'FAIL', freshness: 'PASS', distribution: 'PASS' })
+    expect(outcome.result.headline.layerLabel).toBe('Semantics')
+    const violation = outcome.result.violations.find((v) => v.column === 'grade')
+    expect(violation.code).toBe('new-category')
+    expect(violation.message).toContain('Consumer')
   })
 
-  it('schema break: caught at the first gate', () => {
-    const { schema, result } = run('schema')
-    expect(schema).toBe('FAIL')
-    expect(result.headline.layerLabel).toBe('Schema')
-    const byCode = result.violations.filter((v) => v.layer === 'schema').map((v) => `${v.code}:${v.column}`)
+  it('feed stopped: freshness catches it, and the checks above pass', () => {
+    const outcome = run('freshness')
+    expect(layers(outcome)).toEqual({ schema: 'PASS', semantics: 'PASS', freshness: 'FAIL', distribution: 'PASS' })
+    expect(outcome.result.headline.layerLabel).toBe('Freshness')
+    expect(outcome.result.violations.map((v) => v.code)).toContain('stale')
+  })
+
+  it('salaries 83x: only the bottom layer objects, and it names the salary column', () => {
+    const outcome = run('distribution')
+    expect(layers(outcome)).toEqual({ schema: 'PASS', semantics: 'PASS', freshness: 'PASS', distribution: 'FAIL' })
+    expect(outcome.result.headline.layerLabel).toBe('Distribution')
+    expect(outcome.result.violations.every((v) => v.column === 'annual_salary_usd')).toBe(true)
+    expect(outcome.result.violations.map((v) => v.code)).toContain('central-shift')
+  })
+
+  it('columns changed: caught at the first gate', () => {
+    const outcome = run('schema')
+    expect(outcome.schema).toBe('FAIL')
+    expect(outcome.result.headline.layerLabel).toBe('Schema')
+    const byCode = outcome.result.violations.filter((v) => v.layer === 'schema').map((v) => `${v.code}:${v.column}`)
     expect(byCode).toEqual(expect.arrayContaining([
-      'missing-column:revenue_usd',
-      'missing-column:avg_basket_usd',
-      'type-change:order_count',
-      'extra-column:revenue',
-      'extra-column:currency',
+      'missing-column:manager_email',
+      'missing-column:annual_salary_usd',
+      'type-change:employment_status',
+      'extra-column:salary',
+      'extra-column:cost_centre',
     ]))
+  })
+})
+
+// The shipped demo data must stay invented. A real employee record reaching
+// this file would be shipped to everyone who opens the app.
+describe('sample data is synthetic', () => {
+  const everyCsv = SAMPLE_PAIRS.flatMap((sample) => [sample.baseline(), sample.candidate()]).join('\n')
+
+  it('uses only the reserved .example domain for addresses', () => {
+    const domains = [...everyCsv.matchAll(/@([\w.-]+)/g)].map((m) => m[1])
+    expect(domains.length).toBeGreaterThan(0)
+    expect([...new Set(domains)]).toEqual(['meridian.example'])
+  })
+
+  it('carries no trace of the real data this was developed against', () => {
+    for (const forbidden of ['tresvista', 'hrdl', 'EMP0', 'srijit', 'minali', 'arnab']) {
+      expect(everyCsv.toLowerCase()).not.toContain(forbidden.toLowerCase())
+    }
   })
 })
