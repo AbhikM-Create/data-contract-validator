@@ -12,7 +12,7 @@ import { chip, colors, ghostButton, mono, panel, sans, secondaryButton } from '.
 export default function ValidateScreen({
   baseline, candidate, contract, result, rules, thresholds, draft,
   onLoadBaseline, onLoadCandidate, onClearBaseline, onClearCandidate,
-  onThresholdChange, onThresholdReset, onReset, onCheckAnother, onRemoveRule,
+  onThresholdChange, onThresholdReset, onReset, onCheckAnother, onRemoveRule, runNotice,
 }) {
   if (result) {
     return (
@@ -28,6 +28,7 @@ export default function ValidateScreen({
         onReset={onReset}
         onCheckAnother={onCheckAnother}
         onRemoveRule={onRemoveRule}
+        runNotice={runNotice}
       />
     )
   }
@@ -89,7 +90,7 @@ export default function ValidateScreen({
 
 function Report({
   baseline, candidate, contract, result, rules, thresholds,
-  onThresholdChange, onThresholdReset, onReset, onCheckAnother, onRemoveRule,
+  onThresholdChange, onThresholdReset, onReset, onCheckAnother, onRemoveRule, runNotice,
 }) {
   // The comparison half shows drift only. A layer that failed purely because of
   // an authored rule reads PASS here and FAIL in the rules section — which is
@@ -131,6 +132,14 @@ function Report({
           </p>
         )}
       </div>
+
+      {/* The check itself already happened, in this browser, and is on screen.
+          Failing to record it is worth saying and never worth interrupting. */}
+      {runNotice && (
+        <p style={{ fontFamily: sans, fontSize: 12.5, color: colors.warn, lineHeight: 1.5, marginTop: 12 }}>
+          {runNotice} The result above is still correct — only the history entry is missing.
+        </p>
+      )}
 
       {baseline && <Staircase layers={baselineLayers} />}
 

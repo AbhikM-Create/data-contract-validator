@@ -1,10 +1,12 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import AppShell from './components/AppShell.jsx'
 import { defineContract, withRules } from './lib/authoredContract.js'
 import { inferContract } from './lib/contract.js'
 import { contractToJson, parseContractFile } from './lib/contractFile.js'
 import { deleteContract, listContracts, loadContract, saveContract } from './lib/contractStore.js'
 import { parseCsv, parseCsvFile } from './lib/parseCsv.js'
+import { summariseRun } from './lib/runRecord.js'
+import { saveRun } from './lib/runStore.js'
 import { ruleKey } from './lib/rules.js'
 import { DEFAULT_THRESHOLDS, validate } from './lib/validate.js'
 import { useAuth } from './lib/useAuth.js'
@@ -32,6 +34,7 @@ export default function App() {
   const [savedContracts, setSavedContracts] = useState([])
   const [contractsLoading, setContractsLoading] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [runNotice, setRunNotice] = useState(null)
 
   const draft = useMemo(
     () => (baseline && baseline.rows.length > 0 ? inferContract(baseline.rows) : null),
@@ -160,6 +163,36 @@ export default function App() {
     setContractNotice(null)
   }
 
+  // --- run history ----------------------------------------------------------
+  // A run is recorded when a FILE IS CHECKED — not every time the result object
+  // is recomputed. Adjusting a threshold afterwards re-judges what is on screen,
+  // which is exploration; recording each drag of a number input would fill the
+  // history with noise and bury the actual checks.
+  const lastRunKey = useRef(null)
+
+  useEffect(() => {
+    if (!user || !result || !candidate) return
+    const key = [candidate.name, candidate.rows.length, contractId ?? 'unsaved', rules.length, baseline?.name ?? ''].join('|')
+    if (lastRunKey.current === key) return
+    lastRunKey.current = key
+
+    const record = summariseRun({
+      result,
+      contractId,
+      contractName,
+      baselineName: baseline?.name ?? null,
+      candidateName: candidate.name,
+      baselineRows: baseline?.rows.length ?? null,
+      candidateRows: candidate.rows.length,
+    })
+
+    saveRun(record).then(({ error }) => {
+      // The check already happened, in the browser, and is on screen. Failing
+      // to record it is worth saying, never worth interrupting.
+      setRunNotice(error ?? null)
+    })
+  }, [user, result, candidate, baseline, contractId, contractName, rules.length])
+
   const loadSample = (sample) => {
     setBaseline({ ...parseCsv(sample.baseline()), name: sample.baselineName })
     setCandidate({ ...parseCsv(sample.candidate()), name: sample.candidateName })
@@ -225,6 +258,7 @@ export default function App() {
           onReset={reset}
           onCheckAnother={() => setCandidate(null)}
           onRemoveRule={removeRule}
+          runNotice={runNotice}
         />
       )}
 

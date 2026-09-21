@@ -76,3 +76,70 @@ drop trigger if exists contracts_touch_updated_at on public.contracts;
 create trigger contracts_touch_updated_at
   before update on public.contracts
   for each row execute function public.touch_updated_at();
+
+-- ---------------------------------------------------------------------------
+-- Validation runs (final PRD, increment 4)
+--
+-- WHAT THIS STORES: the summary of a check — when, which contract, which file,
+-- how each layer came out, and the SHAPE of each finding (layer, source, code,
+-- column).
+--
+-- WHAT IT MUST NEVER STORE: violation messages or evidence. Those quote real
+-- values out of the file — "row 21: Consumer", a median of 9,608,791.1 — and
+-- storing them would put the checked data in the database while the page still
+-- promises it never leaves the browser. src/lib/runRecord.js is the only thing
+-- that builds these rows, and a test there asserts no value can leak through.
+
+create table if not exists public.validation_runs (
+  id             uuid primary key default gen_random_uuid(),
+  user_id        uuid not null references auth.users (id) on delete cascade default auth.uid(),
+
+  -- Set null rather than cascade: deleting a contract must not erase the
+  -- history of what it caught. contract_name is kept alongside so the run still
+  -- reads correctly once the contract itself is gone.
+  contract_id    uuid references public.contracts (id) on delete set null,
+  contract_name  text,
+
+  baseline_name  text,
+  candidate_name text not null,
+  status         text not null check (status in ('PASS', 'FAIL', 'INSUFFICIENT')),
+
+  layers         jsonb not null default '{}'::jsonb,
+  findings       jsonb not null default '[]'::jsonb,
+  rules_total    integer not null default 0,
+  rules_broken   integer not null default 0,
+  baseline_rows  integer,
+  candidate_rows integer,
+
+  ran_at         timestamptz not null default now(),
+
+  constraint layers_is_object  check (jsonb_typeof(layers) = 'object'),
+  constraint findings_is_array check (jsonb_typeof(findings) = 'array')
+);
+
+comment on table public.validation_runs is
+  'Run summaries. Never store violation messages or evidence — they quote real cell values.';
+
+alter table public.validation_runs enable row level security;
+
+drop policy if exists "read own runs"   on public.validation_runs;
+drop policy if exists "insert own runs" on public.validation_runs;
+drop policy if exists "delete own runs" on public.validation_runs;
+
+create policy "read own runs"
+  on public.validation_runs for select
+  using (auth.uid() = user_id);
+
+create policy "insert own runs"
+  on public.validation_runs for insert
+  with check (auth.uid() = user_id);
+
+create policy "delete own runs"
+  on public.validation_runs for delete
+  using (auth.uid() = user_id);
+
+-- A run is a record of something that happened; there is no update policy,
+-- because rewriting history is not an operation this app should offer.
+
+create index if not exists validation_runs_user_ran_idx
+  on public.validation_runs (user_id, ran_at desc);
