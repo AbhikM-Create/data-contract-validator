@@ -1,8 +1,9 @@
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import AppShell from './components/AppShell.jsx'
 import { defineContract, withRules } from './lib/authoredContract.js'
 import { inferContract } from './lib/contract.js'
 import { contractToJson, parseContractFile } from './lib/contractFile.js'
+import { deleteContract, listContracts, loadContract, saveContract } from './lib/contractStore.js'
 import { parseCsv, parseCsvFile } from './lib/parseCsv.js'
 import { ruleKey } from './lib/rules.js'
 import { DEFAULT_THRESHOLDS, validate } from './lib/validate.js'
@@ -27,6 +28,10 @@ export default function App() {
   const [rules, setRules] = useState([])
   const [contractName, setContractName] = useState('')
   const [contractNotice, setContractNotice] = useState(null)
+  const [contractId, setContractId] = useState(null)
+  const [savedContracts, setSavedContracts] = useState([])
+  const [contractsLoading, setContractsLoading] = useState(false)
+  const [saving, setSaving] = useState(false)
 
   const draft = useMemo(
     () => (baseline && baseline.rows.length > 0 ? inferContract(baseline.rows) : null),
@@ -63,7 +68,7 @@ export default function App() {
     setContractNotice({ tone: 'good', text: `Saved ${rules.length} rule${rules.length === 1 ? '' : 's'} to ${safeName}.contract.json. Load it back here any time to check another file.` })
   }
 
-  const loadContract = async (file) => {
+  const loadContractFile = async (file) => {
     const loaded = parseContractFile(await file.text())
     if (loaded.error) {
       setContractNotice({ tone: 'bad', text: loaded.error })
@@ -71,6 +76,9 @@ export default function App() {
     }
     setRules(loaded.rules)
     setContractName(loaded.name)
+    // A contract read from a file is not the saved row that happens to be open;
+    // saving it should create a new one rather than overwrite something else.
+    setContractId(null)
     setContractNotice(loaded.skipped.length > 0
       ? {
           tone: 'warn',
@@ -78,6 +86,78 @@ export default function App() {
           details: loaded.skipped.map((s) => `${s.rule?.column ?? '(no column)'}: ${s.reason}`),
         }
       : { tone: 'good', text: `Loaded "${loaded.name}" — ${loaded.rules.length} rule${loaded.rules.length === 1 ? '' : 's'}, now checked on every file you validate.` })
+  }
+
+  // --- saved contracts ------------------------------------------------------
+  const refreshContracts = useCallback(async () => {
+    if (!user) {
+      setSavedContracts([])
+      return
+    }
+    setContractsLoading(true)
+    const { contracts, error } = await listContracts()
+    setSavedContracts(contracts)
+    setContractsLoading(false)
+    if (error) setContractNotice({ tone: 'bad', text: error })
+  }, [user])
+
+  // Signing in or out changes whose contracts these are, so the list is rebuilt
+  // rather than left showing the previous account's names. This is an effect
+  // synchronising with an external system — the database — which is the case
+  // the rule below exists to allow; the state it sets is the fetch result.
+  // oxlint-disable-next-line react/set-state-in-effect
+  useEffect(() => { refreshContracts() }, [refreshContracts])
+
+  const saveToAccount = async () => {
+    setSaving(true)
+    const { contract: saved, error } = await saveContract({ id: contractId, name: contractName, rules })
+    setSaving(false)
+    if (error) {
+      setContractNotice({ tone: 'bad', text: error })
+      return
+    }
+    setContractId(saved.id)
+    setContractName(saved.name)
+    setContractNotice({ tone: 'good', text: `Saved "${saved.name}" to your account — ${rules.length} rule${rules.length === 1 ? '' : 's'}.` })
+    refreshContracts()
+  }
+
+  const openFromAccount = async (id) => {
+    const { contract: opened, skipped, error } = await loadContract(id)
+    if (error) {
+      setContractNotice({ tone: 'bad', text: error })
+      return
+    }
+    setContractId(opened.id)
+    setContractName(opened.name)
+    setRules(opened.rules)
+    setContractNotice(skipped.length > 0
+      ? {
+          tone: 'warn',
+          text: `Opened "${opened.name}" with ${opened.rules.length} rule${opened.rules.length === 1 ? '' : 's'}, but ${skipped.length} could not be read and ${skipped.length === 1 ? 'is' : 'are'} NOT being checked.`,
+          details: skipped.map((s) => `${s.rule?.column ?? '(no column)'}: ${s.reason}`),
+        }
+      : { tone: 'good', text: `Opened "${opened.name}" — ${opened.rules.length} rule${opened.rules.length === 1 ? '' : 's'}, now checked on every file you validate.` })
+  }
+
+  const removeFromAccount = async (id) => {
+    const { error } = await deleteContract(id)
+    if (error) {
+      setContractNotice({ tone: 'bad', text: error })
+      return
+    }
+    // The open contract no longer exists anywhere; keeping its id would make
+    // the next save fail against a row that is gone.
+    if (id === contractId) setContractId(null)
+    setContractNotice({ tone: 'good', text: 'Contract deleted.' })
+    refreshContracts()
+  }
+
+  const newContract = () => {
+    setContractId(null)
+    setContractName('')
+    setRules([])
+    setContractNotice(null)
   }
 
   const loadSample = (sample) => {
@@ -92,6 +172,7 @@ export default function App() {
     setRules([])
     setContractName('')
     setContractNotice(null)
+    setContractId(null)
   }
 
   return (
@@ -107,7 +188,16 @@ export default function App() {
           contractName={contractName}
           contractNotice={contractNotice}
           onName={setContractName}
-          onLoadContract={loadContract}
+          onLoadContract={loadContractFile}
+          onSaveContract={saveToAccount}
+          onOpenContract={openFromAccount}
+          onDeleteContract={removeFromAccount}
+          onNewContract={newContract}
+          savedContracts={savedContracts}
+          contractsLoading={contractsLoading}
+          contractId={contractId}
+          saving={saving}
+          user={user}
           onDownloadContract={downloadContract}
           onLoadBaseline={(file) => loadFile(file, setBaseline)}
           onClearBaseline={() => setBaseline(null)}

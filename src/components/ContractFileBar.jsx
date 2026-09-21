@@ -1,11 +1,12 @@
 import { useRef } from 'react'
-import { colors, mono, sans } from '../theme.js'
+import { colors, mono, primaryButton, sans } from '../theme.js'
 
 // Naming, downloading and loading a contract. A contract that only exists in
 // one browser tab is not a contract, so this is what lets it outlive the
 // session — and, once there is a database, it is the same spec that gets stored.
-export default function ContractFileBar({ name, onName, rules, onLoad, onDownload, notice }) {
+export default function ContractFileBar({ name, onName, rules, onLoad, onDownload, notice, onSave, saving, signedIn }) {
   const inputRef = useRef(null)
+  const empty = rules.length === 0
 
   return (
     <div style={{ marginTop: 14 }}>
@@ -22,7 +23,21 @@ export default function ContractFileBar({ name, onName, rules, onLoad, onDownloa
             fontFamily: sans, fontSize: 13, padding: '8px 10px', outline: 'none',
           }}
         />
-        <button onClick={() => inputRef.current?.click()} style={secondary}>Load a contract</button>
+        {signedIn && (
+          <button
+            onClick={onSave}
+            disabled={empty || saving}
+            title={empty ? 'Write a rule first — there is nothing to save yet.' : undefined}
+            style={{
+              ...primary,
+              opacity: empty || saving ? 0.5 : 1,
+              cursor: empty || saving ? 'default' : 'pointer',
+            }}
+          >
+            {saving ? 'Saving…' : 'Save to account'}
+          </button>
+        )}
+        <button onClick={() => inputRef.current?.click()} style={secondary}>Load a file</button>
         <button
           onClick={onDownload}
           disabled={rules.length === 0}
@@ -67,6 +82,12 @@ export default function ContractFileBar({ name, onName, rules, onLoad, onDownloa
       )}
     </div>
   )
+}
+
+const primary = {
+  ...primaryButton,
+  fontSize: 13,
+  padding: '8px 13px',
 }
 
 const secondary = {

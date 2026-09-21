@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import ContractFileBar from '../components/ContractFileBar.jsx'
 import RuleEditor from '../components/RuleEditor.jsx'
+import SavedContracts from '../components/SavedContracts.jsx'
 import UploadCard from '../components/UploadCard.jsx'
 import { describeRule, ruleKey, ruleLayer } from '../lib/rules.js'
 import { LAYERS } from '../lib/validate.js'
@@ -23,6 +24,8 @@ export default function ContractsScreen({
   contract, draft, baseline, rules, contractName, contractNotice,
   onName, onLoadContract, onDownloadContract, onLoadBaseline, onClearBaseline,
   onAddRule, onRemoveRule, onClearRules,
+  savedContracts, contractsLoading, contractId, saving, user,
+  onSaveContract, onOpenContract, onDeleteContract, onNewContract,
 }) {
   const [facet, setFacet] = useState('all')
   const [query, setQuery] = useState('')
@@ -50,15 +53,30 @@ export default function ContractsScreen({
         action={rules.length > 0 ? <button onClick={() => go('validate')} style={secondaryButton}>Use in a validation →</button> : null}
       />
 
-      <div style={{ ...panel, padding: '16px 18px', marginTop: 20 }}>
-        <span style={label}>Contract</span>
-        <ContractFileBar
-          name={contractName}
-          onName={onName}
-          rules={rules}
-          onLoad={onLoadContract}
-          onDownload={onDownloadContract}
-          notice={contractNotice}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 14, marginTop: 20, alignItems: 'start' }}>
+        <div style={{ ...panel, padding: '16px 18px' }}>
+          <span style={label}>{contractId ? 'Editing a saved contract' : 'Contract'}</span>
+          <ContractFileBar
+            name={contractName}
+            onName={onName}
+            rules={rules}
+            onLoad={onLoadContract}
+            onDownload={onDownloadContract}
+            notice={contractNotice}
+            onSave={onSaveContract}
+            saving={saving}
+            signedIn={Boolean(user)}
+          />
+        </div>
+
+        <SavedContracts
+          contracts={savedContracts}
+          loading={contractsLoading}
+          openId={contractId}
+          signedIn={Boolean(user)}
+          onOpen={onOpenContract}
+          onDelete={onDeleteContract}
+          onNew={onNewContract}
         />
       </div>
 

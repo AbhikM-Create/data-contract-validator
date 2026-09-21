@@ -74,13 +74,7 @@ export function parseContractFile(text) {
     return fail('this contract has no rules list')
   }
 
-  const rules = []
-  const skipped = []
-  for (const rule of parsed.rules) {
-    const issue = ruleIssue(rule)
-    if (issue) skipped.push({ rule, reason: issue })
-    else rules.push(cleanRule(rule))
-  }
+  const { rules, skipped } = readRules(parsed.rules)
 
   return {
     name: typeof parsed.name === 'string' && parsed.name.trim() ? parsed.name.trim() : 'Untitled contract',
@@ -93,4 +87,22 @@ export function parseContractFile(text) {
 
 function fail(reason) {
   return { name: null, savedAt: null, rules: [], skipped: [], error: `Couldn’t load this contract — ${reason}.` }
+}
+
+// readRules(raw) -> { rules, skipped }
+//
+// Shared by every route a contract can arrive on — a JSON file, a database row,
+// whatever comes next. A rule this version cannot read is REPORTED, never
+// dropped in silence, and that judgement has to be made in one place: two
+// copies of it would eventually disagree, and the disagreement would be a
+// contract that quietly enforces less than it claims.
+export function readRules(raw) {
+  const rules = []
+  const skipped = []
+  for (const rule of Array.isArray(raw) ? raw : []) {
+    const issue = ruleIssue(rule)
+    if (issue) skipped.push({ rule, reason: issue })
+    else rules.push(cleanRule(rule))
+  }
+  return { rules, skipped }
 }
