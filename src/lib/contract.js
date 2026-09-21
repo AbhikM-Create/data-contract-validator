@@ -130,6 +130,7 @@ export function profileColumn(name, values) {
     profile.oldest = stamps[0] ?? null
     profile.newest = stamps[stamps.length - 1] ?? null
     profile.cadenceMs = medianCadence(stamps)
+    profile.cadenceSpread = cadenceSpread(stamps)
     profile.stamps = stamps
   }
 
@@ -155,6 +156,30 @@ function medianCadence(sortedStamps) {
   for (let i = 1; i < distinct.length; i += 1) gaps.push(distinct[i] - distinct[i - 1])
   gaps.sort((a, b) => a - b)
   return quantile(gaps, 0.5)
+}
+
+// How regular those gaps are: the interquartile range over the median.
+//
+// A median gap alone cannot tell a SCHEDULE from a series of EVENTS, and only a
+// schedule implies anything about when the next row should arrive. This is what
+// separates them. A feed that runs daily has gaps that barely vary and scores 0;
+// a column of business dates scatters — hire dates 17 to 472 days apart score
+// around 0.7.
+//
+// Interquartile range rather than min/max, so one backfill or one quiet summer
+// cannot on its own make a regular feed look irregular.
+function cadenceSpread(sortedStamps) {
+  const distinct = [...new Set(sortedStamps)]
+  // Under four gaps there are no quartiles worth the name.
+  if (distinct.length < 5) return null
+
+  const gaps = []
+  for (let i = 1; i < distinct.length; i += 1) gaps.push(distinct[i] - distinct[i - 1])
+  gaps.sort((a, b) => a - b)
+
+  const median = quantile(gaps, 0.5)
+  if (!median) return null
+  return (quantile(gaps, 0.75) - quantile(gaps, 0.25)) / median
 }
 
 const CADENCE_UNITS = [
@@ -221,6 +246,7 @@ export function inferContract(rows, options = {}) {
     byName: new Map(columns.map((column) => [column.name, column])),
     dateColumn: dateColumn ? dateColumn.name : null,
     cadenceMs: dateColumn ? dateColumn.cadenceMs : null,
+    cadenceSpread: dateColumn ? dateColumn.cadenceSpread : null,
     newest: dateColumn ? dateColumn.newest : null,
     oldest: dateColumn ? dateColumn.oldest : null,
     sufficient: reasons.length === 0,

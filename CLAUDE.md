@@ -68,12 +68,33 @@ Verify with `node scripts/verify-authored-contract.mjs` — it runs a hand-writt
 contract against the real HR snapshots AND against deliberately broken
 copies, because a rule that never fires looks correct for the wrong reason.
 
-### Final build (PRD) — screens, and the frozen engine
-THE ENGINE IS FROZEN. `inferContract`, `validate`, the four layer checks and
-their thresholds are verified against real data and must not be modified,
-re-tuned or "improved". All remaining work is UI, routing, auth and
-persistence AROUND them. If a requirement seems to need an engine change,
-stop and flag it rather than editing `src/lib/`.
+### Final build (PRD) — screens, and a once-frozen engine
+The PRD froze the engine, and it stayed frozen for that whole build: routing,
+auth, persistence and History were added around it without touching a
+detection rule. Default to that posture — an engine edit needs a reason and
+re-verification against real data, not a hunch.
+
+It was unfrozen ONCE, deliberately, to fix two false alarms found against real
+HR snapshots. Both fixes were re-verified against those same files and not
+only against unit tests, which is the bar any future engine change must clear.
+
+### The two false alarms, and what fixed them
+**A median gap is not a cadence.** Freshness read `effective_from` — business
+dates 17 to 472 days apart — as an update schedule, and called a healthy file
+three weeks dead. Contracts now carry `cadenceSpread` (interquartile range over
+median: 0 for a daily feed, 0.69 for those hire dates). Above
+`cadenceIrregularity` the staleness check declines to judge and says why. The
+went-backwards check needs no cadence and always runs.
+
+**A blank is not always missing data.** `effective_to` went 0% → 95.5% blank
+and distribution called it an upstream failure. It was a column that had become
+conditional: blank exactly where `is_current` is `Y`. `explainBlanks()` looks
+for one value of one other column that covers nearly all the blanks AND is
+nearly always blank itself — both tests, or any sufficiently frequent value
+would "explain" anything. When the explaining value is NEW, distribution stays
+quiet, because semantics already reports that new kind of row and one event
+should not be reported twice; when the value existed in the baseline, the
+violation names the condition instead of asserting a breakage.
 
 Structure: `routes.js` (hash routing, no router dependency — the app is served
 as static files and a hash route survives a refresh with no server rewrites),

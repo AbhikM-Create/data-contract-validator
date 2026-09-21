@@ -25,6 +25,7 @@ export const DEFAULT_THRESHOLDS = {
   rowCountChangeShare: 0.3,
   nullRateJumpPoints: 0.1,
   freshnessCadenceMultiple: 3,
+  cadenceIrregularity: 0.5,
   newCategoryShare: 0.005,
   droppedCategoryShare: 0.05,
   unitShiftTolerance: 0.05,
@@ -56,6 +57,10 @@ export const THRESHOLD_FIELDS = [
   {
     key: 'freshnessCadenceMultiple', layer: 'freshness', label: 'Staleness allowance', unit: '× cadence', scale: 1, step: 0.5, min: 1,
     help: 'How many update intervals the newest row may lag behind now before the data counts as stale.',
+  },
+  {
+    key: 'cadenceIrregularity', layer: 'freshness', label: 'Cadence irregularity', unit: '', scale: 1, step: 0.1, min: 0,
+    help: 'Above this much scatter in the gaps between dates, the column is treated as business dates rather than a scheduled feed, and staleness is not judged.',
   },
   {
     key: 'newCategoryShare', layer: 'semantics', label: 'Unseen categories', unit: '%', scale: 100, step: 0.1, min: 0, max: 100,
@@ -239,7 +244,15 @@ function checkFreshness(contract, candidate, thresholds, now) {
   const ageMs = now - actual.newest
   const cadence = describeCadence(contract.cadenceMs)
 
-  if (ageMs > allowedMs) {
+  // A median gap is only an UPDATE CADENCE when the gaps are regular. Business
+  // dates — when someone was hired, when a role took effect — have a median too,
+  // and it predicts nothing: the next row arrives when the next event happens.
+  // Judging staleness against that calls a healthy file dead because nobody
+  // changed role recently. Where the gaps scatter, this declines to judge rather
+  // than guessing; the went-backwards check below needs no cadence and still runs.
+  const irregular = contract.cadenceSpread !== null && contract.cadenceSpread > thresholds.cadenceIrregularity
+
+  if (!irregular && ageMs > allowedMs) {
     violations.push(violation(
       'freshness', 'stale', contract.dateColumn,
       `The newest row in the new file is dated ${formatDate(actual.newest)}, which is ${humanDuration(ageMs)} old. The baseline updates ${cadence}, so anything older than ${humanDuration(allowedMs)} means the feed has stopped arriving.`,
@@ -253,6 +266,13 @@ function checkFreshness(contract, candidate, thresholds, now) {
       `The new file's newest row (${formatDate(actual.newest)}) is older than the baseline file's newest row (${formatDate(expected.newest)}). The new file is not a later snapshot — it may be a re-run of an old extract.`,
       `${formatDate(actual.newest)} < ${formatDate(expected.newest)}`,
     ))
+  }
+
+  if (irregular && violations.length === 0) {
+    return {
+      skipped: `"${contract.dateColumn}" holds business dates arriving irregularly, not a feed on a schedule, so there is no cadence to call this file late against. Whether it moved forward is still checked.`,
+      violations: [],
+    }
   }
 
   return { skipped: null, violations }
@@ -274,7 +294,7 @@ function humanDuration(ms) {
 }
 
 // --- layer 4: distribution --------------------------------------------------
-function checkDistribution(contract, candidate, comparable, thresholds) {
+function checkDistribution(contract, candidate, comparable, thresholds, rows) {
   if (candidate.rowCount < MIN_CANDIDATE_ROWS_FOR_STATS) {
     return {
       skipped: `The new file has only ${plural(candidate.rowCount, 'row')} — too few for a mean, a range or a null rate to describe anything. Distribution is not being judged.`,
@@ -316,15 +336,79 @@ function checkDistribution(contract, candidate, comparable, thresholds) {
 
     const nullJump = actual.nullRate - expected.nullRate
     if (nullJump > thresholds.nullRateJumpPoints) {
-      violations.push(violation(
-        'distribution', 'null-rate', expected.name,
-        `"${expected.name}" is blank in ${pct(actual.nullRate)} of rows in the new file, up from ${pct(expected.nullRate)} in the baseline. Something upstream has stopped populating it for part of the data.`,
-        `null rate ${pct(expected.nullRate)} → ${pct(actual.nullRate)}`,
-      ))
+      const explained = explainBlanks(expected.name, rows, candidate, contract)
+
+      if (explained?.valueIsNew) {
+        // The blanks are not missing data: they are what this column looks like
+        // for a kind of row the baseline never held — an end date on a record
+        // that has not ended. The semantics layer already reports that new kind
+        // of row, which is the actual change; saying it again here as "something
+        // upstream has stopped populating it" would be both a second report and
+        // a false one.
+      } else if (explained) {
+        violations.push(violation(
+          'distribution', 'null-rate', expected.name,
+          `"${expected.name}" is blank in ${pct(actual.nullRate)} of rows in the new file, up from ${pct(expected.nullRate)} in the baseline — and it is blank wherever "${explained.column}" is "${explained.value}" (${explained.blanks} of ${explained.rowsWithValue} such rows). The column has become conditional on something it was not conditional on before.`,
+          `blank where ${explained.column} = ${explained.value} · null rate ${pct(expected.nullRate)} → ${pct(actual.nullRate)}`,
+        ))
+      } else {
+        violations.push(violation(
+          'distribution', 'null-rate', expected.name,
+          `"${expected.name}" is blank in ${pct(actual.nullRate)} of rows in the new file, up from ${pct(expected.nullRate)} in the baseline. Something upstream has stopped populating it for part of the data.`,
+          `null rate ${pct(expected.nullRate)} → ${pct(actual.nullRate)}`,
+        ))
+      }
     }
   }
 
   return { skipped: null, violations }
+}
+
+// Why is this column blank? A share of blanks is a number; a REASON is what a
+// reader can act on. This looks for one value of one other column that accounts
+// for nearly all the blanks and is nearly always blank itself — "empty wherever
+// is_current is Y" — which is the difference between a column that has broken
+// and a column that is conditional.
+//
+// Both tests are needed. Without the second, any value common enough to cover
+// the blanks would "explain" them; a column blank in 90% of rows would be
+// explained by whichever value happens to be most frequent.
+const BLANKS_EXPLAINED = 0.95
+
+function explainBlanks(columnName, rows, candidate, contract) {
+  const blankRows = rows.filter((row) => isBlank(row[columnName]))
+  if (blankRows.length === 0) return null
+
+  for (const profile of candidate.columns) {
+    if (profile.name === columnName) continue
+    if (profile.type !== TYPES.CATEGORICAL && profile.type !== TYPES.BOOLEAN) continue
+
+    const blanksByValue = new Map()
+    for (const row of blankRows) {
+      const value = String(row[profile.name] ?? '').trim()
+      if (value === '') continue
+      blanksByValue.set(value, (blanksByValue.get(value) ?? 0) + 1)
+    }
+
+    for (const [value, blanks] of blanksByValue) {
+      const rowsWithValue = profile.counts?.get(value) ?? 0
+      const explainsTheBlanks = blanks / blankRows.length >= BLANKS_EXPLAINED
+      const alwaysBlankThere = rowsWithValue > 0 && blanks / rowsWithValue >= BLANKS_EXPLAINED
+
+      if (explainsTheBlanks && alwaysBlankThere) {
+        const baselineProfile = contract.byName.get(profile.name)
+        return {
+          column: profile.name,
+          value,
+          blanks,
+          rowsWithValue,
+          valueIsNew: !(baselineProfile?.domain ?? []).includes(value),
+        }
+      }
+    }
+  }
+
+  return null
 }
 
 function centralShift(expected, actual) {
@@ -489,7 +573,7 @@ export function validate(rawContract, candidateRows, options = {}) {
         schema: { violations: checkSchema(contract, candidate), skipped: null },
         semantics: { violations: checkSemantics(contract, candidate, comparable, thresholds), skipped: null },
         freshness: checkFreshness(contract, candidate, thresholds, now),
-        distribution: checkDistribution(contract, candidate, comparable, thresholds),
+        distribution: checkDistribution(contract, candidate, comparable, thresholds, rows),
       }
     : {
         schema: { violations: [], skipped: null },
