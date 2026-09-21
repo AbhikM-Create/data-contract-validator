@@ -50,9 +50,14 @@ export const label = {
   textTransform: 'uppercase',
 }
 
+// All three use border LONGHANDS, like `panel` above. Callers tint one edge —
+// a destructive action's border goes red — and setting the `border` shorthand
+// alongside a longhand makes React drop one of them on re-render.
 export const ghostButton = {
   background: 'transparent',
-  border: `1px solid ${colors.panelEdge}`,
+  borderWidth: 1,
+  borderStyle: 'solid',
+  borderColor: colors.panelEdge,
   color: colors.mute,
   fontFamily: sans,
   fontSize: 12,
@@ -63,7 +68,9 @@ export const ghostButton = {
 
 export const primaryButton = {
   background: colors.accent,
-  border: '1px solid transparent',
+  borderWidth: 1,
+  borderStyle: 'solid',
+  borderColor: 'transparent',
   color: '#FFFFFF',
   fontFamily: sans,
   fontSize: 14,
@@ -75,7 +82,9 @@ export const primaryButton = {
 
 export const secondaryButton = {
   background: colors.panel,
-  border: `1px solid ${colors.panelEdge}`,
+  borderWidth: 1,
+  borderStyle: 'solid',
+  borderColor: colors.panelEdge,
   color: colors.ink,
   fontFamily: sans,
   fontSize: 13,

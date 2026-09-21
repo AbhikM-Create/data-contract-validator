@@ -6,7 +6,7 @@ import { contractToJson, parseContractFile } from './lib/contractFile.js'
 import { deleteContract, listContracts, loadContract, saveContract } from './lib/contractStore.js'
 import { parseCsv, parseCsvFile } from './lib/parseCsv.js'
 import { summariseRun } from './lib/runRecord.js'
-import { saveRun } from './lib/runStore.js'
+import { listRuns, saveRun } from './lib/runStore.js'
 import { ruleKey } from './lib/rules.js'
 import { DEFAULT_THRESHOLDS, validate } from './lib/validate.js'
 import { useAuth } from './lib/useAuth.js'
@@ -35,6 +35,9 @@ export default function App() {
   const [contractsLoading, setContractsLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [runNotice, setRunNotice] = useState(null)
+  const [runs, setRuns] = useState([])
+  const [runsLoading, setRunsLoading] = useState(false)
+  const [runsError, setRunsError] = useState(null)
 
   const draft = useMemo(
     () => (baseline && baseline.rows.length > 0 ? inferContract(baseline.rows) : null),
@@ -170,6 +173,22 @@ export default function App() {
   // history with noise and bury the actual checks.
   const lastRunKey = useRef(null)
 
+  const refreshRuns = useCallback(async () => {
+    if (!user) {
+      setRuns([])
+      return
+    }
+    setRunsLoading(true)
+    const { runs: rows, error } = await listRuns()
+    setRuns(rows)
+    setRunsError(error)
+    setRunsLoading(false)
+  }, [user])
+
+  // Same as the contracts list: whose runs these are changes with the account.
+  // oxlint-disable-next-line react/set-state-in-effect
+  useEffect(() => { refreshRuns() }, [refreshRuns])
+
   useEffect(() => {
     if (!user || !result || !candidate) return
     const key = [candidate.name, candidate.rows.length, contractId ?? 'unsaved', rules.length, baseline?.name ?? ''].join('|')
@@ -190,8 +209,9 @@ export default function App() {
       // The check already happened, in the browser, and is on screen. Failing
       // to record it is worth saying, never worth interrupting.
       setRunNotice(error ?? null)
+      if (!error) refreshRuns()
     })
-  }, [user, result, candidate, baseline, contractId, contractName, rules.length])
+  }, [user, result, candidate, baseline, contractId, contractName, rules.length, refreshRuns])
 
   const loadSample = (sample) => {
     setBaseline({ ...parseCsv(sample.baseline()), name: sample.baselineName })
@@ -262,7 +282,15 @@ export default function App() {
         />
       )}
 
-      {route === 'history' && <HistoryScreen />}
+      {route === 'history' && (
+        <HistoryScreen
+          runs={runs}
+          loading={runsLoading}
+          error={runsError}
+          signedIn={Boolean(user)}
+          onRefresh={refreshRuns}
+        />
+      )}
 
       {route === 'signin' && <SignInScreen user={user} />}
     </AppShell>

@@ -73,3 +73,19 @@ p {
     flex-wrap: wrap;
   }
 }
+
+/* The history table: a grid so the columns line up across every row, and a
+   stack on a narrow screen where five columns would be five slivers. */
+.history-row {
+  display: grid;
+  grid-template-columns: 84px minmax(0, 1.6fr) minmax(0, 1.2fr) 110px 96px;
+  gap: 12px;
+  align-items: center;
+}
+
+@media (max-width: 760px) {
+  .history-row {
+    grid-template-columns: minmax(0, 1fr) 96px;
+    row-gap: 4px;
+  }
+}
