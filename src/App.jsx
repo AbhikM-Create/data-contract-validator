@@ -1,14 +1,12 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import AppShell from './components/AppShell.jsx'
-import { defineContract, withRules } from './lib/authoredContract.js'
-import { inferContract } from './lib/contract.js'
 import { contractToJson, parseContractFile } from './lib/contractFile.js'
 import { deleteContract, listContracts, loadContract, saveContract } from './lib/contractStore.js'
-import { parseCsv, parseCsvFile } from './lib/parseCsv.js'
+import { clearFileInWorker, parseFileInWorker, parseTextInWorker, validateInWorker } from './lib/engineClient.js'
 import { summariseRun } from './lib/runRecord.js'
 import { listRuns, saveRun } from './lib/runStore.js'
 import { ruleKey } from './lib/rules.js'
-import { DEFAULT_THRESHOLDS, validate } from './lib/validate.js'
+import { DEFAULT_THRESHOLDS } from './lib/validate.js'
 import { useAuth } from './lib/useAuth.js'
 import { go, useRoute } from './routes.js'
 import ContractsScreen from './screens/ContractsScreen.jsx'
@@ -39,33 +37,90 @@ export default function App() {
   const [runsLoading, setRunsLoading] = useState(false)
   const [runsError, setRunsError] = useState(null)
 
-  const draft = useMemo(
-    () => (baseline && baseline.rows.length > 0 ? inferContract(baseline.rows) : null),
-    [baseline],
-  )
+  // Parsing and checking happen in a worker, which also KEEPS the parsed rows.
+  // The main thread holds only summaries, so it never has a million row objects
+  // in hand while trying to render — and re-checking after a threshold change
+  // costs nothing, because the rows are already over there.
+  const [draft, setDraft] = useState(null)
+  const [contract, setContract] = useState(null)
+  const [result, setResult] = useState(null)
+  const [busy, setBusy] = useState(null)
+  const [engineError, setEngineError] = useState(null)
 
-  // Draft plus authored rules. With no rules it is the v1 contract exactly;
-  // with rules and no baseline it stands on its own, which is what lets a saved
-  // contract judge files it was never drafted from.
-  const contract = useMemo(() => {
-    if (draft) return withRules(draft, rules)
-    if (rules.length > 0) return defineContract({ rules, name: contractName || null })
-    return null
-  }, [draft, rules, contractName])
+  const loadFile = useCallback(async (which, file) => {
+    const refusal = tooLargeToRead(file)
+    if (refusal) {
+      setEngineError(refusal)
+      return
+    }
 
-  const result = useMemo(
-    () => (contract && candidate && candidate.rows.length > 0 ? validate(contract, candidate.rows, { thresholds }) : null),
-    [contract, candidate, thresholds],
-  )
+    setEngineError(null)
+    setBusy(`Reading ${file.name}…`)
+    try {
+      const { file: summary, draft: inferred } = await parseFileInWorker(which, file)
+      if (which === 'baseline') {
+        setBaseline(summary)
+        setDraft(inferred)
+      } else {
+        setCandidate(summary)
+      }
+    } catch (error) {
+      setEngineError(error.message)
+    } finally {
+      setBusy(null)
+    }
+  }, [])
+
+  const clearFile = useCallback(async (which) => {
+    if (which === 'baseline') {
+      setBaseline(null)
+      setDraft(null)
+    } else {
+      setCandidate(null)
+    }
+    await clearFileInWorker(which)
+  }, [])
+
+  // Re-check whenever an input to the check changes. The counter drops stale
+  // answers: a slow check of a large file must not overwrite the faster one
+  // somebody started after it.
+  const checkId = useRef(0)
+
+  // Synchronising with an external system — the worker — which is what effects
+  // are for; the state it sets is the answer that comes back.
+  // oxlint-disable-next-line react/set-state-in-effect
+  useEffect(() => {
+    if (!candidate || candidate.rowCount === 0 || (!draft && rules.length === 0)) {
+      // oxlint-disable-next-line react/set-state-in-effect
+      setResult(null)
+      setContract(null)
+      return
+    }
+
+    checkId.current += 1
+    const mine = checkId.current
+    setBusy('Checking…')
+
+    validateInWorker({ rules, thresholds })
+      .then(({ result: checked, contract: used }) => {
+        if (mine !== checkId.current) return
+        setResult(checked ?? null)
+        setContract(used ?? null)
+      })
+      .catch((error) => {
+        if (mine !== checkId.current) return
+        setEngineError(error.message)
+        setResult(null)
+      })
+      .finally(() => {
+        if (mine === checkId.current) setBusy(null)
+      })
+  }, [candidate, draft, rules, thresholds])
 
   const addRule = (rule) => setRules((current) => (
     current.some((existing) => ruleKey(existing) === ruleKey(rule)) ? current : [...current, rule]
   ))
   const removeRule = (rule) => setRules((current) => current.filter((existing) => ruleKey(existing) !== ruleKey(rule)))
-
-  const loadFile = useCallback(async (file, setter) => {
-    setter(await parseCsvFile(file))
-  }, [])
 
   const downloadContract = () => {
     const json = contractToJson({ name: contractName, rules })
@@ -191,7 +246,7 @@ export default function App() {
 
   useEffect(() => {
     if (!user || !result || !candidate) return
-    const key = [candidate.name, candidate.rows.length, contractId ?? 'unsaved', rules.length, baseline?.name ?? ''].join('|')
+    const key = [candidate.name, candidate.rowCount, contractId ?? 'unsaved', rules.length, baseline?.name ?? ''].join('|')
     if (lastRunKey.current === key) return
     lastRunKey.current = key
 
@@ -201,8 +256,8 @@ export default function App() {
       contractName,
       baselineName: baseline?.name ?? null,
       candidateName: candidate.name,
-      baselineRows: baseline?.rows.length ?? null,
-      candidateRows: candidate.rows.length,
+      baselineRows: baseline?.rowCount ?? null,
+      candidateRows: candidate.rowCount,
     })
 
     saveRun(record).then(({ error }) => {
@@ -213,10 +268,21 @@ export default function App() {
     })
   }, [user, result, candidate, baseline, contractId, contractName, rules.length, refreshRuns])
 
-  const loadSample = (sample) => {
-    setBaseline({ ...parseCsv(sample.baseline()), name: sample.baselineName })
-    setCandidate({ ...parseCsv(sample.candidate()), name: sample.candidateName })
+  const loadSample = async (sample) => {
+    setEngineError(null)
+    setBusy('Loading the example…')
     go('validate')
+    try {
+      const base = await parseTextInWorker('baseline', sample.baseline(), sample.baselineName)
+      setBaseline(base.file)
+      setDraft(base.draft)
+      const cand = await parseTextInWorker('candidate', sample.candidate(), sample.candidateName)
+      setCandidate(cand.file)
+    } catch (error) {
+      setEngineError(error.message)
+    } finally {
+      setBusy(null)
+    }
   }
 
   const reset = () => {
@@ -229,12 +295,12 @@ export default function App() {
   }
 
   return (
-    <AppShell route={route} user={user} authLoading={authLoading}>
+    <AppShell route={route} user={user} authLoading={authLoading} busy={busy} engineError={engineError} onDismissError={() => setEngineError(null)}>
       {route === 'home' && <LandingScreen onLoadSample={loadSample} />}
 
       {route === 'contracts' && (
         <ContractsScreen
-          contract={contract}
+          contract={draft}
           draft={draft}
           baseline={baseline}
           rules={rules}
@@ -252,8 +318,8 @@ export default function App() {
           saving={saving}
           user={user}
           onDownloadContract={downloadContract}
-          onLoadBaseline={(file) => loadFile(file, setBaseline)}
-          onClearBaseline={() => setBaseline(null)}
+          onLoadBaseline={(file) => loadFile('baseline', file)}
+          onClearBaseline={() => clearFile('baseline')}
           onAddRule={addRule}
           onRemoveRule={removeRule}
           onClearRules={() => setRules([])}
@@ -269,14 +335,14 @@ export default function App() {
           result={result}
           rules={rules}
           thresholds={thresholds}
-          onLoadBaseline={(file) => loadFile(file, setBaseline)}
-          onLoadCandidate={(file) => loadFile(file, setCandidate)}
-          onClearBaseline={() => setBaseline(null)}
-          onClearCandidate={() => setCandidate(null)}
+          onLoadBaseline={(file) => loadFile('baseline', file)}
+          onLoadCandidate={(file) => loadFile('candidate', file)}
+          onClearBaseline={() => clearFile('baseline')}
+          onClearCandidate={() => clearFile('candidate')}
           onThresholdChange={(key, value) => setThresholds((current) => ({ ...current, [key]: value }))}
           onThresholdReset={() => setThresholds(DEFAULT_THRESHOLDS)}
           onReset={reset}
-          onCheckAnother={() => setCandidate(null)}
+          onCheckAnother={() => clearFile('candidate')}
           onRemoveRule={removeRule}
           runNotice={runNotice}
         />
@@ -295,6 +361,20 @@ export default function App() {
       {route === 'signin' && <SignInScreen user={user} />}
     </AppShell>
   )
+}
+
+// Measured, not guessed. On a register-shaped CSV this engine costs roughly
+// 2 KB of memory per row once the browser is done with it, so a 57 MB file
+// needs about 1.3 GB and a 114 MB file about 2.1 GB — past what a tab can be
+// relied on to survive. Refusing with a reason and a way forward beats a tab
+// that dies holding someone's work.
+const REFUSE_BYTES = 90 * 1024 * 1024
+
+const mb = (bytes) => `${Math.round(bytes / 1024 / 1024)} MB`
+
+function tooLargeToRead(file) {
+  if (file.size <= REFUSE_BYTES) return null
+  return `"${file.name}" is ${mb(file.size)}, and a browser tab cannot hold a file that size — everything here runs in this page, so the limit is real memory, not a policy. Check a slice of it, or split it by month or region and check each part.`
 }
 
 // Everything this app hands back is built in the page and handed straight to

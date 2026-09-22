@@ -85,18 +85,45 @@ export function columnNames(rows) {
   return seen
 }
 
-function detectType(present) {
+// One pass over the column, parsing each value at most once and keeping what
+// came back. The three parsers are mutually exclusive — a date needs separators
+// so it can never parse as a number, and no boolean word parses as either — so
+// counting them in a single loop gives exactly the counts three separate passes
+// gave, for a third of the parsing.
+function scanTypes(present) {
+  const dates = []
+  const numbers = []
+  let booleans = 0
+
+  for (const raw of present) {
+    const date = parseDate(raw)
+    if (date !== null) {
+      dates.push(date)
+      continue
+    }
+    const number = parseNumber(raw)
+    if (number !== null) {
+      numbers.push(number)
+      continue
+    }
+    if (parseBoolean(raw) !== null) booleans += 1
+  }
+
+  return { dates, numbers, booleans }
+}
+
+// 0.95 rather than 1.0: one "N/A" in a column of 500 dates is a typo, not a
+// different type. Below that the column really is mixed, and calling it numeric
+// would make every downstream statistic a lie.
+function decideType(present, scan) {
   if (present.length === 0) return TYPES.EMPTY
 
-  const share = (predicate) => present.filter(predicate).length / present.length
+  if (scan.dates.length / present.length >= 0.95) return TYPES.DATE
+  if (scan.numbers.length / present.length >= 0.95) return TYPES.NUMERIC
+  if (scan.booleans / present.length >= 0.95) return TYPES.BOOLEAN
 
-  // 0.95 rather than 1.0: one "N/A" in a column of 500 dates is a typo, not a
-  // different type. Below that the column really is mixed, and calling it
-  // numeric would make every downstream statistic a lie.
-  if (share((v) => parseDate(v) !== null) >= 0.95) return TYPES.DATE
-  if (share((v) => parseNumber(v) !== null) >= 0.95) return TYPES.NUMERIC
-  if (share((v) => parseBoolean(v) !== null) >= 0.95) return TYPES.BOOLEAN
-
+  // Only reached when the column is none of the above: building a set of every
+  // distinct value is the expensive path, and a numeric column never pays it.
   const distinct = new Set(present.map((v) => String(v).trim())).size
   const isCategorical = distinct < present.length && distinct <= Math.max(12, present.length * 0.05)
   return isCategorical ? TYPES.CATEGORICAL : TYPES.TEXT
@@ -108,11 +135,12 @@ function detectType(present) {
 export function profileColumn(name, values) {
   const present = values.filter((v) => !isBlank(v))
   const nullRate = values.length === 0 ? 0 : 1 - present.length / values.length
-  const type = detectType(present)
+  const scan = scanTypes(present)
+  const type = decideType(present, scan)
   const profile = { name, type, rowCount: values.length, presentCount: present.length, nullRate }
 
   if (type === TYPES.NUMERIC) {
-    const numbers = present.map(parseNumber).filter((n) => n !== null)
+    const numbers = scan.numbers
     const sorted = [...numbers].sort((a, b) => a - b)
     const sum = numbers.reduce((acc, n) => acc + n, 0)
     profile.min = sorted[0] ?? null
@@ -122,16 +150,21 @@ export function profileColumn(name, values) {
     profile.p05 = quantile(sorted, 0.05)
     profile.p95 = quantile(sorted, 0.95)
     profile.allIntegers = numbers.every((n) => Number.isInteger(n))
+    // Kept because the candidate side needs every value to count how many fall
+    // outside the baseline's range. inferContract drops it from the contract,
+    // which is the long-lived object.
     profile.values = numbers
   }
 
   if (type === TYPES.DATE) {
-    const stamps = present.map(parseDate).filter((ms) => ms !== null).sort((a, b) => a - b)
+    const stamps = scan.dates.sort((a, b) => a - b)
     profile.oldest = stamps[0] ?? null
     profile.newest = stamps[stamps.length - 1] ?? null
     profile.cadenceMs = medianCadence(stamps)
     profile.cadenceSpread = cadenceSpread(stamps)
-    profile.stamps = stamps
+    // The stamps themselves are deliberately NOT kept: every question asked of
+    // them is answered above, and on a million-row file the array is the single
+    // largest thing the profile would hold.
   }
 
   if (type === TYPES.CATEGORICAL || type === TYPES.BOOLEAN) {
@@ -236,14 +269,22 @@ export function inferContract(rows, options = {}) {
   }
   if (names.length === 0) reasons.push('the baseline file has no columns')
 
+  // A contract keeps the SUMMARY of each numeric column, never the values
+  // themselves. Every question the checks ask of the baseline is answered by
+  // min, max, mean, median and the percentiles; only the candidate side needs
+  // the raw numbers, and that profile is rebuilt for each file and thrown away.
+  // On a million-row file this is the difference between a contract weighing
+  // megabytes and weighing almost nothing.
+  const stored = columns.map(({ values: _values, ...summary }) => summary)
+
   return {
     rowCount: safeRows.length,
-    columns,
+    columns: stored,
     // A draft contract carries an empty rules[] so an authored contract and an
     // inferred one are the same shape — the engine never asks which it got.
     rules: options.rules ?? [],
     columnNames: names,
-    byName: new Map(columns.map((column) => [column.name, column])),
+    byName: new Map(stored.map((column) => [column.name, column])),
     dateColumn: dateColumn ? dateColumn.name : null,
     cadenceMs: dateColumn ? dateColumn.cadenceMs : null,
     cadenceSpread: dateColumn ? dateColumn.cadenceSpread : null,

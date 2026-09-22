@@ -6,7 +6,7 @@ import { colors, ghostButton, mono, sans } from '../theme.js'
 // and the trust line. The trust line is part of the chrome rather than one
 // screen's copy, because the claim it makes is true on every screen and a
 // reader should never have to go looking for it.
-export default function AppShell({ route, user, authLoading, children }) {
+export default function AppShell({ route, user, authLoading, busy, engineError, onDismissError, children }) {
   const onLanding = route === 'home'
 
   return (
@@ -105,6 +105,32 @@ export default function AppShell({ route, user, authLoading, children }) {
           </span>
         </div>
       </div>
+
+      {/* Work happens in a worker, so the page can say what is going on instead
+          of freezing and looking crashed. */}
+      {busy && (
+        <div style={{ background: `${colors.accent}0F`, borderBottom: `1px solid ${colors.accent}33` }}>
+          <div style={{ maxWidth: 1080, margin: '0 auto', padding: '8px 24px', display: 'flex', alignItems: 'center', gap: 9 }}>
+            <span className="pulse" style={{ width: 7, height: 7, borderRadius: '50%', background: colors.accent }} />
+            <span style={{ fontFamily: sans, fontSize: 12.5, color: colors.accent }}>
+              {busy} The page stays usable while this runs.
+            </span>
+          </div>
+        </div>
+      )}
+
+      {engineError && (
+        <div style={{ background: `${colors.fail}0D`, borderBottom: `1px solid ${colors.fail}33` }}>
+          <div style={{ maxWidth: 1080, margin: '0 auto', padding: '11px 24px', display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+            <span style={{ fontFamily: sans, fontSize: 12.5, color: colors.fail, lineHeight: 1.55, flex: 1 }}>
+              {engineError}
+            </span>
+            <button onClick={onDismissError} style={{ ...ghostButton, color: colors.fail, borderColor: `${colors.fail}55` }}>
+              Dismiss
+            </button>
+          </div>
+        </div>
+      )}
 
       <main style={{ maxWidth: onLanding ? 1080 : 1080, margin: '0 auto', padding: '28px 24px 80px' }}>
         {children}

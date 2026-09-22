@@ -13,7 +13,7 @@ export default function UploadCard({ step, title, tag, hint, file, accent, onFil
     if (picked) onFile(picked)
   }
 
-  const loaded = file && file.rows.length > 0
+  const loaded = file && file.rowCount > 0
   const failed = file && file.errors.length > 0
 
   return (
@@ -58,7 +58,7 @@ export default function UploadCard({ step, title, tag, hint, file, accent, onFil
           <div style={{ flex: 1, minWidth: 160 }}>
             <div style={{ fontFamily: mono, fontSize: 13, color: colors.ink, wordBreak: 'break-all' }}>{file.name}</div>
             <div style={{ fontFamily: mono, fontSize: 11.5, color: colors.faint, marginTop: 3 }}>
-              {file.rows.length.toLocaleString('en-US')} rows &middot; {file.columns.length} columns
+              {file.rowCount.toLocaleString('en-US')} rows &middot; {file.columns.length} columns
             </div>
           </div>
           <button onClick={() => inputRef.current?.click()} style={secondaryButton}>Replace</button>

@@ -108,11 +108,11 @@ function Report({
       <div style={{ ...panel, padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
         {baseline && (
           <>
-            <FileChip tone={colors.accent} caption="baseline" name={baseline.name} rows={baseline.rows.length} />
+            <FileChip tone={colors.accent} caption="baseline" name={baseline.name} rows={baseline.rowCount} />
             <span style={{ color: colors.faint, fontFamily: sans, fontSize: 12 }}>vs</span>
           </>
         )}
-        <FileChip tone={colors.warn} caption="checked" name={candidate.name} rows={candidate.rows.length} />
+        <FileChip tone={colors.warn} caption="checked" name={candidate.name} rows={candidate.rowCount} />
         <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
           <button onClick={onCheckAnother} style={ghostButton}>check another file</button>
           <button onClick={onReset} style={ghostButton}>start over</button>
@@ -229,7 +229,7 @@ function FileChip({ tone, caption, name, rows }) {
 }
 
 function StatusLine({ baseline, candidate, contract, hasRules }) {
-  const unreadable = [baseline, candidate].some((file) => file && file.rows.length === 0)
+  const unreadable = [baseline, candidate].some((file) => file && file.rowCount === 0)
   let tone = colors.faint
   let text = 'Add a file to each slot above, or load just one if you are checking against rules alone.'
 
