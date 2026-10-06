@@ -152,14 +152,6 @@ The engine runs in a worker, so the page stays responsive throughout — on two
 reason rather than killing the tab. Going further needs columnar or streaming
 parsing.
 
-## Not built yet
-
-- Component and end-to-end tests — every test here is pure logic
-- Editing a rule in place (today: remove and re-add)
-- Deleting a saved run from the History screen
-- Live connections, scheduling, alerting — deliberately out of scope
-
 ## Status
 
-A working demo build, verified against real HR snapshots. No licence has been
-chosen, so it is all rights reserved by default.
+A working demo build, verified against real process snapshots. 
