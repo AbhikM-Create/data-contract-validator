@@ -110,10 +110,26 @@ on is the finding**, because each step is meaningless if the one above broke.
 |---|---|---|
 | 1 | **Reconciliation engine + CLI** (`reconcile.js`, `scripts/reconcile.mjs`). | **Done.** |
 | 2 | **Done.** **Load readiness** — `scripts/check.mjs <contract.json> <load.csv>`: the contract run rules-only from the CLI, with exit codes and `--json`. Rules gain `severity: reject | warn`, mirroring how a target system rejects some records and accepts others with a warning; the report predicts rejections per rule with counts and example keys. | Uses `validate()`'s rules-only mode, which already exists. Puts the contract into the pipeline on day one, ahead of the most expensive failure in a mock cycle. |
-| 3 | **Streaming for large files**, both CLIs — key-hash join and rule evaluation over streamed CSV, millions of rows in bounded memory. | Real objects are 1–20M rows. Nobody adopts a tool that fails on their first real file. |
+| 3 | **Done.** **Streaming for large files**, both CLIs — key-hash join and rule evaluation over streamed CSV, millions of rows in bounded memory. | Real objects are 1–20M rows. Nobody adopts a tool that fails on their first real file. |
 | 4 | **Migration object workspace** (UI) — one object holds its contract, its reconciliation spec, and its runs per wave and mock. Mapping builder from dropdowns; crosswalks uploaded as CSV; the reconcile staircase with drill-down. | The business data owner's and migration lead's view. Reuses the Staircase and the rule builder. |
 | 5 | **Evidence pack** — a self-contained HTML report generated locally: contract + spec + their hashes, file names + SHA-256, row counts, every step's verdict, rejection and mismatch samples, thresholds, timestamp, sign-off block. | What internal audit files and the go/no-go decision cites. Never uploaded. |
 | 6 | **Go-live handover** — promote the cutover snapshot to the contract's baseline in one action; the readiness board (every object × latest mock, worst step first) becomes the run-state board for production feeds. | Turns the project's contracts into the production team's. |
+
+## Measured scale (increment 3)
+
+`node --max-old-space-size=512 scripts/benchmark-migration.mjs 5000000` on a
+4-core cloud container, heap capped at 512 MB to prove memory is bounded:
+
+| | Rows | Input | Time | Peak RSS |
+|---|---|---|---|---|
+| Reconcile (17 partitions) | 5,000,000 source / 4.9M target | 538 MB | 123 s | 642 MB |
+| Load readiness, with key | 4.9M | 283 MB | 39 s | 718 MB |
+
+Every planted break (out of scope, missing, duplicated, unmapped, wrong value)
+is reported exactly; the benchmark fails if one is not. Uncapped, the same
+reconciliation took ~115 s with a larger, lazily collected heap. Against the
+"under 2 minutes" measure above: met uncapped, ~3 s over when capped — on this
+machine; a laptop has not been measured.
 
 ## Explicitly out of v2
 

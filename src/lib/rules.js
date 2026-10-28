@@ -273,7 +273,9 @@ function evaluateRow(rule, row) {
 
 const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`
 
-function violationFor(rule, failures, applicable, rowCount) {
+// failing is the full count; failures may hold only the first few when a
+// streaming caller caps them, so the count never comes from the array.
+function violationFor(rule, failures, failing, applicable, rowCount) {
   const examples = failures.slice(0, 3)
   const shown = examples
     .map((f) => `row ${f.row}${f.value === '' ? ' (blank)' : `: ${f.value}`}`)
@@ -294,8 +296,80 @@ function violationFor(rule, failures, applicable, rowCount) {
     code: `rule:${rule.kind}`,
     column: rule.column,
     rule,
-    message: `The contract says ${describeRule(rule)}, and ${plural(failures.length, 'row')}${gated} break${failures.length === 1 ? 's' : ''} that.`,
-    evidence: `${shown}${failures.length > examples.length ? ` · and ${failures.length - examples.length} more` : ''}`,
+    message: `The contract says ${describeRule(rule)}, and ${plural(failing, 'row')}${gated} break${failing === 1 ? 's' : ''} that.`,
+    evidence: `${shown}${failing > examples.length ? ` · and ${failing - examples.length} more` : ''}`,
+  }
+}
+
+function uncheckedOutcome(rule, problem) {
+  return {
+    rule,
+    status: 'UNCHECKED',
+    applicable: 0,
+    failures: [],
+    violation: {
+      layer: ruleLayer(rule ?? {}),
+      source: 'rule',
+      code: 'rule:invalid',
+      column: rule?.column ?? null,
+      rule,
+      message: `A rule in this contract can't be checked because ${problem}. Nothing was verified for it, so treat this column as unchecked.`,
+      evidence: JSON.stringify(rule ?? null),
+    },
+  }
+}
+
+// createRuleChecker(rules, { keepFailures }) -> { row, states, outcomes }
+//
+// THE rule evaluator: checkRules() below is a loop over it, and load readiness
+// streams a file through it a row at a time. One evaluator means a rule cannot
+// mean one thing in a report and another in a pipeline.
+//
+// row(row, rowNumber) evaluates every rule on one row and returns the indexes
+// of the rules it broke. keepFailures caps how many failing rows each rule
+// remembers — a streaming caller over twenty million rows wants the count and
+// a few examples, not a list as long as the file. Counts are always exact.
+export function createRuleChecker(rules, { keepFailures = Infinity } = {}) {
+  const states = (Array.isArray(rules) ? rules : []).map((rule) => ({
+    rule,
+    problem: ruleIssue(rule),
+    applicable: 0,
+    failing: 0,
+    failures: [],
+  }))
+
+  return {
+    states,
+    row(row, rowNumber) {
+      const broken = []
+      for (let i = 0; i < states.length; i += 1) {
+        const state = states[i]
+        if (state.problem || !conditionHolds(state.rule.when, row)) continue
+        state.applicable += 1
+        if (evaluateRow(state.rule, row) === false) {
+          state.failing += 1
+          if (state.failures.length < keepFailures) {
+            state.failures.push({ row: rowNumber, value: String(row[state.rule.column] ?? '').trim() })
+          }
+          broken.push(i)
+        }
+      }
+      return broken
+    },
+    outcomes(rowCount) {
+      return states.map((state) => {
+        if (state.problem) return uncheckedOutcome(state.rule, state.problem)
+        return {
+          rule: state.rule,
+          status: state.failing > 0 ? 'FAIL' : 'PASS',
+          applicable: state.applicable,
+          failures: state.failures,
+          violation: state.failing > 0
+            ? violationFor(state.rule, state.failures, state.failing, state.applicable, rowCount)
+            : null,
+        }
+      })
+    },
   }
 }
 
@@ -309,46 +383,9 @@ function violationFor(rule, failures, applicable, rowCount) {
 // a spreadsheet under the header.
 export function checkRules(rules, rows) {
   if (!Array.isArray(rules) || rules.length === 0) return []
-
-  return rules.map((rule) => {
-    const problem = ruleIssue(rule)
-    if (problem) {
-      return {
-        rule,
-        status: 'UNCHECKED',
-        applicable: 0,
-        failures: [],
-        violation: {
-          layer: ruleLayer(rule ?? {}),
-          source: 'rule',
-          code: 'rule:invalid',
-          column: rule?.column ?? null,
-          rule,
-          message: `A rule in this contract can't be checked because ${problem}. Nothing was verified for it, so treat this column as unchecked.`,
-          evidence: JSON.stringify(rule ?? null),
-        },
-      }
-    }
-
-    const failures = []
-    let applicable = 0
-
-    rows.forEach((row, index) => {
-      if (!conditionHolds(rule.when, row)) return
-      applicable += 1
-      if (evaluateRow(rule, row) === false) {
-        failures.push({ row: index + 1, value: String(row[rule.column] ?? '').trim() })
-      }
-    })
-
-    return {
-      rule,
-      status: failures.length > 0 ? 'FAIL' : 'PASS',
-      applicable,
-      failures,
-      violation: failures.length > 0 ? violationFor(rule, failures, applicable, rows.length) : null,
-    }
-  })
+  const checker = createRuleChecker(rules)
+  rows.forEach((row, index) => checker.row(row, index + 1))
+  return checker.outcomes(rows.length)
 }
 
 // The violations alone, for callers that only report problems.

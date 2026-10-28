@@ -167,7 +167,7 @@ export function specIssues(rawSpec, sourceColumns, targetColumns) {
   return issues
 }
 
-// --- indexing ---------------------------------------------------------------
+// --- keys -------------------------------------------------------------------
 
 function keyOf(row, columns) {
   const parts = []
@@ -181,44 +181,16 @@ function keyOf(row, columns) {
 
 const showKey = (key) => key.split(KEY_SEP).join(' / ')
 
-// Index one side by key. Rows with a blank key, and every row of a key that
-// appears more than once, are set aside: matching them would mean guessing
-// which of two records is "the" one, and a reconciliation that guesses is
-// worth nothing at sign-off.
-function indexSide(rows, keyColumns, scope) {
-  const byKey = new Map()
-  const duplicates = new Map()
-  let blankKeys = 0
-  let outOfScope = 0
-  let inScope = 0
-  const inScopeRows = []
-
-  for (const row of rows) {
-    if (scope && !conditionHolds(scope, row)) {
-      outOfScope += 1
-      continue
-    }
-    inScope += 1
-    inScopeRows.push(row)
-    const key = keyOf(row, keyColumns)
-    if (key === null) {
-      blankKeys += 1
-      continue
-    }
-    if (duplicates.has(key)) {
-      duplicates.set(key, duplicates.get(key) + 1)
-    } else if (byKey.has(key)) {
-      byKey.delete(key)
-      duplicates.set(key, 2)
-    } else {
-      byKey.set(key, row)
-    }
-  }
-
-  let duplicateRows = 0
-  for (const count of duplicates.values()) duplicateRows += count
-
-  return { byKey, duplicates, duplicateRows, blankKeys, outOfScope, inScope, inScopeRows }
+// Keeps the `limit` entries with the smallest row number. Partitions of a large
+// file are joined in no particular order, so "the first five examples" has to
+// mean first in the FILE — which is also what makes a partitioned run report
+// exactly what an in-memory run reports.
+function keepFirst(list, entry, limit = EXAMPLES) {
+  if (list.length >= limit && entry.rowNo >= list[list.length - 1].rowNo) return
+  let i = list.length
+  while (i > 0 && list[i - 1].rowNo > entry.rowNo) i -= 1
+  list.splice(i, 0, entry)
+  if (list.length > limit) list.pop()
 }
 
 // --- value comparison -------------------------------------------------------
@@ -260,7 +232,10 @@ function translate(value, map) {
   return { value: map.get(key) }
 }
 
-// --- the steps --------------------------------------------------------------
+// --- accumulation -----------------------------------------------------------
+// Everything a report needs, gathered as rows and partitions go by. Each field
+// is a count, a sum or a short sorted list, so the state stays small however
+// large the files are.
 
 function step(id, status, findings, detail = {}) {
   const meta = RECON_STEPS.find((s) => s.id === id)
@@ -271,74 +246,92 @@ function finding(stepId, code, column, message, examples = []) {
   return { step: stepId, code, column, message, examples }
 }
 
-function checkKeys(source, target) {
-  const findings = []
-  if (source.blankKeys > 0) {
-    findings.push(finding('keys', 'blank-key-source', null,
-      `${plural(source.blankKeys, 'source record')} ${source.blankKeys === 1 ? 'has' : 'have'} no key, so ${source.blankKeys === 1 ? 'it' : 'they'} cannot be traced into the target.`))
-  }
-  if (target.blankKeys > 0) {
-    findings.push(finding('keys', 'blank-key-target', null,
-      `${plural(target.blankKeys, 'target record')} ${target.blankKeys === 1 ? 'has' : 'have'} no key, so ${target.blankKeys === 1 ? 'it' : 'they'} cannot be traced back to the source.`))
-  }
-  if (source.duplicates.size > 0) {
-    findings.push(finding('keys', 'duplicate-key-source', null,
-      `${plural(source.duplicates.size, 'key')} ${source.duplicates.size === 1 ? 'appears' : 'appear'} more than once in the source (${plural(source.duplicateRows, 'record')} in all). These are set aside rather than guessed at.`,
-      [...source.duplicates].slice(0, EXAMPLES).map(([key, n]) => ({ key: showKey(key), detail: `${n} records` }))))
-  }
-  if (target.duplicates.size > 0) {
-    findings.push(finding('keys', 'duplicate-key-target', null,
-      `${plural(target.duplicates.size, 'key')} ${target.duplicates.size === 1 ? 'appears' : 'appear'} more than once in the target (${plural(target.duplicateRows, 'record')} in all) — often a join that fanned out during the load. These are set aside rather than guessed at.`,
-      [...target.duplicates].slice(0, EXAMPLES).map(([key, n]) => ({ key: showKey(key), detail: `${n} records` }))))
-  }
-  return step('keys', findings.length ? 'FAIL' : 'PASS', findings)
-}
-
-function checkCompleteness(source, target, thresholds) {
-  const missing = []
-  const matched = []
-  for (const [key, row] of source.byKey) {
-    const other = target.byKey.get(key)
-    if (other) matched.push([key, row, other])
-    // A key duplicated in the target DID arrive — too many times, which the
-    // keys step reports. Calling it missing as well would count one fault twice.
-    else if (!target.duplicates.has(key)) missing.push(key)
-  }
-  const extra = []
-  for (const key of target.byKey.keys()) {
-    if (!source.byKey.has(key) && !source.duplicates.has(key)) extra.push(key)
-  }
-
-  const expected = source.byKey.size
-  const missingShare = expected ? missing.length / expected : 0
-  const extraShare = target.byKey.size ? extra.length / target.byKey.size : 0
-  const findings = []
-
-  if (missing.length > 0) {
-    findings.push(finding('completeness', 'missing-in-target', null,
-      `${plural(missing.length, 'source record')} (${pct(missingShare)}) did not arrive in the target.`,
-      missing.slice(0, EXAMPLES).map((key) => ({ key: showKey(key) }))))
-  }
-  if (extra.length > 0) {
-    findings.push(finding('completeness', 'extra-in-target', null,
-      `${plural(extra.length, 'target record')} (${pct(extraShare)}) ${extra.length === 1 ? 'has' : 'have'} no source record — loaded from somewhere this extract does not cover, or created by the load itself.`,
-      extra.slice(0, EXAMPLES).map((key) => ({ key: showKey(key) }))))
-  }
-
-  const failed = missingShare > thresholds.missingShare || extraShare > thresholds.extraShare
-  const status = expected === 0 && target.byKey.size === 0 ? 'SKIPPED' : failed ? 'FAIL' : 'PASS'
+function newSide(spec) {
   return {
-    result: step('completeness', status, findings, {
-      reason: status === 'SKIPPED' ? 'No record on either side could be identified by its key.' : undefined,
-    }),
-    matched,
-    missing: missing.length,
-    extra: extra.length,
+    rows: 0,
+    outOfScope: 0,
+    blankKeys: 0,
+    uniqueKeys: 0,
+    duplicateKeys: 0,
+    duplicateRows: 0,
+    duplicateExamples: [],
+    totals: spec.totals.map(() => ({ groups: new Map(), unreadable: 0 })),
   }
 }
 
-function checkMappingAndAccuracy(spec, matched, thresholds) {
-  const crosswalked = spec.mapping.filter((field) => field.map)
+// Control totals run over every in-scope record — blank and duplicated keys
+// included — because they answer for the whole population, not for the
+// records that happened to match.
+function addToTotals(side, spec, sideName, row) {
+  spec.totals.forEach((total, i) => {
+    const acc = side.totals[i]
+    const group = total.groupBy?.[sideName]
+    const map = sideName === 'source' ? total.groupBy?.map : null
+    let label = '(all records)'
+    if (group) {
+      const raw = row[group]
+      const translated = translate(raw, map)
+      label = isBlank(raw) ? '(blank)' : translated.unmapped ? String(raw).trim() : String(translated.value).trim()
+    }
+    const entry = acc.groups.get(label) ?? { sum: 0, count: 0 }
+    const value = parseNumber(row[total[sideName]])
+    if (value !== null) entry.sum += value
+    else if (!isBlank(row[total[sideName]])) acc.unreadable += 1
+    entry.count += 1
+    acc.groups.set(label, entry)
+  })
+}
+
+// One side of one partition, indexed by key. A key that appears more than once
+// is set aside rather than guessed at: matching it would mean choosing which of
+// two records is "the" one, and a reconciliation that guesses is worth nothing
+// at sign-off. A key's every copy lands in the same partition, so duplicates
+// found per partition are exactly the duplicates in the file.
+function indexPartition(entries, side) {
+  const byKey = new Map()
+  for (const entry of entries) {
+    const hit = byKey.get(entry.key)
+    if (hit) hit.count += 1
+    else byKey.set(entry.key, { row: entry.row, rowNo: entry.rowNo, count: 1 })
+  }
+  const unique = new Map()
+  const duplicated = new Set()
+  for (const [key, hit] of byKey) {
+    if (hit.count > 1) {
+      duplicated.add(key)
+      side.duplicateKeys += 1
+      side.duplicateRows += hit.count
+      keepFirst(side.duplicateExamples, { rowNo: hit.rowNo, key, count: hit.count })
+    } else {
+      unique.set(key, hit)
+    }
+  }
+  side.uniqueKeys += unique.size
+  return { unique, duplicated }
+}
+
+// createReconciliation(spec, { thresholds, sourceColumns, targetColumns })
+//   -> { issues, spec, columnsNeeded, observe, joinPartition, finish }
+//
+// The form that scales: reconcile() below is this run as a single partition.
+//
+//   1. observe('source' | 'target', row) for every row of each file. It applies
+//      the scope, adds to control totals, counts blank keys, and returns the
+//      record's key — or null when the record is out of scope or has no key.
+//   2. joinPartition(sourceEntries, targetEntries) for each partition, where an
+//      entry is { key, row, rowNo } and every record sharing a key is in the
+//      same partition. A caller with files too large to hold splits records by
+//      a hash of their key and joins one partition at a time.
+//   3. finish() -> the report.
+//
+// A row in an entry needs only the columns in columnsNeeded — the key and the
+// mapped fields — which is what a caller writes to disk between steps 1 and 2.
+export function createReconciliation(rawSpec, options = {}) {
+  const thresholds = { ...DEFAULT_RECON_THRESHOLDS, ...(options.thresholds ?? {}) }
+  const spec = normalizeSpec(rawSpec)
+  const issues = specIssues(spec, options.sourceColumns ?? [], options.targetColumns ?? [])
+  const sides = { source: newSide(spec), target: newSide(spec) }
+  const join = { expected: 0, matched: 0, missing: 0, extra: 0, rowsWithDifference: 0, missingExamples: [], extraExamples: [] }
   const fieldStats = spec.mapping.map((field) => ({
     source: field.source,
     target: field.target,
@@ -349,50 +342,216 @@ function checkMappingAndAccuracy(spec, matched, thresholds) {
     unmappedValues: new Map(),
     examples: [],
   }))
-  const rowsWithDifference = new Set()
 
-  for (const [key, sourceRow, targetRow] of matched) {
-    spec.mapping.forEach((field, i) => {
-      const stats = fieldStats[i]
-      const translated = translate(sourceRow[field.source], field.map)
-      if (translated.unmapped) {
-        stats.unmapped += 1
-        const legacy = String(sourceRow[field.source]).trim()
-        stats.unmappedValues.set(legacy, (stats.unmappedValues.get(legacy) ?? 0) + 1)
-        return
-      }
-      stats.compared += 1
-      if (valuesAgree(translated.value, targetRow[field.target], field)) {
-        stats.agreed += 1
-      } else {
-        stats.mismatched += 1
-        rowsWithDifference.add(key)
-        if (stats.examples.length < EXAMPLES) {
-          stats.examples.push({
-            key: showKey(key),
-            source: sourceRow[field.source],
-            expected: translated.value,
-            target: targetRow[field.target],
-          })
-        }
-      }
-    })
+  const columnsNeeded = {
+    source: [...new Set([...spec.key.source, ...spec.mapping.map((f) => f.source)])],
+    target: [...new Set([...spec.key.target, ...spec.mapping.map((f) => f.target)])],
   }
 
-  // --- mapping step
+  function observe(sideName, row) {
+    if (issues.length > 0) return null
+    const side = sides[sideName]
+    side.rows += 1
+    const scope = spec.scope[sideName]
+    if (scope && !conditionHolds(scope, row)) {
+      side.outOfScope += 1
+      return null
+    }
+    addToTotals(side, spec, sideName, row)
+    const key = keyOf(row, spec.key[sideName])
+    if (key === null) side.blankKeys += 1
+    return key
+  }
+
+  function joinPartition(sourceEntries, targetEntries) {
+    if (issues.length > 0) return
+    const source = indexPartition(sourceEntries, sides.source)
+    const target = indexPartition(targetEntries, sides.target)
+
+    for (const [key, s] of source.unique) {
+      join.expected += 1
+      const t = target.unique.get(key)
+      if (!t) {
+        // A key duplicated in the target DID arrive — too many times, which the
+        // keys step reports. Calling it missing as well would count one fault twice.
+        if (!target.duplicated.has(key)) {
+          join.missing += 1
+          keepFirst(join.missingExamples, { rowNo: s.rowNo, key })
+        }
+        continue
+      }
+      join.matched += 1
+      let differs = false
+      spec.mapping.forEach((field, i) => {
+        const stats = fieldStats[i]
+        const translated = translate(s.row[field.source], field.map)
+        if (translated.unmapped) {
+          stats.unmapped += 1
+          const legacy = String(s.row[field.source]).trim()
+          const seen = stats.unmappedValues.get(legacy)
+          if (seen) {
+            seen.count += 1
+            seen.firstRow = Math.min(seen.firstRow, s.rowNo)
+          } else {
+            stats.unmappedValues.set(legacy, { count: 1, firstRow: s.rowNo })
+          }
+          return
+        }
+        stats.compared += 1
+        if (valuesAgree(translated.value, t.row[field.target], field)) {
+          stats.agreed += 1
+        } else {
+          stats.mismatched += 1
+          differs = true
+          keepFirst(stats.examples, {
+            rowNo: s.rowNo,
+            key: showKey(key),
+            source: s.row[field.source],
+            expected: translated.value,
+            target: t.row[field.target],
+          })
+        }
+      })
+      if (differs) join.rowsWithDifference += 1
+    }
+
+    for (const [key, t] of target.unique) {
+      if (!source.unique.has(key) && !source.duplicated.has(key)) {
+        join.extra += 1
+        keepFirst(join.extraExamples, { rowNo: t.rowNo, key })
+      }
+    }
+  }
+
+  function finish() {
+    if (issues.length > 0) {
+      return {
+        status: 'INVALID',
+        name: spec.name,
+        headline: 'This reconciliation spec cannot run against these files as written.',
+        issues,
+        steps: RECON_STEPS.map((s) => step(s.id, 'SKIPPED', [], { reason: 'The spec could not run.' })),
+        findings: [],
+        counts: null,
+        fields: [],
+        totals: [],
+        thresholds,
+      }
+    }
+
+    const steps = [
+      keysStep(sides),
+      completenessStep(sides, join, thresholds),
+      ...mappingAndAccuracySteps(spec, fieldStats, join, thresholds),
+    ]
+    const totals = totalsStep(spec, sides, thresholds)
+    steps.push(totals.result)
+
+    const counts = {
+      sourceRows: sides.source.rows,
+      targetRows: sides.target.rows,
+      sourceOutOfScope: sides.source.outOfScope,
+      targetOutOfScope: sides.target.outOfScope,
+      expected: join.expected,
+      matched: join.matched,
+      missing: join.missing,
+      extra: join.extra,
+      sourceBlankKeys: sides.source.blankKeys,
+      targetBlankKeys: sides.target.blankKeys,
+      sourceDuplicateKeys: sides.source.duplicateKeys,
+      targetDuplicateKeys: sides.target.duplicateKeys,
+      rowsWithDifference: join.rowsWithDifference,
+      rowsFullyMatched: join.matched - join.rowsWithDifference,
+    }
+
+    return {
+      status: steps.some((s) => s.status === 'FAIL') ? 'FAIL' : 'PASS',
+      name: spec.name,
+      headline: buildHeadline(steps, counts),
+      issues: [],
+      steps,
+      findings: steps.flatMap((s) => s.findings),
+      counts,
+      fields: fieldStats.map((stats) => ({
+        source: stats.source,
+        target: stats.target,
+        compared: stats.compared,
+        agreed: stats.agreed,
+        mismatched: stats.mismatched,
+        unmapped: stats.unmapped,
+        examples: stats.examples.map(({ rowNo: _rowNo, ...example }) => example),
+        matchRate: stats.compared ? stats.agreed / stats.compared : null,
+      })),
+      totals: totals.totals,
+      thresholds,
+    }
+  }
+
+  return { issues, spec, columnsNeeded, observe, joinPartition, finish }
+}
+
+// --- the steps --------------------------------------------------------------
+
+function keysStep({ source, target }) {
+  const findings = []
+  if (source.blankKeys > 0) {
+    findings.push(finding('keys', 'blank-key-source', null,
+      `${plural(source.blankKeys, 'source record')} ${source.blankKeys === 1 ? 'has' : 'have'} no key, so ${source.blankKeys === 1 ? 'it' : 'they'} cannot be traced into the target.`))
+  }
+  if (target.blankKeys > 0) {
+    findings.push(finding('keys', 'blank-key-target', null,
+      `${plural(target.blankKeys, 'target record')} ${target.blankKeys === 1 ? 'has' : 'have'} no key, so ${target.blankKeys === 1 ? 'it' : 'they'} cannot be traced back to the source.`))
+  }
+  if (source.duplicateKeys > 0) {
+    findings.push(finding('keys', 'duplicate-key-source', null,
+      `${plural(source.duplicateKeys, 'key')} ${source.duplicateKeys === 1 ? 'appears' : 'appear'} more than once in the source (${plural(source.duplicateRows, 'record')} in all). These are set aside rather than guessed at.`,
+      source.duplicateExamples.map((d) => ({ key: showKey(d.key), detail: `${d.count} records` }))))
+  }
+  if (target.duplicateKeys > 0) {
+    findings.push(finding('keys', 'duplicate-key-target', null,
+      `${plural(target.duplicateKeys, 'key')} ${target.duplicateKeys === 1 ? 'appears' : 'appear'} more than once in the target (${plural(target.duplicateRows, 'record')} in all) — often a join that fanned out during the load. These are set aside rather than guessed at.`,
+      target.duplicateExamples.map((d) => ({ key: showKey(d.key), detail: `${d.count} records` }))))
+  }
+  return step('keys', findings.length ? 'FAIL' : 'PASS', findings)
+}
+
+function completenessStep(sides, join, thresholds) {
+  const expected = join.expected
+  const missingShare = expected ? join.missing / expected : 0
+  const extraShare = sides.target.uniqueKeys ? join.extra / sides.target.uniqueKeys : 0
+  const findings = []
+
+  if (join.missing > 0) {
+    findings.push(finding('completeness', 'missing-in-target', null,
+      `${plural(join.missing, 'source record')} (${pct(missingShare)}) did not arrive in the target.`,
+      join.missingExamples.map((m) => ({ key: showKey(m.key) }))))
+  }
+  if (join.extra > 0) {
+    findings.push(finding('completeness', 'extra-in-target', null,
+      `${plural(join.extra, 'target record')} (${pct(extraShare)}) ${join.extra === 1 ? 'has' : 'have'} no source record — loaded from somewhere this extract does not cover, or created by the load itself.`,
+      join.extraExamples.map((m) => ({ key: showKey(m.key) }))))
+  }
+
+  const failed = missingShare > thresholds.missingShare || extraShare > thresholds.extraShare
+  const status = expected === 0 && sides.target.uniqueKeys === 0 ? 'SKIPPED' : failed ? 'FAIL' : 'PASS'
+  return step('completeness', status, findings, {
+    reason: status === 'SKIPPED' ? 'No record on either side could be identified by its key.' : undefined,
+  })
+}
+
+function mappingAndAccuracySteps(spec, fieldStats, join, thresholds) {
   const mappingFindings = []
   fieldStats.forEach((stats) => {
     if (stats.unmapped === 0) return
-    const values = [...stats.unmappedValues].sort((a, b) => b[1] - a[1])
+    const values = [...stats.unmappedValues].sort((a, b) => b[1].count - a[1].count || a[1].firstRow - b[1].firstRow)
     mappingFindings.push(finding('mapping', 'unmapped-value', stats.target,
       `${plural(values.length, 'legacy value')} in "${stats.source}" ${values.length === 1 ? 'has' : 'have'} no entry in the crosswalk to "${stats.target}", affecting ${plural(stats.unmapped, 'record')}. This is a gap in the mapping specification, not in the load.`,
-      values.slice(0, EXAMPLES).map(([value, n]) => ({ value, detail: plural(n, 'record') }))))
+      values.slice(0, EXAMPLES).map(([value, seen]) => ({ value, detail: plural(seen.count, 'record') }))))
   })
-  const mapping = crosswalked.length === 0
-    ? step('mapping', 'SKIPPED', [], { reason: 'No field in the spec carries a crosswalk.' })
-    : step('mapping', mappingFindings.length ? 'FAIL' : 'PASS', mappingFindings)
+  const mapping = spec.mapping.some((field) => field.map)
+    ? step('mapping', mappingFindings.length ? 'FAIL' : 'PASS', mappingFindings)
+    : step('mapping', 'SKIPPED', [], { reason: 'No field in the spec carries a crosswalk.' })
 
-  // --- accuracy step
   const accuracyFindings = []
   fieldStats.forEach((stats) => {
     if (stats.mismatched === 0) return
@@ -410,53 +569,22 @@ function checkMappingAndAccuracy(spec, matched, thresholds) {
   let accuracy
   if (spec.mapping.length === 0) {
     accuracy = step('accuracy', 'SKIPPED', [], { reason: 'The spec maps no fields, so only presence was checked.' })
-  } else if (matched.length === 0) {
+  } else if (join.matched === 0) {
     accuracy = step('accuracy', 'SKIPPED', [], { reason: 'No record arrived on both sides, so there was nothing to compare.' })
   } else {
     accuracy = step('accuracy', worstShare > thresholds.mismatchShare ? 'FAIL' : 'PASS', accuracyFindings)
   }
-
-  const fields = fieldStats.map((stats) => ({
-    source: stats.source,
-    target: stats.target,
-    compared: stats.compared,
-    agreed: stats.agreed,
-    mismatched: stats.mismatched,
-    unmapped: stats.unmapped,
-    examples: stats.examples,
-    matchRate: stats.compared ? stats.agreed / stats.compared : null,
-  }))
-  return { mapping, accuracy, fields, rowsWithDifference: rowsWithDifference.size }
+  return [mapping, accuracy]
 }
 
-function sumBy(rows, measure, group, map) {
-  const groups = new Map()
-  let unreadable = 0
-  for (const row of rows) {
-    let label = '(all records)'
-    if (group) {
-      const raw = row[group]
-      const translated = translate(raw, map)
-      label = isBlank(raw) ? '(blank)' : translated.unmapped ? String(raw).trim() : String(translated.value).trim()
-    }
-    const entry = groups.get(label) ?? { sum: 0, count: 0 }
-    const value = parseNumber(row[measure])
-    if (value !== null) entry.sum += value
-    else if (!isBlank(row[measure])) unreadable += 1
-    entry.count += 1
-    groups.set(label, entry)
-  }
-  return { groups, unreadable }
-}
-
-function checkTotals(spec, source, target, thresholds) {
+function totalsStep(spec, sides, thresholds) {
   if (spec.totals.length === 0) {
     return { result: step('totals', 'SKIPPED', [], { reason: 'The spec sets no control totals.' }), totals: [] }
   }
   const findings = []
-  const totals = spec.totals.map((total) => {
-    const s = sumBy(source.inScopeRows, total.source, total.groupBy?.source, total.groupBy?.map)
-    const t = sumBy(target.inScopeRows, total.target, total.groupBy?.target, null)
+  const totals = spec.totals.map((total, i) => {
+    const s = sides.source.totals[i]
+    const t = sides.target.totals[i]
     const labels = [...new Set([...s.groups.keys(), ...t.groups.keys()])].sort()
     const groups = labels.map((label) => {
       const a = s.groups.get(label) ?? { sum: 0, count: 0 }
@@ -482,14 +610,14 @@ function checkTotals(spec, source, target, thresholds) {
           detail: `source ${money(g.source)}, target ${money(g.target)}, difference ${g.difference > 0 ? '+' : ''}${money(g.difference)}`,
         }))))
     }
-    if (s.unreadable + t.unreadable > 0) {
+    const unreadable = s.unreadable + t.unreadable
+    if (unreadable > 0) {
       findings.push(finding('totals', 'unreadable-amount', total.target,
-        `${plural(s.unreadable + t.unreadable, 'value')} in "${total.source}" / "${total.target}" could not be read as a number and ${s.unreadable + t.unreadable === 1 ? 'is' : 'are'} left out of the totals.`))
+        `${plural(unreadable, 'value')} in "${total.source}" / "${total.target}" could not be read as a number and ${unreadable === 1 ? 'is' : 'are'} left out of the totals.`))
     }
     return { source: total.source, target: total.target, groupBy: total.groupBy?.target ?? null, groups }
   })
-  const status = findings.some((f) => f.code === 'total-mismatch' || f.code === 'unreadable-amount') ? 'FAIL' : 'PASS'
-  return { result: step('totals', status, findings), totals }
+  return { result: step('totals', findings.length ? 'FAIL' : 'PASS', findings), totals }
 }
 
 // --- headline ---------------------------------------------------------------
@@ -517,70 +645,29 @@ function joinLabels(labels) {
 
 // reconcile(spec, sourceRows, targetRows, { thresholds }) -> report
 //
-// Never throws on bad input: a spec that cannot run returns status INVALID
-// with the reasons, so every caller always has a sentence to show.
+// Both files in memory, as one partition. Never throws on bad input: a spec that
+// cannot run returns status INVALID with the reasons, so every caller always
+// has a sentence to show.
 export function reconcile(rawSpec, sourceRows, targetRows, options = {}) {
-  const thresholds = { ...DEFAULT_RECON_THRESHOLDS, ...(options.thresholds ?? {}) }
-  const spec = normalizeSpec(rawSpec)
   const sourceList = Array.isArray(sourceRows) ? sourceRows : []
   const targetList = Array.isArray(targetRows) ? targetRows : []
-  const sourceColumns = options.sourceColumns ?? columnsOf(sourceList)
-  const targetColumns = options.targetColumns ?? columnsOf(targetList)
+  const run = createReconciliation(rawSpec, {
+    ...options,
+    sourceColumns: options.sourceColumns ?? columnsOf(sourceList),
+    targetColumns: options.targetColumns ?? columnsOf(targetList),
+  })
+  if (run.issues.length > 0) return run.finish()
 
-  const issues = specIssues(spec, sourceColumns, targetColumns)
-  if (issues.length > 0) {
-    return {
-      status: 'INVALID',
-      name: spec.name,
-      headline: 'This reconciliation spec cannot run against these files as written.',
-      issues,
-      steps: RECON_STEPS.map((s) => step(s.id, 'SKIPPED', [], { reason: 'The spec could not run.' })),
-      findings: [],
-      counts: null,
-      fields: [],
-      totals: [],
-      thresholds,
-    }
+  const entries = (sideName, rows) => {
+    const out = []
+    rows.forEach((row, index) => {
+      const key = run.observe(sideName, row)
+      if (key !== null) out.push({ key, row, rowNo: index + 1 })
+    })
+    return out
   }
-
-  const source = indexSide(sourceList, spec.key.source, spec.scope.source)
-  const target = indexSide(targetList, spec.key.target, spec.scope.target)
-
-  const keys = checkKeys(source, target)
-  const completeness = checkCompleteness(source, target, thresholds)
-  const { mapping, accuracy, fields, rowsWithDifference } = checkMappingAndAccuracy(spec, completeness.matched, thresholds)
-  const totals = checkTotals(spec, source, target, thresholds)
-
-  const steps = [keys, completeness.result, mapping, accuracy, totals.result]
-  const counts = {
-    sourceRows: sourceList.length,
-    targetRows: targetList.length,
-    sourceOutOfScope: source.outOfScope,
-    targetOutOfScope: target.outOfScope,
-    expected: source.byKey.size,
-    matched: completeness.matched.length,
-    missing: completeness.missing,
-    extra: completeness.extra,
-    sourceBlankKeys: source.blankKeys,
-    targetBlankKeys: target.blankKeys,
-    sourceDuplicateKeys: source.duplicates.size,
-    targetDuplicateKeys: target.duplicates.size,
-    rowsWithDifference,
-    rowsFullyMatched: completeness.matched.length - rowsWithDifference,
-  }
-
-  return {
-    status: steps.some((s) => s.status === 'FAIL') ? 'FAIL' : 'PASS',
-    name: spec.name,
-    headline: buildHeadline(steps, counts),
-    issues: [],
-    steps,
-    findings: steps.flatMap((s) => s.findings),
-    counts,
-    fields,
-    totals: totals.totals,
-    thresholds,
-  }
+  run.joinPartition(entries('source', sourceList), entries('target', targetList))
+  return run.finish()
 }
 
 function columnsOf(rows) {

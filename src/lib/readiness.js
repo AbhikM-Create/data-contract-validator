@@ -7,12 +7,13 @@
 // migration cycle. See docs/v2-spec.md.
 //
 // This is a view over the same rules validate() enforces, evaluated by the same
-// checkRules(), so a rule cannot mean one thing here and another there. What it
+// createRuleChecker() that checkRules() runs on, so a rule cannot mean one
+// thing here and another there. What it
 // adds is the question a load asks: not "which rules broke?" but "which RECORDS
 // will be turned away, and which will load with a warning?"
 
 import { isBlank } from './contract.js'
-import { checkRules, describeRule, ruleColumns, ruleIssue, ruleSeverity } from './rules.js'
+import { createRuleChecker, describeRule, ruleColumns, ruleIssue, ruleSeverity } from './rules.js'
 
 export const READINESS = {
   READY: 'READY',
@@ -39,32 +40,218 @@ function columnsOf(rows) {
   return [...seen]
 }
 
-// The key check a target load performs before any field rule: a record it
-// cannot identify, or one it already has, is turned away.
-function checkKey(rows, keyColumns) {
-  const firstRow = new Map()
-  const failures = []
-  rows.forEach((row, index) => {
-    if (keyColumns.some((column) => isBlank(row[column]))) {
-      failures.push({ row: index + 1, value: '(blank key)' })
-      return
+// The key a record is identified by, or null when any part of it is blank.
+function keyValue(row, keyColumns) {
+  if (keyColumns.some((column) => isBlank(row?.[column]))) return null
+  return keyColumns.map((column) => String(row[column]).trim()).join(' / ')
+}
+
+function normalizeKey(key) {
+  return (Array.isArray(key) ? key : key ? [key] : []).map((c) => String(c).trim()).filter(Boolean)
+}
+
+// Keys appearing more than once in rows. In memory here; a caller streaming a
+// file too large to hold builds the same set by partitioning keys on disk.
+export function findDuplicateKeys(rows, key) {
+  const keyColumns = normalizeKey(key)
+  const seen = new Set()
+  const duplicates = new Set()
+  for (const row of rows) {
+    const value = keyValue(row, keyColumns)
+    if (value === null) continue
+    if (seen.has(value)) duplicates.add(value)
+    else seen.add(value)
+  }
+  return duplicates
+}
+
+// createReadinessCheck(contract, { columns, key, duplicateKeys, collectFlagged })
+//   -> { issues, keyOf, row, finish }
+//
+// The record-at-a-time form, so a twenty-million-row load file can be judged in
+// bounded memory: feed every row to row(row, rowNumber), then call
+// finish(rowCount). checkReadiness() below is this, over an array.
+//
+// duplicateKeys: the keys that appear more than once in the whole file. A row
+// cannot know that its key recurs ninety thousand rows later, so a key check
+// needs the set up front. Every copy of a duplicated key is rejected, the first
+// included: the target cannot tell which one is meant, and neither can this.
+//
+// collectFlagged keeps every flagged record in the report — right for a few
+// thousand rows, wrong for a stream, where the caller writes them out as row()
+// returns them instead.
+export function createReadinessCheck(contract, options = {}) {
+  const rules = Array.isArray(contract?.rules) ? contract.rules : []
+  const skipped = Array.isArray(contract?.skipped) ? contract.skipped : []
+  const columns = options.columns ?? []
+  const columnSet = new Set(columns)
+  const key = normalizeKey(options.key)
+  const duplicateKeys = options.duplicateKeys ?? new Set()
+  const collectFlagged = options.collectFlagged === true
+
+  const issues = []
+  if (rules.length === 0 && skipped.length === 0) {
+    issues.push('The contract has no rules, so there is nothing to predict a load against.')
+  }
+  const missingKey = key.filter((column) => !columnSet.has(column))
+  if (missingKey.length > 0) {
+    issues.push(`The key names ${quote(missingKey)}, which the load file does not have.`)
+  }
+
+  // Sort rules into what can be evaluated and what cannot, BEFORE evaluating:
+  // a rule over a missing column would otherwise read every cell as blank and
+  // pass without testing anything.
+  const unevaluable = []
+  const evaluable = []
+  const missingColumns = new Set()
+  for (const rule of rules) {
+    const problem = ruleIssue(rule)
+    if (problem) {
+      unevaluable.push(unchecked(rule, `it can't be read — ${problem}`))
+      continue
     }
-    const key = keyColumns.map((column) => String(row[column]).trim()).join(' / ')
-    if (firstRow.has(key)) {
-      const first = firstRow.get(key)
-      // Every copy is rejected, the first included: the target cannot tell
-      // which one is meant, and neither can this tool.
-      if (first.counted === false) {
-        failures.push({ row: first.row, value: key })
-        first.counted = true
+    const missing = ruleColumns(rule).filter((column) => !columnSet.has(column))
+    if (missing.length > 0) {
+      missing.forEach((column) => missingColumns.add(column))
+      unevaluable.push(unchecked(rule, `the load file has no column ${quote(missing)}`, missing))
+      continue
+    }
+    evaluable.push(rule)
+  }
+  for (const entry of skipped) {
+    unevaluable.push(unchecked(entry.rule, `the contract file holds it in a form this version can't read — ${entry.reason}`))
+  }
+
+  const checker = createRuleChecker(evaluable, { keepFailures: EXAMPLES })
+  const severities = evaluable.map(ruleSeverity)
+  const descriptions = evaluable.map(describeRule)
+  const keyDescription = `${quote(key)} must identify each record exactly once`
+  const keyCheck = { failing: 0, examples: [] }
+  const labels = new Map() // example row number -> record label, for examples only
+  const flaggedList = []
+  let rejected = 0
+  let warned = 0
+
+  const labelFor = (row, rowNumber) => {
+    if (key.length === 0) return `row ${rowNumber}`
+    return keyValue(row, key) ?? `row ${rowNumber}`
+  }
+
+  return {
+    issues,
+    keyOf: (row) => keyValue(row, key),
+
+    // Judges one record; returns { severity, reasons } when it is flagged,
+    // null when it would load clean.
+    row(row, rowNumber) {
+      if (issues.length > 0) return null
+      let severity = null
+      const reasons = []
+
+      if (key.length > 0) {
+        const value = keyValue(row, key)
+        if (value === null || duplicateKeys.has(value)) {
+          keyCheck.failing += 1
+          if (keyCheck.examples.length < EXAMPLES) {
+            keyCheck.examples.push({ row: rowNumber, record: labelFor(row, rowNumber), value: value ?? '(blank key)' })
+          }
+          severity = 'reject'
+          reasons.push(keyDescription)
+        }
       }
-      failures.push({ row: index + 1, value: key })
-    } else {
-      firstRow.set(key, { row: index + 1, counted: false })
-    }
-  })
-  failures.sort((a, b) => a.row - b.row)
-  return failures
+
+      const before = checker.states.map((state) => state.failures.length)
+      for (const index of checker.row(row, rowNumber)) {
+        if (severities[index] === 'reject') severity = 'reject'
+        else if (severity === null) severity = 'warn'
+        reasons.push(descriptions[index])
+        // Remember how to name this record only if it became an example.
+        if (checker.states[index].failures.length > before[index]) labels.set(rowNumber, labelFor(row, rowNumber))
+      }
+
+      if (severity === null) return null
+      if (severity === 'reject') rejected += 1
+      else warned += 1
+      const flag = { row: rowNumber, record: labelFor(row, rowNumber), severity, reasons }
+      if (collectFlagged) flaggedList.push(flag)
+      return flag
+    },
+
+    finish(rowCount) {
+      if (issues.length > 0) {
+        return {
+          status: READINESS.INVALID,
+          name: contract?.name ?? null,
+          headline: 'This readiness check cannot run as set up.',
+          issues,
+          counts: null,
+          checks: [],
+          missingColumns: [],
+          flagged: [],
+        }
+      }
+
+      const checks = [...unevaluable]
+      if (key.length > 0) {
+        checks.push({
+          kind: 'key',
+          description: keyDescription,
+          severity: 'reject',
+          status: keyCheck.failing > 0 ? 'FAIL' : 'PASS',
+          applicable: rowCount,
+          failing: keyCheck.failing,
+          share: rowCount ? keyCheck.failing / rowCount : 0,
+          examples: keyCheck.examples,
+          reason: null,
+        })
+      }
+      checker.states.forEach((state, index) => {
+        checks.push({
+          kind: state.rule.kind,
+          rule: state.rule,
+          description: descriptions[index],
+          severity: severities[index],
+          status: state.failing > 0 ? 'FAIL' : 'PASS',
+          applicable: state.applicable,
+          failing: state.failing,
+          share: state.applicable ? state.failing / state.applicable : 0,
+          examples: state.failures.map((f) => ({
+            row: f.row,
+            record: labels.get(f.row) ?? `row ${f.row}`,
+            value: f.value === '' ? '(blank)' : f.value,
+          })),
+          reason: state.applicable === 0 ? 'No record met the rule\u2019s condition, so nothing was tested against it.' : null,
+        })
+      })
+
+      // Most damaging first: rejections by size, then warnings, then what could
+      // not be checked, then what passed.
+      const rank = (c) =>
+        c.status === 'FAIL' ? (c.severity === 'reject' ? 0 : 1) : c.status === 'UNCHECKED' ? 2 : 3
+      checks.sort((a, b) => rank(a) - rank(b) || b.failing - a.failing)
+
+      const counts = { records: rowCount, rejected, warned, clean: rowCount - rejected - warned }
+      const missing = [...missingColumns]
+      const missingRequired = checks.some((c) => c.status === 'UNCHECKED' && c.severity === 'reject' && c.missing?.length)
+      const uncheckedCount = checks.filter((c) => c.status === 'UNCHECKED').length
+
+      let status
+      if (rejected > 0 || missingRequired) status = READINESS.NOT_READY
+      else if (uncheckedCount > 0) status = READINESS.UNVERIFIED
+      else status = READINESS.READY
+
+      return {
+        status,
+        name: contract?.name ?? null,
+        headline: buildHeadline(status, counts, checks, missing, uncheckedCount),
+        issues: [],
+        counts,
+        checks,
+        missingColumns: missing,
+        flagged: flaggedList,
+      }
+    },
+  }
 }
 
 // checkReadiness(contract, rows, { columns, key }) -> report
@@ -80,144 +267,17 @@ function checkKey(rows, keyColumns) {
 //           example names its record by key, not just by row number.
 export function checkReadiness(contract, rows, options = {}) {
   const rowList = Array.isArray(rows) ? rows : []
-  const rules = Array.isArray(contract?.rules) ? contract.rules : []
-  const skipped = Array.isArray(contract?.skipped) ? contract.skipped : []
   const columns = options.columns ?? columnsOf(rowList)
-  const columnSet = new Set(columns)
-  const key = (Array.isArray(options.key) ? options.key : options.key ? [options.key] : [])
-    .map((c) => String(c).trim())
-    .filter(Boolean)
-
-  const issues = []
-  if (rules.length === 0 && skipped.length === 0) {
-    issues.push('The contract has no rules, so there is nothing to predict a load against.')
-  }
-  const missingKey = key.filter((column) => !columnSet.has(column))
-  if (missingKey.length > 0) {
-    issues.push(`The key names ${quote(missingKey)}, which the load file does not have.`)
-  }
-  if (issues.length > 0) {
-    return {
-      status: READINESS.INVALID,
-      name: contract?.name ?? null,
-      headline: 'This readiness check cannot run as set up.',
-      issues,
-      counts: null,
-      checks: [],
-      missingColumns: [],
-      flagged: [],
-    }
-  }
-
-  const label = (rowNumber) => {
-    if (key.length === 0) return `row ${rowNumber}`
-    const row = rowList[rowNumber - 1]
-    if (key.some((column) => isBlank(row?.[column]))) return `row ${rowNumber}`
-    return key.map((column) => String(row[column]).trim()).join(' / ')
-  }
-
-  // Sort rules into what can be evaluated and what cannot, BEFORE evaluating:
-  // a rule over a missing column would otherwise read every cell as blank and
-  // pass without testing anything.
-  const checks = []
-  const evaluable = []
-  const missingColumns = new Set()
-  for (const rule of rules) {
-    const problem = ruleIssue(rule)
-    if (problem) {
-      checks.push(unchecked(rule, `it can't be read — ${problem}`))
-      continue
-    }
-    const missing = ruleColumns(rule).filter((column) => !columnSet.has(column))
-    if (missing.length > 0) {
-      missing.forEach((column) => missingColumns.add(column))
-      checks.push(unchecked(rule, `the load file has no column ${quote(missing)}`, missing))
-      continue
-    }
-    evaluable.push(rule)
-  }
-  for (const entry of skipped) {
-    checks.push(unchecked(entry.rule, `the contract file holds it in a form this version can't read — ${entry.reason}`))
-  }
-
-  // Per-record tally: one record broken by three rules is one rejection.
-  const flagged = new Map()
-  const flag = (rowNumber, severity, reason) => {
-    const entry = flagged.get(rowNumber) ?? { row: rowNumber, record: label(rowNumber), severity: 'warn', reasons: [] }
-    if (severity === 'reject') entry.severity = 'reject'
-    entry.reasons.push(reason)
-    flagged.set(rowNumber, entry)
-  }
-
-  if (key.length > 0) {
-    const failures = checkKey(rowList, key)
-    const description = `${quote(key)} must identify each record exactly once`
-    failures.forEach((f) => flag(f.row, 'reject', description))
-    checks.push({
-      kind: 'key',
-      description,
-      severity: 'reject',
-      status: failures.length > 0 ? 'FAIL' : 'PASS',
-      applicable: rowList.length,
-      failing: failures.length,
-      share: rowList.length ? failures.length / rowList.length : 0,
-      examples: failures.slice(0, EXAMPLES).map((f) => ({ row: f.row, record: label(f.row), value: f.value })),
-      reason: null,
-    })
-  }
-
-  for (const outcome of checkRules(evaluable, rowList)) {
-    const severity = ruleSeverity(outcome.rule)
-    const description = describeRule(outcome.rule)
-    outcome.failures.forEach((f) => flag(f.row, severity, description))
-    checks.push({
-      kind: outcome.rule.kind,
-      rule: outcome.rule,
-      description,
-      severity,
-      status: outcome.status,
-      applicable: outcome.applicable,
-      failing: outcome.failures.length,
-      share: outcome.applicable ? outcome.failures.length / outcome.applicable : 0,
-      examples: outcome.failures.slice(0, EXAMPLES).map((f) => ({
-        row: f.row,
-        record: label(f.row),
-        value: f.value === '' ? '(blank)' : f.value,
-      })),
-      reason: outcome.applicable === 0 ? 'No record met the rule’s condition, so nothing was tested against it.' : null,
-    })
-  }
-
-  // Most damaging first: rejections by size, then warnings, then what could not
-  // be checked, then what passed.
-  const rank = (c) =>
-    c.status === 'FAIL' ? (c.severity === 'reject' ? 0 : 1) : c.status === 'UNCHECKED' ? 2 : 3
-  checks.sort((a, b) => rank(a) - rank(b) || b.failing - a.failing)
-
-  const flaggedList = [...flagged.values()].sort((a, b) => a.row - b.row)
-  const rejected = flaggedList.filter((f) => f.severity === 'reject').length
-  const warned = flaggedList.length - rejected
-  const counts = { records: rowList.length, rejected, warned, clean: rowList.length - flaggedList.length }
-
-  const missing = [...missingColumns]
-  const missingRequired = checks.some((c) => c.status === 'UNCHECKED' && c.severity === 'reject' && c.missing?.length)
-  const uncheckedCount = checks.filter((c) => c.status === 'UNCHECKED').length
-
-  let status
-  if (rejected > 0 || missingRequired) status = READINESS.NOT_READY
-  else if (uncheckedCount > 0) status = READINESS.UNVERIFIED
-  else status = READINESS.READY
-
-  return {
-    status,
-    name: contract?.name ?? null,
-    headline: buildHeadline(status, counts, checks, missing, uncheckedCount),
-    issues: [],
-    counts,
-    checks,
-    missingColumns: missing,
-    flagged: flaggedList,
-  }
+  const key = normalizeKey(options.key)
+  const keyUsable = key.length > 0 && key.every((column) => columns.includes(column))
+  const check = createReadinessCheck(contract, {
+    columns,
+    key,
+    duplicateKeys: keyUsable ? findDuplicateKeys(rowList, key) : new Set(),
+    collectFlagged: true,
+  })
+  rowList.forEach((row, index) => check.row(row, index + 1))
+  return check.finish(rowList.length)
 }
 
 function unchecked(rule, why, missing = []) {

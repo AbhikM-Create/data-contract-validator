@@ -1,30 +1,47 @@
 // Migration reconciliation from the command line.
 //
-//   node scripts/reconcile.mjs <spec.json> <source.csv> <target.csv> [--json]
+//   node scripts/reconcile.mjs <spec.json> <source.csv> <target.csv>
+//        [--json] [--tmp dir] [--partitions n]
 //
 // Exit codes are the contract with a pipeline: 0 reconciled, 1 a step failed,
 // 2 the spec or a file could not be used. --json prints the full report for a
 // downstream job; without it, a plain-language summary for a person.
 //
-// Reads each file whole. Streaming for multi-million-row loads is the next
-// increment (docs/v2-spec.md); until then the limit is memory, ~2 KB a row.
+// Files of any size: both are streamed, and records are split by a hash of
+// their key into partitions on local disk and joined one partition at a time,
+// so memory depends on the partition, not the file (scripts/lib/). Partitions
+// go to the system temp directory, or --tmp, and are deleted when the run
+// ends. --partitions forces a count; normally it is chosen from file size.
 
 import { readFileSync } from 'node:fs'
 import { basename } from 'node:path'
-import { parseCsv } from '../src/lib/parseCsv.js'
-import { reconcile } from '../src/lib/reconcile.js'
+import { reconcileFiles } from './lib/reconcileFiles.mjs'
 
 const args = process.argv.slice(2)
+const option = (name) => {
+  const i = args.indexOf(name)
+  if (i === -1) return undefined
+  const value = args[i + 1]
+  args.splice(i, 2)
+  return value
+}
+const tmpDir = option('--tmp')
+const partitionsArg = option('--partitions')
 const asJson = args.includes('--json')
-const [specPath, sourcePath, targetPath] = args.filter((a) => a !== '--json')
+if (asJson) args.splice(args.indexOf('--json'), 1)
+const [specPath, sourcePath, targetPath] = args
 
 function fail(message) {
   console.error(message)
   process.exit(2)
 }
 
-if (!specPath || !sourcePath || !targetPath) {
-  fail('Usage: node scripts/reconcile.mjs <spec.json> <source.csv> <target.csv> [--json]')
+if (!specPath || !sourcePath || !targetPath || args.length > 3) {
+  fail('Usage: node scripts/reconcile.mjs <spec.json> <source.csv> <target.csv> [--json] [--tmp dir] [--partitions n]')
+}
+const partitions = partitionsArg === undefined ? undefined : Number(partitionsArg)
+if (partitions !== undefined && !(Number.isInteger(partitions) && partitions >= 1 && partitions <= 256)) {
+  fail('--partitions must be a whole number from 1 to 256')
 }
 
 let spec
@@ -34,29 +51,13 @@ try {
   fail(`${specPath}: could not read the spec as JSON — ${error.message}`)
 }
 
-function read(path) {
-  let text
-  try {
-    text = readFileSync(path, 'utf8')
-  } catch (error) {
-    fail(`${path}: ${error.message}`)
-  }
-  const parsed = parseCsv(text)
-  if (parsed.errors.length > 0) fail(`${path}: ${parsed.errors[0]}`)
-  return parsed
-}
-
-const source = read(sourcePath)
-const target = read(targetPath)
-const started = Date.now()
-const report = reconcile(spec, source.rows, target.rows, {
-  sourceColumns: source.columns,
-  targetColumns: target.columns,
-})
-const seconds = ((Date.now() - started) / 1000).toFixed(2)
+const outcome = await reconcileFiles(spec, sourcePath, targetPath, { tmpDir, partitions })
+if (outcome.error) fail(outcome.error)
+const report = outcome.report
+const seconds = outcome.seconds.toFixed(2)
 
 if (asJson) {
-  console.log(JSON.stringify({ ...report, files: { source: basename(sourcePath), target: basename(targetPath) } }, null, 2))
+  console.log(JSON.stringify({ ...report, files: { source: basename(sourcePath), target: basename(targetPath) }, partitions: outcome.partitions }, null, 2))
 } else {
   const mark = { PASS: 'PASS   ', FAIL: 'FAIL   ', SKIPPED: 'SKIPPED' }
   console.log(`\n${report.name ?? 'Reconciliation'}: ${basename(sourcePath)} → ${basename(targetPath)}\n`)
@@ -74,7 +75,7 @@ if (asJson) {
       }
     })
     const c = report.counts
-    console.log(`\n  ${c.sourceRows.toLocaleString('en-US')} source rows (${c.sourceOutOfScope.toLocaleString('en-US')} out of scope), ${c.targetRows.toLocaleString('en-US')} target rows, ${seconds}s`)
+    console.log(`\n  ${c.sourceRows.toLocaleString('en-US')} source rows (${c.sourceOutOfScope.toLocaleString('en-US')} out of scope), ${c.targetRows.toLocaleString('en-US')} target rows, ${seconds}s${outcome.partitions > 1 ? `, ${outcome.partitions} partitions` : ''}`)
   }
   console.log(`\n${report.headline}\n`)
 }

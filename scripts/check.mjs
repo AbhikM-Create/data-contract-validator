@@ -1,6 +1,7 @@
 // Load readiness from the command line: will the target accept this load file?
 //
-//   node scripts/check.mjs <contract.json> <load.csv> [--key col[,col]] [--json] [--rejects out.csv]
+//   node scripts/check.mjs <contract.json> <load.csv>
+//        [--key col[,col]] [--json] [--rejects out.csv] [--tmp dir] [--partitions n]
 //
 // Exit codes are the contract with a pipeline: 0 ready, 1 records would be
 // rejected (or the file lacks a column the contract requires), 2 the check
@@ -8,32 +9,34 @@
 // lacks, or a rule that could not be checked. A pipeline should stop on 2 as
 // firmly as on 1: "could not confirm" is not "ready".
 //
-// --rejects writes every flagged record — the load file's own columns plus a
-// _readiness and a _reasons column — as the fix list for the data owners. It
-// is written to local disk only, like everything else this tool touches.
+// --rejects writes every flagged record — the load file's own columns plus
+// _row, _readiness and _reasons — as the fix list for the data owners. It is
+// written to local disk only, like everything else this tool touches.
 //
-// Reads each file whole; streaming for multi-million-row files is the next
-// increment (docs/v2-spec.md).
+// Files of any size: the file is streamed, and flagged records are written as
+// they are found. With --key, a first pass partitions keys on local disk to
+// find duplicates (--tmp to choose where; deleted when the run ends).
 
-import { readFileSync, writeFileSync } from 'node:fs'
+import { readFileSync } from 'node:fs'
 import { basename } from 'node:path'
-import Papa from 'papaparse'
 import { parseContractFile } from '../src/lib/contractFile.js'
-import { parseCsv } from '../src/lib/parseCsv.js'
-import { READINESS, checkReadiness } from '../src/lib/readiness.js'
+import { READINESS } from '../src/lib/readiness.js'
+import { checkReadinessFile } from './lib/readinessFile.mjs'
 
 const args = process.argv.slice(2)
-const flag = (name) => {
+const option = (name) => {
   const i = args.indexOf(name)
   if (i === -1) return undefined
   const value = args[i + 1]
   args.splice(i, 2)
   return value
 }
+const keyArg = option('--key')
+const rejectsPath = option('--rejects')
+const tmpDir = option('--tmp')
+const partitionsArg = option('--partitions')
 const asJson = args.includes('--json')
 if (asJson) args.splice(args.indexOf('--json'), 1)
-const keyArg = flag('--key')
-const rejectsPath = flag('--rejects')
 const [contractPath, loadPath] = args
 
 function fail(message) {
@@ -42,42 +45,36 @@ function fail(message) {
 }
 
 if (!contractPath || !loadPath || args.length > 2) {
-  fail('Usage: node scripts/check.mjs <contract.json> <load.csv> [--key col[,col]] [--json] [--rejects out.csv]')
+  fail('Usage: node scripts/check.mjs <contract.json> <load.csv> [--key col[,col]] [--json] [--rejects out.csv] [--tmp dir] [--partitions n]')
+}
+const partitions = partitionsArg === undefined ? undefined : Number(partitionsArg)
+if (partitions !== undefined && !(Number.isInteger(partitions) && partitions >= 1 && partitions <= 256)) {
+  fail('--partitions must be a whole number from 1 to 256')
 }
 
-function readText(path) {
-  try {
-    return readFileSync(path, 'utf8')
-  } catch (error) {
-    return fail(`${path}: ${error.message}`)
-  }
+let contractText
+try {
+  contractText = readFileSync(contractPath, 'utf8')
+} catch (error) {
+  fail(`${contractPath}: ${error.message}`)
 }
-
-const contract = parseContractFile(readText(contractPath))
+const contract = parseContractFile(contractText)
 if (contract.error) fail(`${contractPath}: ${contract.error}`)
 
-const load = parseCsv(readText(loadPath))
-if (load.errors.length > 0) fail(`${loadPath}: ${load.errors[0]}`)
-
-const started = Date.now()
-const report = checkReadiness(contract, load.rows, {
-  columns: load.columns,
-  key: keyArg ? keyArg.split(',') : [],
+const outcome = await checkReadinessFile(contract, loadPath, {
+  key: keyArg ? keyArg.split(',').map((c) => c.trim()).filter(Boolean) : [],
+  rejectsPath,
+  tmpDir,
+  partitions,
 })
-const seconds = ((Date.now() - started) / 1000).toFixed(2)
-
-if (rejectsPath && report.flagged.length > 0) {
-  const rows = report.flagged.map((f) => ({
-    ...Object.fromEntries(load.columns.map((column) => [column, load.rows[f.row - 1][column]])),
-    _row: f.row,
-    _readiness: f.severity === 'reject' ? 'REJECT' : 'WARN',
-    _reasons: f.reasons.join('; '),
-  }))
-  writeFileSync(rejectsPath, `${Papa.unparse(rows)}\n`)
-}
+if (outcome.error) fail(outcome.error)
+const report = outcome.report
+const seconds = outcome.seconds.toFixed(2)
 
 if (asJson) {
-  console.log(JSON.stringify({ ...report, file: basename(loadPath) }, null, 2))
+  // flagged is empty when streaming — the records went to --rejects instead.
+  const { flagged: _flagged, ...summary } = report
+  console.log(JSON.stringify({ ...summary, file: basename(loadPath) }, null, 2))
 } else {
   const tone = { FAIL: 'FAIL     ', PASS: 'PASS     ', UNCHECKED: 'UNCHECKED' }
   console.log(`\n${report.name ?? 'Contract'}: ${basename(loadPath)}\n`)
@@ -99,8 +96,8 @@ if (asJson) {
       console.log(`  ${contract.skipped.length} rule(s) in the contract file could not be read and were NOT checked.`)
     }
     if (rejectsPath) {
-      console.log(report.flagged.length > 0
-        ? `  Flagged records written to ${rejectsPath}`
+      console.log(outcome.rejectsWritten > 0
+        ? `  ${outcome.rejectsWritten.toLocaleString('en-US')} flagged records written to ${rejectsPath}`
         : `  No flagged records, so ${rejectsPath} was not written.`)
     }
   }

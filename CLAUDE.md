@@ -234,7 +234,7 @@ Live data connectors. Any backend. Export/PDF. Multi-file batches.
 - Visual language: dark ground, mono labels, cyan = baseline, amber = candidate,
   green = pass, red = fail.
 
-## v2 — Migration reconciliation (increments 1-2 done)
+## v2 — Migration reconciliation (increments 1-3 done)
 Spec: `docs/v2-spec.md`. The audience is the data engineer on a business
 transformation (ERP/HCM cutover, M&A integration) who must prove, every mock
 cycle, that a load arrived whole and correct.
@@ -263,8 +263,8 @@ Load-bearing distinctions:
   returns INVALID with reasons, never a half-run.
 
 CLI: `node scripts/reconcile.mjs <spec.json> <source.csv> <target.csv> [--json]`
-— exit 0 reconciled, 1 a step failed, 2 spec/file unusable. Reads files whole;
-streaming for multi-million-row loads is increment 2.
+— exit 0 reconciled, 1 a step failed, 2 spec/file unusable. Any file size: see
+increment 3.
 
 ### Increment 2 — load readiness (done)
 `src/lib/readiness.js` — `checkReadiness(contract, rows, { columns, key })` —
@@ -292,3 +292,41 @@ KNOWN GAP, not fixed here: `validate()` in rules-only mode has the same hole
 readiness closes — a rule on a missing column reports PASS, because the schema
 layer only runs with a baseline. Fixing it changes engine output, so it needs
 the real-data re-verification the engine bar requires.
+
+### Increment 3 — files of any size (done)
+Both CLIs stream. ONE implementation per engine, never a "large-file version":
+- `createRuleChecker` (rules.js) is THE rule evaluator; `checkRules` loops it.
+- `createReadinessCheck` / `createReconciliation` are the row-at-a-time and
+  partition-at-a-time forms; `checkReadiness` / `reconcile` are those run over
+  an in-memory array as ONE partition.
+`scripts/lib/streaming.test.js` holds the streamed path to `toEqual` the
+in-memory report (1, 7 and 64 partitions) on data planting every finding more
+than five times. Keep that test; it is what makes the refactor safe.
+
+- Examples are the first K IN THE FILE (`keepFirst`, by row number), because
+  partitions are joined in no particular order.
+- Reconciliation spills key + mapped columns to hash partitions, ~32 MB of CSV
+  each: memory is set by that, not by file size (64 MB did not fit a 512 MB
+  heap at 5M rows). Readiness spills only keys, to find duplicates up front,
+  then streams and writes `--rejects` as it goes.
+- Partitions are escaped TSV (`partitions.mjs`), measured 4-5x faster to read
+  than JSON. A cell may hold tab/newline/backslash; the codec escapes them and
+  the parity data carries such a cell.
+- Temp data is company data. Scratch dirs are `dcv-<pid>-*`, owner-only, files
+  0600, removed on exit/Ctrl-C, and every run sweeps dirs whose pid is dead —
+  an out-of-memory abort skips every handler, so this is the only cleanup a
+  crash gets.
+- `scripts/lib/csvStream.mjs` reads by parseCsv's own exported rules
+  (`readHeader`, `cleanRow`, `isMisaligned`). Settle BEFORE `parser.abort()`:
+  Papa runs `complete()` synchronously inside abort.
+- `parseNumber` has two fast paths; `parseNumber.test.js` holds them to the
+  original verbatim over every short string of a hostile alphabet. Any change
+  to it must keep that test.
+
+Measure with `node scripts/benchmark-migration.mjs [rows]`; it fails unless every
+planted break is reported exactly. 5M rows under a 512 MB heap: reconcile 123 s,
+readiness 39 s (docs/v2-spec.md).
+
+Fixed on the way: parseCsv rejected every single-column CSV ("row 2 doesn't
+line up"), because Papa's UndetectableDelimiter warning was counted as a broken
+row. Only TooManyFields/TooFewFields are now (`isMisaligned`).

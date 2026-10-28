@@ -39,9 +39,27 @@ export function isBlank(value) {
   return value === null || value === undefined || String(value).trim() === ''
 }
 
+// Two fast paths, both returning exactly what the full path below would — a
+// test holds them to the original over a large corpus of awkward inputs. They
+// exist because this runs on every cell of every comparison: on a five-million-
+// row reconciliation the three replaces below were the largest single cost,
+// spent mostly on names and dates that could never be numbers.
+//
+// PLAIN_NUMBER: already clean, so cleaning would not change it.
+// NOT_A_NUMBER: holds a character cleaning would leave in place and the final
+// pattern would refuse — a letter other than e/E, a slash, a colon.
+const PLAIN_NUMBER = /^[+-]?\d+(\.\d+)?$/
+const NOT_A_NUMBER = /[^\d+\-.eE,%\s\p{Sc}]/u
+
 export function parseNumber(raw) {
   if (isBlank(raw)) return null
-  const cleaned = String(raw).trim().replace(CURRENCY_RE, '').replace(PERCENT_RE, '').replace(THOUSANDS_RE, '').trim()
+  const text = String(raw)
+  if (PLAIN_NUMBER.test(text)) {
+    const value = Number(text)
+    return Number.isFinite(value) ? value : null
+  }
+  if (NOT_A_NUMBER.test(text)) return null
+  const cleaned = text.trim().replace(CURRENCY_RE, '').replace(PERCENT_RE, '').replace(THOUSANDS_RE, '').trim()
   if (cleaned === '' || !/^[+-]?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?$/.test(cleaned)) return null
   const value = Number(cleaned)
   return Number.isFinite(value) ? value : null
