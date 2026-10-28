@@ -38,6 +38,6 @@ run -f "$ROOT/supabase/schema.sql" 2>"$TMP/schema.err" || { cat "$TMP/schema.err
 # One line per check: "ok  ..." for each pass, the failure and its reason if
 # one fails. The exit status is psql's, so a failed check fails this script.
 status=0
-run -f "$ROOT/supabase/tests/rls.sql" >"$TMP/out" 2>&1 || status=$?
+{ run -f "$ROOT/supabase/tests/rls.sql" && run -f "$ROOT/supabase/tests/orgs.sql"; } >"$TMP/out" 2>&1 || status=$?
 sed -n -e 's/^.*NOTICE:  //p' -e 's/^.*ERROR:  /FAILED: /p' -e '/PASSED/p' "$TMP/out" | sed 's/^FAILED: FAILED: /FAILED: /'
 exit $status

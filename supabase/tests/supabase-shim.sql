@@ -18,7 +18,8 @@ create role authenticated nologin;
 create schema auth;
 grant usage on schema auth to anon, authenticated;
 
-create table auth.users (id uuid primary key);
+-- The columns of Supabase's auth.users that schema.sql reads.
+create table auth.users (id uuid primary key, email varchar(255), email_confirmed_at timestamptz);
 
 create function auth.uid() returns uuid
 language sql stable
