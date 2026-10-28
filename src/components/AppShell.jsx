@@ -95,13 +95,13 @@ export default function AppShell({ route, user, authLoading, busy, engineError, 
         <div
           style={{
             maxWidth: 1080, margin: '0 auto', padding: '7px 24px',
-            display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap',
+            display: 'flex', alignItems: 'baseline', gap: 8,
           }}
         >
-          <span style={{ width: 5, height: 5, borderRadius: '50%', background: colors.pass, flexShrink: 0 }} />
-          <span style={{ fontFamily: sans, fontSize: 12, color: colors.mute }}>
-            Your CSVs are read in this browser and never uploaded. Only the contracts you author leave this
-            page, and only when you download them.
+          <span style={{ width: 5, height: 5, borderRadius: '50%', background: colors.pass, flexShrink: 0, transform: 'translateY(-1px)' }} />
+          <span style={{ fontFamily: sans, fontSize: 12, color: colors.mute, flex: 1, minWidth: 0 }}>
+            Your CSVs are read in this browser and never uploaded. Only what you author leaves this page — when you
+            download it or save it to your account — and saved checks hold counts, never your records.
           </span>
         </div>
       </div>

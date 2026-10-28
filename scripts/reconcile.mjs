@@ -3,6 +3,9 @@
 //   node scripts/reconcile.mjs <spec.json> <source.csv> <target.csv>
 //        [--json] [--tmp dir] [--partitions n]
 //
+// <spec.json> may be a reconciliation spec or a migration object saved from the
+// workspace (*.migration.json), whose spec is used.
+//
 // Exit codes are the contract with a pipeline: 0 reconciled, 1 a step failed,
 // 2 the spec or a file could not be used. --json prints the full report for a
 // downstream job; without it, a plain-language summary for a person.
@@ -15,6 +18,7 @@
 
 import { readFileSync } from 'node:fs'
 import { basename } from 'node:path'
+import { isMigrationObjectFile, readMigrationObject, runnableSpec } from '../src/lib/migrationObject.js'
 import { reconcileFiles } from './lib/reconcileFiles.mjs'
 
 const args = process.argv.slice(2)
@@ -49,6 +53,13 @@ try {
   spec = JSON.parse(readFileSync(specPath, 'utf8'))
 } catch (error) {
   fail(`${specPath}: could not read the spec as JSON — ${error.message}`)
+}
+// A migration object saved from the workspace carries its spec; the pipeline
+// and the screen then run from the same file.
+if (isMigrationObjectFile(spec)) {
+  const opened = readMigrationObject(spec)
+  if (opened.error) fail(`${specPath}: ${opened.error}`)
+  spec = runnableSpec(opened.object)
 }
 
 const outcome = await reconcileFiles(spec, sourcePath, targetPath, { tmpDir, partitions })

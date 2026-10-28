@@ -61,3 +61,15 @@ export function clearFileInWorker(which) {
 export function validateInWorker({ rules, thresholds }) {
   return send({ type: 'validate', rules, thresholds })
 }
+
+export function reconcileInWorker(spec) {
+  return send({ type: 'reconcile', spec })
+}
+
+export function readinessInWorker({ contract, key }) {
+  return send({ type: 'readiness', contract, key })
+}
+
+export function fixListInWorker() {
+  return send({ type: 'fixList' })
+}

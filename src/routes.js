@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react'
 // server rewrites to survive a refresh or a shared link.
 
 export const ROUTES = [
+  { id: 'migrations', label: 'Migrations', blurb: 'Check a migration object, cycle by cycle' },
   { id: 'contracts', label: 'Contracts', blurb: 'Author the rules a file must obey' },
   { id: 'validate', label: 'Validate', blurb: 'Check a file and read the result' },
   { id: 'history', label: 'History', blurb: 'Runs you have saved' },

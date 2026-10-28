@@ -3,6 +3,10 @@
 //   node scripts/check.mjs <contract.json> <load.csv>
 //        [--key col[,col]] [--json] [--rejects out.csv] [--tmp dir] [--partitions n]
 //
+// <contract.json> may be a contract or a migration object saved from the
+// workspace (*.migration.json): its contract is used, and its spec's target
+// key unless --key is given.
+//
 // Exit codes are the contract with a pipeline: 0 ready, 1 records would be
 // rejected (or the file lacks a column the contract requires), 2 the check
 // could not be completed — an unreadable contract or file, a key the file
@@ -20,6 +24,7 @@
 import { readFileSync } from 'node:fs'
 import { basename } from 'node:path'
 import { parseContractFile } from '../src/lib/contractFile.js'
+import { isMigrationObjectFile, readMigrationObject } from '../src/lib/migrationObject.js'
 import { READINESS } from '../src/lib/readiness.js'
 import { checkReadinessFile } from './lib/readinessFile.mjs'
 
@@ -58,11 +63,28 @@ try {
 } catch (error) {
   fail(`${contractPath}: ${error.message}`)
 }
-const contract = parseContractFile(contractText)
-if (contract.error) fail(`${contractPath}: ${contract.error}`)
+// A migration object saved from the workspace carries its contract, and its
+// spec names the target key, used when --key is not given.
+let contract
+let defaultKey = []
+let parsedJson = null
+try {
+  parsedJson = JSON.parse(contractText)
+} catch {
+  // not JSON: parseContractFile below says so in its own words
+}
+if (isMigrationObjectFile(parsedJson)) {
+  const opened = readMigrationObject(parsedJson)
+  if (opened.error) fail(`${contractPath}: ${opened.error}`)
+  contract = { name: opened.object.contract.name || opened.object.name, rules: opened.object.contract.rules, skipped: opened.skipped }
+  defaultKey = opened.object.spec.key.target.filter(Boolean)
+} else {
+  contract = parseContractFile(contractText)
+  if (contract.error) fail(`${contractPath}: ${contract.error}`)
+}
 
 const outcome = await checkReadinessFile(contract, loadPath, {
-  key: keyArg ? keyArg.split(',').map((c) => c.trim()).filter(Boolean) : [],
+  key: keyArg ? keyArg.split(',').map((c) => c.trim()).filter(Boolean) : defaultKey,
   rejectsPath,
   tmpDir,
   partitions,

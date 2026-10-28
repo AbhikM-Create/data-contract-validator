@@ -32,7 +32,8 @@ p {
 
 .staircase-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  /* --steps is set by Staircase: four drift layers, five reconciliation steps */
+  grid-template-columns: repeat(var(--steps, 4), minmax(0, 1fr));
   gap: 10px;
   align-items: start;
 }
@@ -58,6 +59,7 @@ p {
   .staircase-step:nth-child(2) { margin-left: 14px; }
   .staircase-step:nth-child(3) { margin-left: 28px; }
   .staircase-step:nth-child(4) { margin-left: 42px; }
+  .staircase-step:nth-child(5) { margin-left: 56px; }
 
   /* The riser is drawn for a left-to-right descent; stacked, the indent
      carries the descent and a vertical stub would point at nothing. */

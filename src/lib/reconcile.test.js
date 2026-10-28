@@ -79,7 +79,7 @@ describe('reconcile — each step catches its own break (negative controls)', ()
     const report = reconcile(SPEC, LEGACY, target)
     expect(stepOf(report, 'keys').status).toBe('FAIL')
     expect(report.findings[0].code).toBe('duplicate-key-target')
-    expect(report.findings[0].examples[0]).toEqual({ key: '1003', detail: '2 records' })
+    expect(report.findings[0].examples[0]).toEqual({ key: '1003', detail: '2 records', count: 2 })
     // It arrived — too often — so it is not ALSO reported missing.
     expect(report.counts.missing).toBe(0)
     expect(report.headline).toMatch(/^Stopped at Keys\./)
@@ -108,7 +108,7 @@ describe('reconcile — each step catches its own break (negative controls)', ()
     const report = reconcile(SPEC, source, TARGET)
     expect(statuses(report)).toMatchObject({ keys: 'PASS', completeness: 'PASS', mapping: 'FAIL', accuracy: 'PASS' })
     const gap = stepOf(report, 'mapping').findings[0]
-    expect(gap.examples).toEqual([{ value: 'G4', detail: '1 record' }])
+    expect(gap.examples).toEqual([{ value: 'G4', detail: '1 record', count: 1 }])
     expect(gap.message).toMatch(/mapping specification, not in the load/)
   })
 
@@ -191,5 +191,31 @@ describe('reconcile — unconfigured steps', () => {
   it('reads SKIPPED, never PASS', () => {
     const report = reconcile({ key: { source: 'PERNR', target: 'employee_id' } }, LEGACY, TARGET)
     expect(statuses(report)).toMatchObject({ mapping: 'SKIPPED', accuracy: 'SKIPPED', totals: 'SKIPPED' })
+  })
+})
+
+describe('reconcile — drill-down', () => {
+  it('keeps five examples by default and as many as asked for, first in the file', () => {
+    const many = Array.from({ length: 40 }, (_, i) => ({ id: String(i), amount: String(i) }))
+    const changed = many.map((row) => ({ ...row, amount: String(Number(row.amount) + 1) }))
+    const spec = { key: 'id', mapping: [{ source: 'amount' }] }
+    expect(reconcile(spec, many, changed).fields[0].examples).toHaveLength(5)
+    const drill = reconcile(spec, many, changed, { exampleLimit: 1000 })
+    const finding = drill.findings.find((f) => f.code === 'field-mismatch')
+    expect(finding.examples).toHaveLength(40)
+    expect(finding.examples.map((e) => e.key)).toEqual(many.map((r) => r.id))
+    expect(finding.examples[3]).toMatchObject({ key: '3', source: '3', expected: '3', target: '4' })
+    // The sentence is the same whatever the limit: it counts, it does not list.
+    expect(finding.message).toBe(reconcile(spec, many, changed).findings.find((f) => f.code === 'field-mismatch').message)
+  })
+})
+
+describe('reconcile — normalising is idempotent', () => {
+  it('a spec normalised twice reconciles exactly as one normalised once', () => {
+    // Crosswalks become Maps when normalised; a second pass once read each Map
+    // as an empty object and every legacy value came back "unmapped".
+    const once = normalizeSpec(SPEC)
+    expect(reconcile(normalizeSpec(once), LEGACY, TARGET)).toEqual(reconcile(SPEC, LEGACY, TARGET))
+    expect(reconcile(once, LEGACY, TARGET).status).toBe('PASS')
   })
 })

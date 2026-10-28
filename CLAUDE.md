@@ -234,7 +234,7 @@ Live data connectors. Any backend. Export/PDF. Multi-file batches.
 - Visual language: dark ground, mono labels, cyan = baseline, amber = candidate,
   green = pass, red = fail.
 
-## v2 — Migration reconciliation (increments 1-3 done)
+## v2 — Migration reconciliation (increments 1-4 done)
 Spec: `docs/v2-spec.md`. The audience is the data engineer on a business
 transformation (ERP/HCM cutover, M&A integration) who must prove, every mock
 cycle, that a load arrived whole and correct.
@@ -330,3 +330,49 @@ readiness 39 s (docs/v2-spec.md).
 Fixed on the way: parseCsv rejected every single-column CSV ("row 2 doesn't
 line up"), because Papa's UndetectableDelimiter warning was counted as a broken
 row. Only TooManyFields/TooFewFields are now (`isMisaligned`).
+
+### Increment 4 — the migration object workspace (done)
+Route `#/migrations` (`screens/MigrationsScreen.jsx`), first in the nav. One
+migration object, in the order a cycle runs: BEFORE the load (readiness on the
+load file) → AFTER the load (reconcile source extract vs target extract) →
+cycle history. Three files, because on a real project the load file and the
+target extract are different files. Worker file slots: `load`, `source`,
+`target`.
+
+`src/lib/migrationObject.js` is the object and its file format
+(`*.migration.json`): name, wave, cycle, contract (rules), spec, runs. It is a
+DATA BOUNDARY like `contractFile.js`/`runRecord.js`: a run (`summarise*`) holds
+counts, rates and verdicts — never a key, value, example or group label — and
+`cleanRun` rebuilds runs field by field on read, so a hand-edited file cannot
+smuggle values in. `migrationObject.test.js` collects every value from real
+reports and asserts none reaches the saved JSON. Keep it.
+
+- The CLIs accept the object file: `reconcile.mjs` uses its spec, `check.mjs`
+  its contract and (unless `--key`) its spec's target key. One artifact for the
+  pipeline and the screen.
+- `runnableSpec` returns the spec in its SAVED form — what is saved is what runs.
+  `normalizeSpec` is idempotent (`trimMap` accepts a Map); it once was not, and
+  normalising twice silently emptied every crosswalk. A test pins it.
+- Crosswalks are two-column CSVs (`readCrosswalk`). A legacy value mapped two
+  ways refuses the WHOLE crosswalk — keeping either would be the tool choosing.
+- `suggestFieldPairs` pairs only names equal modulo case/punctuation. Anything
+  cleverer is a guess, and a reconciliation against a guessed column passes
+  for the wrong reason.
+- Drill-down: the worker asks `reconcile` for `exampleLimit: 1000`; the CLIs keep
+  5. `findingTable.js` builds both the on-screen table and the CSV export, and
+  the table says "first N of M" when it shows fewer. The readiness fix list is
+  built IN the worker (`toCsv`), so flagged rows never cross to the page.
+- The target key is one setting shared by readiness and the spec; the readiness
+  section offers a picker so a load file can be checked without both extracts.
+- Reports remember what they ran against (`stamp`) and say when the spec or
+  files have changed since.
+- `Staircase.jsx` takes any number of steps (`--steps` CSS variable), an optional
+  per-step `question`, and a `subject` ("file"/"load"). Validate's four-layer
+  output is unchanged.
+- `src/samples/migrationSample.js` — an invented employee migration whose story
+  is pinned: Keys and Completeness pass, Mapping catches legacy grade G4; the
+  load file has two blank surnames and one warned salary.
+
+Not built: Supabase storage for objects (needs credentials to verify RLS, like
+contracts did). Until then an object persists as its downloaded file. Files
+over 90 MB are refused in the browser with a pointer to the CLIs.

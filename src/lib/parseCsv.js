@@ -120,6 +120,13 @@ export function readErrorFor(reason) {
   return readError(reason)
 }
 
+// toCsv(fields, rows) -> CSV text, quoting whatever needs quoting. The other
+// direction of the same library, kept here so this stays the one module that
+// knows about it. rows are arrays, in the order of fields.
+export function toCsv(fields, rows) {
+  return `${Papa.unparse({ fields, data: rows })}\n`
+}
+
 // Reads a File/Blob from an <input type="file"> or a drop, entirely in-browser.
 export async function parseCsvFile(file) {
   if (!file) return { rows: [], columns: [], errors: [readError('no file was given')], name: null }
