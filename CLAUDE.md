@@ -260,8 +260,9 @@ a load, never performs one); an expression language; storing record values.
 ## Known gaps
 No format picker on Validate (it refuses non-UTF-8, but cannot be told a file
 uses decimal commas); formats are per file, not per column; Indian grouping
-(1,23,456) is refused; Supabase storage for migration objects; the container and
-the CI jobs added in phase 2 were written but not yet run on GitHub.
+(1,23,456) is refused; Supabase storage for migration objects; the npm release
+workflow has not run yet (it needs a LICENSE, a `license` field and the
+NPM_TOKEN secret).
 
 ## Conventions
 - Plain JS + React, function components, hooks. No state library.
