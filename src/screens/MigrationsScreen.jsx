@@ -25,7 +25,7 @@ export default function MigrationsScreen(props) {
     onChange, onOpenFile, onDownload, onNew, onSample,
     onLoadFile, onClearFile, onCrosswalk,
     onReconcile, onCheckReadiness, onDownloadFixList, onExportFinding,
-    onUseSessionRules, onEditRules, onLoadContract,
+    onUseSessionRules, onEditRules, onLoadContract, onDownloadEvidence,
   } = props
 
   const openInput = useRef(null)
@@ -38,6 +38,7 @@ export default function MigrationsScreen(props) {
   const suggestions = bothRead ? suggestFieldPairs(sourceColumns, targetColumns, [...spec.mapping, ...spec.key.source.map((s, i) => ({ source: s, target: spec.key.target[i] }))]) : []
   const targetKey = spec.key.target.filter(Boolean)
   const rules = object.contract.rules
+  const evidenceReady = Boolean((readiness && !readiness.stale) || (recon && !recon.stale))
   const empty = !object.name && rules.length === 0 && object.runs.length === 0 && spec.mapping.length === 0
 
   return (
@@ -214,8 +215,26 @@ export default function MigrationsScreen(props) {
       )}
       {recon && <ReconReport report={recon.report} stale={recon.stale} onExport={onExportFinding} />}
 
+      {/* --- evidence ------------------------------------------------------ */}
+      <Phase step="3" title="Evidence for sign-off">
+        One self-contained document for the people who sign this cycle off: the verdicts, the records behind them, the
+        SHA-256 fingerprint of every file and of the rules and mapping, and a sign-off block. It quotes records from your
+        files, so it is made in this page and never uploaded. Print it, or save it as PDF from the browser.
+      </Phase>
+      <div style={{ ...panel, padding: 14, marginTop: 10 }}>
+        <EvidenceLine title="Before the load" state={readiness ? (readiness.stale ? 'stale' : 'current') : 'none'} />
+        <EvidenceLine title="After the load" state={recon ? (recon.stale ? 'stale' : 'current') : 'none'} />
+        <button
+          onClick={onDownloadEvidence}
+          disabled={!evidenceReady}
+          style={{ ...primaryButton, marginTop: 12, opacity: evidenceReady ? 1 : 0.45, cursor: evidenceReady ? 'pointer' : 'default' }}
+        >
+          Download the evidence pack
+        </button>
+      </div>
+
       {/* --- history ------------------------------------------------------- */}
-      <Phase step="3" title="Cycle by cycle">
+      <Phase step="4" title="Cycle by cycle">
         Every check on this object, newest first, against the previous check of the same kind.
       </Phase>
       <CycleHistory rows={cycleHistory(object.runs)} />
@@ -243,6 +262,22 @@ function Phase({ step, title, children }) {
         <h2 style={{ fontFamily: sans, fontSize: 19, fontWeight: 650, color: colors.ink, margin: 0 }}>{title}</h2>
       </div>
       <p style={{ fontFamily: sans, fontSize: 13.5, lineHeight: 1.55, color: colors.mute, margin: '6px 0 0', maxWidth: 760 }}>{children}</p>
+    </div>
+  )
+}
+
+const EVIDENCE_STATE = {
+  current: { text: 'included — its result matches the files and definitions on screen', color: colors.ink },
+  stale: { text: 'left out — something changed since it ran; run it again to include it', color: colors.warn },
+  none: { text: 'not run — the pack will say so', color: colors.faint },
+}
+
+function EvidenceLine({ title, state }) {
+  const s = EVIDENCE_STATE[state]
+  return (
+    <div style={{ display: 'flex', gap: 10, alignItems: 'baseline', marginTop: 4 }}>
+      <span style={{ fontFamily: sans, fontSize: 13, fontWeight: 600, color: colors.ink, width: 130 }}>{title}</span>
+      <span style={{ fontFamily: sans, fontSize: 13, color: s.color }}>{s.text}</span>
     </div>
   )
 }

@@ -34,6 +34,10 @@ export default function ReconReport({ report, stale, onExport }) {
         <Figure label="Missing from target" value={fmt(c.missing)} />
         <Figure label="Not in source" value={fmt(c.extra)} />
         <Figure label="Matched, but differ" value={fmt(c.rowsWithDifference)} />
+        {/* Matched, but a field could not be compared — its legacy value has no
+            crosswalk entry — so nothing confirmed it. Never counted as verified. */}
+        {c.rowsUnverified > 0 && <Figure label="Matched, not fully compared" value={fmt(c.rowsUnverified)} note="a field had no crosswalk entry" />}
+        <Figure label="Fully verified" value={fmt(c.rowsFullyMatched)} note={`of ${fmt(c.matched)} matched`} />
       </div>
 
       <Staircase layers={steps} title="How far the load got" subject="load" note="Each step is meaningless if the one above it broke" />

@@ -234,7 +234,7 @@ Live data connectors. Any backend. Export/PDF. Multi-file batches.
 - Visual language: dark ground, mono labels, cyan = baseline, amber = candidate,
   green = pass, red = fail.
 
-## v2 — Migration reconciliation (increments 1-4 done)
+## v2 — Migration reconciliation (increments 1-5 done)
 Spec: `docs/v2-spec.md`. The audience is the data engineer on a business
 transformation (ERP/HCM cutover, M&A integration) who must prove, every mock
 cycle, that a load arrived whole and correct.
@@ -376,3 +376,29 @@ reports and asserts none reaches the saved JSON. Keep it.
 Not built: Supabase storage for objects (needs credentials to verify RLS, like
 contracts did). Until then an object persists as its downloaded file. Files
 over 90 MB are refused in the browser with a pointer to the CLIs.
+
+### Increment 5 — the evidence pack (done)
+`src/lib/evidencePack.js` — `createEvidencePack(input) -> { html, reference,
+fileName }` — one self-contained HTML document per check for the people who
+sign a cycle off. The workspace ("Evidence for sign-off") and both CLIs
+(`--evidence pack.html`) call the same function, so a pack means the same
+wherever it was made.
+
+It is trustworthy on its own or worth nothing:
+- Files are named with the SHA-256 of their exact BYTES (`hashing.js`;
+  `file.arrayBuffer()` in the page, a streamed hash in `scripts/lib/fileInfo.mjs`)
+  — never of decoded text, which drops a BOM and would not match `sha256sum`.
+- Rules and spec are fingerprinted from `canonicalJson` (sorted keys, cleaned
+  rules) and printed in Appendix A: same fingerprint = same definitions.
+- It includes ONLY checks whose result still matches the files and
+  definitions on screen (the report `stamp`); a stale check is left out and the
+  pack says "Not run". Never attest to files that were not the ones checked.
+- `rowsFullyMatched` excludes records with a field that had no crosswalk entry
+  (`rowsUnverified`): a value nobody compared is not verified.
+
+It QUOTES RECORDS — that is what evidence is — so it is never stored or
+uploaded, and it is hostile-input safe: every interpolation goes through
+`escapeHtml`, there is no script and no external reference, and a CSP meta
+(`default-src 'none'`) forbids scripts and requests even if escaping failed.
+`evidencePack.test.js` feeds it markup from "files" and asserts none survives as
+a tag; it fails with escaping disabled. Keep both.

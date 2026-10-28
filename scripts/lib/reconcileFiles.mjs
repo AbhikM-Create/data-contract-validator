@@ -33,6 +33,7 @@ export async function reconcileFiles(spec, sourcePath, targetPath, options = {})
 
   const run = createReconciliation(spec, {
     thresholds: options.thresholds,
+    exampleLimit: options.exampleLimit,
     sourceColumns: sourceHeader.columns,
     targetColumns: targetHeader.columns,
   })

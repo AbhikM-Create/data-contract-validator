@@ -1,7 +1,8 @@
 // Load readiness from the command line: will the target accept this load file?
 //
 //   node scripts/check.mjs <contract.json> <load.csv>
-//        [--key col[,col]] [--json] [--rejects out.csv] [--tmp dir] [--partitions n]
+//        [--key col[,col]] [--json] [--rejects out.csv] [--evidence pack.html]
+//        [--tmp dir] [--partitions n]
 //
 // <contract.json> may be a contract or a migration object saved from the
 // workspace (*.migration.json): its contract is used, and its spec's target
@@ -13,6 +14,8 @@
 // lacks, or a rule that could not be checked. A pipeline should stop on 2 as
 // firmly as on 1: "could not confirm" is not "ready".
 //
+// --evidence writes the evidence pack for this check (see reconcile.mjs).
+//
 // --rejects writes every flagged record — the load file's own columns plus
 // _row, _readiness and _reasons — as the fix list for the data owners. It is
 // written to local disk only, like everything else this tool touches.
@@ -21,11 +24,13 @@
 // they are found. With --key, a first pass partitions keys on local disk to
 // find duplicates (--tmp to choose where; deleted when the run ends).
 
-import { readFileSync } from 'node:fs'
+import { readFileSync, writeFileSync } from 'node:fs'
 import { basename } from 'node:path'
+import { createEvidencePack } from '../src/lib/evidencePack.js'
 import { parseContractFile } from '../src/lib/contractFile.js'
 import { isMigrationObjectFile, readMigrationObject } from '../src/lib/migrationObject.js'
 import { READINESS } from '../src/lib/readiness.js'
+import { fileInfo } from './lib/fileInfo.mjs'
 import { checkReadinessFile } from './lib/readinessFile.mjs'
 
 const args = process.argv.slice(2)
@@ -36,7 +41,9 @@ const option = (name) => {
   args.splice(i, 2)
   return value
 }
+const command = `node scripts/check.mjs ${process.argv.slice(2).join(' ')}`
 const keyArg = option('--key')
+const evidencePath = option('--evidence')
 const rejectsPath = option('--rejects')
 const tmpDir = option('--tmp')
 const partitionsArg = option('--partitions')
@@ -50,7 +57,7 @@ function fail(message) {
 }
 
 if (!contractPath || !loadPath || args.length > 2) {
-  fail('Usage: node scripts/check.mjs <contract.json> <load.csv> [--key col[,col]] [--json] [--rejects out.csv] [--tmp dir] [--partitions n]')
+  fail('Usage: node scripts/check.mjs <contract.json> <load.csv> [--key col[,col]] [--json] [--rejects out.csv] [--evidence pack.html] [--tmp dir] [--partitions n]')
 }
 const partitions = partitionsArg === undefined ? undefined : Number(partitionsArg)
 if (partitions !== undefined && !(Number.isInteger(partitions) && partitions >= 1 && partitions <= 256)) {
@@ -66,6 +73,7 @@ try {
 // A migration object saved from the workspace carries its contract, and its
 // spec names the target key, used when --key is not given.
 let contract
+let object = null
 let defaultKey = []
 let parsedJson = null
 try {
@@ -76,6 +84,7 @@ try {
 if (isMigrationObjectFile(parsedJson)) {
   const opened = readMigrationObject(parsedJson)
   if (opened.error) fail(`${contractPath}: ${opened.error}`)
+  object = opened.object
   contract = { name: opened.object.contract.name || opened.object.name, rules: opened.object.contract.rules, skipped: opened.skipped }
   defaultKey = opened.object.spec.key.target.filter(Boolean)
 } else {
@@ -92,6 +101,18 @@ const outcome = await checkReadinessFile(contract, loadPath, {
 if (outcome.error) fail(outcome.error)
 const report = outcome.report
 const seconds = outcome.seconds.toFixed(2)
+
+let evidenceNote = null
+if (evidencePath && report.status !== READINESS.INVALID) {
+  const pack = await createEvidencePack({
+    object: object ?? { name: contract.name, contract: { name: contract.name, rules: contract.rules }, spec: { key: { source: [], target: [] }, mapping: [], totals: [] }, runs: [] },
+    readiness: { report, flaggedCount: report.counts.rejected + report.counts.warned, file: await fileInfo(loadPath, report.counts.records) },
+    generatedBy: 'the command line',
+    reproduce: command,
+  })
+  writeFileSync(evidencePath, pack.html, { mode: 0o600 })
+  evidenceNote = `Evidence pack ${pack.reference} written to ${evidencePath}`
+}
 
 if (asJson) {
   // flagged is empty when streaming — the records went to --rejects instead.
@@ -114,6 +135,7 @@ if (asJson) {
     }
     const c = report.counts
     console.log(`\n  ${c.records.toLocaleString('en-US')} records: ${c.rejected.toLocaleString('en-US')} would be rejected, ${c.warned.toLocaleString('en-US')} would load with a warning, ${c.clean.toLocaleString('en-US')} clean. ${seconds}s`)
+    if (evidenceNote) console.log(`  ${evidenceNote}`)
     if (contract.skipped.length > 0) {
       console.log(`  ${contract.skipped.length} rule(s) in the contract file could not be read and were NOT checked.`)
     }

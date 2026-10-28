@@ -5,7 +5,9 @@ import { deleteContract, listContracts, loadContract, saveContract } from './lib
 import {
   clearFileInWorker, fixListInWorker, parseFileInWorker, parseTextInWorker, readinessInWorker, reconcileInWorker, validateInWorker,
 } from './lib/engineClient.js'
+import { createEvidencePack } from './lib/evidencePack.js'
 import { findingTable } from './lib/findingTable.js'
+import { sha256Hex } from './lib/hashing.js'
 import {
   migrationObjectToJson, newMigrationObject, parseMigrationObjectFile, readCrosswalk, runnableSpec, summariseReadiness, summariseReconciliation,
 } from './lib/migrationObject.js'
@@ -323,8 +325,10 @@ export default function App() {
     setEngineError(null)
     setBusy(`Reading ${file.name}…`)
     try {
-      const { file: summary } = await parseFileInWorker(which, file)
-      setMigrationFiles((current) => ({ ...current, [which]: summary }))
+      // Fingerprinted from the file's BYTES, before any decoding, so the
+      // evidence pack's SHA-256 is the one `sha256sum` gives for this file.
+      const [{ file: summary }, sha256] = await Promise.all([parseFileInWorker(which, file), file.arrayBuffer().then(sha256Hex)])
+      setMigrationFiles((current) => ({ ...current, [which]: { ...summary, sha256, bytes: file.size } }))
     } catch (error) {
       setEngineError(error.message)
     } finally {
@@ -434,7 +438,10 @@ export default function App() {
         ['load', migrationLoadFile(), MIGRATION_SAMPLE.loadName],
       ]
       const loaded = {}
-      for (const [which, text, name] of parts) loaded[which] = (await parseTextInWorker(which, text, name)).file
+      for (const [which, text, name] of parts) {
+        const { file } = await parseTextInWorker(which, text, name)
+        loaded[which] = { ...file, sha256: await sha256Hex(text), bytes: new TextEncoder().encode(text).length }
+      }
       setMigrationFiles(loaded)
       setMigration(migrationSampleObject())
       setMigrationDirty(false)
@@ -466,6 +473,42 @@ export default function App() {
       text: `Crosswalk from ${file.name}: ${read.entries} legacy value${read.entries === 1 ? '' : 's'}.`,
       details: read.issues,
     })
+  }
+
+  // The evidence pack includes only checks whose results still match the
+  // files and definitions on screen: a pack must never attest to files that
+  // were not the ones checked.
+  const downloadEvidence = async () => {
+    const reconCurrent = recon && recon.stamp === reconStamp(migration, migrationFiles)
+    const readyCurrent = readiness && readiness.stamp === readinessStamp(migration, migrationFiles)
+    if (!reconCurrent && !readyCurrent) return
+    const asFile = (f) => ({ name: f.name, rows: f.rowCount, bytes: f.bytes, sha256: f.sha256 })
+    const objectFile = `${slug(migration.name, 'migration')}.migration.json`
+    const key = migration.spec.key.target.filter(Boolean)
+    const commands = [
+      readyCurrent && `node scripts/check.mjs ${objectFile} ${migrationFiles.load.name}${key.length ? ` --key ${key.join(',')}` : ''}`,
+      reconCurrent && `node scripts/reconcile.mjs ${objectFile} ${migrationFiles.source.name} ${migrationFiles.target.name}`,
+    ].filter(Boolean)
+    setBusy('Building the evidence pack…')
+    try {
+      const pack = await createEvidencePack({
+        object: migration,
+        readiness: readyCurrent ? { report: readiness.report, flaggedCount: readiness.report.flaggedCount, file: asFile(migrationFiles.load) } : null,
+        reconciliation: reconCurrent ? { report: recon.report, source: asFile(migrationFiles.source), target: asFile(migrationFiles.target) } : null,
+        generatedBy: 'the workspace',
+        reproduce: `# with ${objectFile} saved from the workspace\n${commands.join('\n')}`,
+      })
+      saveFile(pack.fileName, pack.html, 'text/html')
+      const left = [!readyCurrent && readiness && 'load readiness', !reconCurrent && recon && 'reconciliation'].filter(Boolean)
+      setMigrationNotice({
+        tone: left.length ? 'warn' : 'good',
+        text: `Evidence pack ${pack.reference} saved as ${pack.fileName}.${left.length ? ` It leaves out ${left.join(' and ')}, whose result no longer matches the files and definitions on screen — run it again to include it.` : ''}`,
+      })
+    } catch (error) {
+      setEngineError(error.message)
+    } finally {
+      setBusy(null)
+    }
   }
 
   const useSessionRules = () => {
@@ -530,6 +573,7 @@ export default function App() {
           onUseSessionRules={useSessionRules}
           onEditRules={editRulesOnContracts}
           onLoadContract={loadContractIntoMigration}
+          onDownloadEvidence={downloadEvidence}
         />
       )}
 

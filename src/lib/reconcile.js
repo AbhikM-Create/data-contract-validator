@@ -338,7 +338,7 @@ export function createReconciliation(rawSpec, options = {}) {
   const spec = normalizeSpec(rawSpec)
   const issues = specIssues(spec, options.sourceColumns ?? [], options.targetColumns ?? [])
   const sides = { source: newSide(spec), target: newSide(spec) }
-  const join = { expected: 0, matched: 0, missing: 0, extra: 0, rowsWithDifference: 0, missingExamples: [], extraExamples: [] }
+  const join = { expected: 0, matched: 0, missing: 0, extra: 0, rowsWithDifference: 0, rowsUnverified: 0, missingExamples: [], extraExamples: [] }
   const fieldStats = spec.mapping.map((field) => ({
     source: field.source,
     target: field.target,
@@ -389,10 +389,12 @@ export function createReconciliation(rawSpec, options = {}) {
       }
       join.matched += 1
       let differs = false
+      let unverified = false
       spec.mapping.forEach((field, i) => {
         const stats = fieldStats[i]
         const translated = translate(s.row[field.source], field.map)
         if (translated.unmapped) {
+          unverified = true
           stats.unmapped += 1
           const legacy = String(s.row[field.source]).trim()
           const seen = stats.unmappedValues.get(legacy)
@@ -419,7 +421,12 @@ export function createReconciliation(rawSpec, options = {}) {
           }, limit)
         }
       })
+      // A record with a field that could not be compared — its legacy value has
+      // no crosswalk entry — is NOT fully matched: nothing confirmed that field.
+      // Counting it as matched would let an evidence pack attest to a value
+      // nobody checked.
       if (differs) join.rowsWithDifference += 1
+      else if (unverified) join.rowsUnverified += 1
     }
 
     for (const [key, t] of target.unique) {
@@ -468,7 +475,8 @@ export function createReconciliation(rawSpec, options = {}) {
       sourceDuplicateKeys: sides.source.duplicateKeys,
       targetDuplicateKeys: sides.target.duplicateKeys,
       rowsWithDifference: join.rowsWithDifference,
-      rowsFullyMatched: join.matched - join.rowsWithDifference,
+      rowsUnverified: join.rowsUnverified,
+      rowsFullyMatched: join.matched - join.rowsWithDifference - join.rowsUnverified,
     }
 
     return {

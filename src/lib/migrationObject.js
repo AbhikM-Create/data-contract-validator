@@ -129,6 +129,7 @@ export function summariseReconciliation(report, { wave, cycle, sourceName, targe
       duplicateKeys: count((c.sourceDuplicateKeys ?? 0) + (c.targetDuplicateKeys ?? 0)),
       blankKeys: count((c.sourceBlankKeys ?? 0) + (c.targetBlankKeys ?? 0)),
       withDifferences: count(c.rowsWithDifference),
+      unverified: count(c.rowsUnverified),
       unmappedRecords: count(report.fields.reduce((sum, f) => sum + f.unmapped, 0)),
       totalsBroken: count(report.totals.reduce((sum, t) => sum + t.groups.filter((g) => !g.ties).length, 0)),
     },
@@ -181,7 +182,7 @@ function cleanRun(raw) {
       ...base,
       files: { source: text(raw.files?.source), target: text(raw.files?.target) },
       steps: Object.fromEntries(['keys', 'completeness', 'mapping', 'accuracy', 'totals'].map((id) => [id, text(raw.steps?.[id])])),
-      counts: numbers(raw.counts, ['sourceRows', 'targetRows', 'outOfScope', 'expected', 'matched', 'missing', 'extra', 'duplicateKeys', 'blankKeys', 'withDifferences', 'unmappedRecords', 'totalsBroken']),
+      counts: numbers(raw.counts, ['sourceRows', 'targetRows', 'outOfScope', 'expected', 'matched', 'missing', 'extra', 'duplicateKeys', 'blankKeys', 'withDifferences', 'unverified', 'unmappedRecords', 'totalsBroken']),
       completeness: count(Number(raw.completeness)),
       accuracy: count(Number(raw.accuracy)),
     }

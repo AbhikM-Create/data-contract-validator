@@ -28,6 +28,10 @@ describe('the example migration', () => {
     expect(report.headline).toBe('Stopped at Mapping. 46 of 46 in-scope records matched one to one. Keys and Completeness passed above it.')
   })
 
+  it('does not count the G4 records as verified: their grade was never compared', () => {
+    expect(report.counts).toMatchObject({ matched: 46, rowsWithDifference: 2, rowsUnverified: 3, rowsFullyMatched: 41 })
+  })
+
   it('counts the two withdrawn employees as out of scope', () => {
     expect(report.counts.sourceOutOfScope).toBe(2)
   })
