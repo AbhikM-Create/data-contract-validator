@@ -1,45 +1,76 @@
-# v2 — Migration Reconciliation
+# v2 — Transformation Data Assurance
 
-**One line:** prove that a migrated dataset arrived whole and correct, mock load
-after mock load, and hand the business an evidence pack they can sign.
+**One line:** for the in-house team running a business transformation — know a
+load will be accepted before you run it, prove it arrived whole after you run
+it, and keep the new system's data honest after go-live. One contract carries
+all three.
 
-## The problem this is for
+## The buyer: the in-house transformation team
 
-Every business transformation — an ERP move (ECC → S/4HANA), an HCM cutover
-(legacy payroll → Workday/SuccessFactors), a CRM consolidation, a post-merger
-integration — moves data from a system people trust into one they don't yet.
-The data engineer on that project owns one question, asked three to six times
-(Mock 1, Mock 2, dress rehearsal, cutover) for every migration object
-(employees, vendors, open items, cost centres…):
+An ERP move (ECC → S/4HANA), an HCM cutover (legacy payroll → Workday or
+SuccessFactors), a CRM consolidation, a post-merger integration. The team that
+buys this is the company's own: a data migration lead, the data engineers who
+build the loads, the business data owners who sign each object off, and
+internal audit who will ask for evidence.
 
-> Did every record that should have moved arrive, and does it still say the
-> same thing after mapping?
+What separates them from a systems integrator, and shapes this spec:
 
-Today that answer is built in Excel: VLOOKUPs over two extracts, a pivot for
-control totals, and a screenshot pasted into a sign-off deck. It is slow, it is
-rebuilt every mock cycle, it breaks on a million rows, and it cannot tell a
-**mapping gap** (nobody said what legacy grade `G7` becomes) from a **data
-defect** (the salary really did change in flight). Auditors and business owners
-sign it anyway, because there is nothing better at the speed a cutover runs.
+- **They own the outcome after go-live.** An SI leaves after hypercare; the
+  in-house team lives with every bad record that got through. Whatever protects
+  the new system's data *after* cutover is worth as much to them as getting
+  through cutover.
+- **They run waves.** In-house programmes roll out by country, entity or
+  business unit — the same object migrates many times over a year or more.
+  Work done for wave 1 has to carry over to wave 2 unchanged.
+- **They answer to internal audit.** SOX and internal controls want evidence of
+  completeness and accuracy for financially relevant objects, owned by the
+  company, not a consultant's spreadsheet.
+- **They buy what clears infosec fast.** A tool that runs locally and never
+  receives company data skips the review that kills most tool purchases.
+- **They have no army for Excel.** An SI staffs reconciliation with people; an
+  in-house team needs it to run unattended in the load pipeline.
 
-v1 answers a neighbouring question — *has this feed drifted from the file I
-trust?* — by comparing profiles. A migration needs something v1 cannot do:
-**match records by business key**, row against row, across two systems that
-name the same thing differently.
+## The two engines, and the one contract
 
-## Who uses it
+```
+            PREPARE                MIGRATE                  RUN
+        (before each load)      (each mock / wave)     (after go-live)
 
-| Role | What they need from it |
-|---|---|
-| **Migration data engineer** | Run it in the load pipeline after every mock; fail the run when completeness or accuracy drops. CLI + exit code + JSON. |
-| **Data migration lead / PMO** | One readiness view across every object and every mock: is Mock 3 better than Mock 2, and what is blocking go-live? |
-| **Business data owner** | A plain-language report they can read and sign: what moved, what didn't, why, and who accepted it. |
-| **Client infosec** | Assurance the tool never ships client data anywhere. It runs locally — browser or CLI — and that is the product, not a caveat. |
+        Will the target         Did every record        Is the data still
+        accept this load?       arrive, correctly?      what we signed off?
 
-## The reconciliation staircase
+        CONTRACT rules     →    RECONCILIATION     →    CONTRACT rules
+        on the load file        source ↔ target         + drift vs the
+                                by business key          cutover snapshot
+```
+
+**The data contract** (`validate()`, built in v1/v2) says what must be true of
+the data in the *target* system. It is authored once per migration object —
+mandatory fields, legal value sets, formats, cross-field logic ("an end date
+once a record closes"). It is used twice:
+
+1. **Load readiness (Prepare).** Run against the transformed load file *before*
+   the load window, it predicts what the target will reject. Mock-load
+   rejections are the largest single time sink in a migration cycle — each one
+   found after a load costs a re-extract, a re-transform and a load slot.
+2. **Production contract (Run).** At go-live the cutover snapshot becomes the
+   baseline. The same rules, plus the four drift layers, now guard every feed
+   and interface into the new system. This is the deliverable that outlives
+   the project — and the reason an in-house team, not an SI, is the buyer.
+
+**Reconciliation** (`reconcile()`, v2 increment 1) says whether the load
+*matches its source*, record by record. It cannot be done with a contract,
+because it needs both systems at once and a mapping between them.
+
+They stay separate files with separate jobs — a contract describes one dataset;
+a reconciliation spec describes the correspondence between two — and a
+reconciliation spec names the contract for its target, so an object's whole
+assurance lives together.
+
+## Reconciliation: the staircase
 
 Same principle as v1: the checks run in order, and **which step a load falls
-on is the finding**, because each step is meaningless if the one above it broke.
+on is the finding**, because each step is meaningless if the one above broke.
 
 ```
 1 Keys          Is every record identifiable, exactly once, on both sides?
@@ -49,33 +80,22 @@ on is the finding**, because each step is meaningless if the one above it broke.
         5 Totals         Do control totals (sums per group) still tie out?
 ```
 
-- **Keys** first: duplicate or blank keys make "missing" and "matched" undefined.
-  Downstream steps still run on the unambiguous keys and say how many they set aside.
 - **Mapping** before **accuracy**: an unmapped legacy value is a *spec* problem
-  owned by the functional team, not a load defect owned by the engineer. Counting
-  it as a mismatch sends the wrong person to fix it — the single most expensive
-  confusion in a real mock cycle.
-- **Totals** last and over whole populations: they catch what record matching
-  misses — a currency field loaded in the wrong unit across every row ties out on
-  keys and fails on totals.
-
-A step that isn't configured reads **SKIPPED**, never PASS.
-
-## The reconciliation spec (the new contract)
-
-Declarative JSON, checked into the migration repo next to the load code. No
-expression language — the same posture as v1's six rule kinds.
+  owned by the functional team, not a load defect owned by the engineer.
+- **Totals** last and over whole populations: a currency loaded in the wrong
+  unit for one company code ties out on keys and fails on totals.
+- A step that isn't configured reads **SKIPPED**, never PASS.
 
 ```json
 {
-  "name": "Employees — Mock 2",
+  "name": "Employees — Wave 2, Mock 2",
+  "contract": "Employees (target)",
   "key": { "source": ["PERNR"], "target": ["employee_id"] },
   "scope": { "source": { "column": "STAT2", "op": "=", "target": "3" } },
   "mapping": [
-    { "source": "NACHN",  "target": "last_name", "ignoreCase": true },
-    { "source": "ANSAL",  "target": "annual_salary", "tolerance": 0.01 },
-    { "source": "TRFGR",  "target": "grade", "map": { "G7": "Senior Analyst", "G8": "Lead" } },
-    { "source": "BEGDA",  "target": "hire_date" }
+    { "source": "NACHN", "target": "last_name", "ignoreCase": true },
+    { "source": "ANSAL", "target": "annual_salary", "tolerance": 0.01 },
+    { "source": "TRFGR", "target": "grade", "map": { "G7": "Senior Analyst", "G8": "Lead" } }
   ],
   "totals": [
     { "source": "ANSAL", "target": "annual_salary",
@@ -84,40 +104,36 @@ expression language — the same posture as v1's six rule kinds.
 }
 ```
 
-- `key` — single or composite, named per side.
-- `scope` — the migration's exclusion rules (e.g. "only active employees
-  migrate"). Out-of-scope rows are **counted and reported**, never silently dropped.
-- `mapping` — source→target field pairs. Values are compared as numbers, dates or
-  text, coerced together exactly as v1 rules are. `map` is a crosswalk; a source
-  value with no crosswalk entry is a **mapping gap**, not a mismatch.
-- `totals` — control totals, optionally per group, with the group crosswalked.
-
 ## Scope — what v2 ships, in order
 
-| # | Increment | Why it is in this position |
+| # | Increment | Why here |
 |---|---|---|
-| 1 | **Reconciliation engine** (`src/lib/reconcile.js`) + `scripts/reconcile.mjs` CLI. Pure, tested, exit code 1 on FAIL, `--json`. | Everything else renders or stores what this computes. Usable by an engineer on day one. |
-| 2 | **Streaming CLI for large loads** — key-hash join over streamed CSV, millions of rows in bounded memory. | Real objects are 1–20M rows. The browser ceiling (~90 MB) is fine for v1 drift, wrong for migrations. |
-| 3 | **Reconcile screen** — mapping builder (dropdowns, column-to-column, crosswalk upload as CSV), the five-step staircase, drill-down to the mismatched records. | The business owner's view. Reuses the Staircase. |
-| 4 | **Mock-cycle tracking** — a *migration object* with runs per cycle (Mock 1…Cutover); trend of completeness and accuracy. Stores counts and rates only, never values (same boundary as `runRecord.js`). | The PMO's question is "is it getting better?", which no single run answers. |
-| 5 | **Evidence pack** — a self-contained HTML report, generated locally: spec + its hash, file names + SHA-256, row counts, every step's verdict, mismatch samples, thresholds, timestamp, sign-off block. | What actually gets attached to the go/no-go decision and the audit file. Generated on the user's machine; never uploaded. |
-| 6 | **Cutover readiness board** — every object × latest cycle, one row each, worst step first. | The go/no-go meeting's single screen. |
+| 1 | **Reconciliation engine + CLI** (`reconcile.js`, `scripts/reconcile.mjs`). | **Done.** |
+| 2 | **Load readiness** — `scripts/check.mjs <contract.json> <load.csv>`: the contract run rules-only from the CLI, with exit codes and `--json`. Rules gain `severity: reject | warn`, mirroring how a target system rejects some records and accepts others with a warning; the report predicts rejections per rule with counts and example keys. | Uses `validate()`'s rules-only mode, which already exists. Puts the contract into the pipeline on day one, ahead of the most expensive failure in a mock cycle. |
+| 3 | **Streaming for large files**, both CLIs — key-hash join and rule evaluation over streamed CSV, millions of rows in bounded memory. | Real objects are 1–20M rows. Nobody adopts a tool that fails on their first real file. |
+| 4 | **Migration object workspace** (UI) — one object holds its contract, its reconciliation spec, and its runs per wave and mock. Mapping builder from dropdowns; crosswalks uploaded as CSV; the reconcile staircase with drill-down. | The business data owner's and migration lead's view. Reuses the Staircase and the rule builder. |
+| 5 | **Evidence pack** — a self-contained HTML report generated locally: contract + spec + their hashes, file names + SHA-256, row counts, every step's verdict, rejection and mismatch samples, thresholds, timestamp, sign-off block. | What internal audit files and the go/no-go decision cites. Never uploaded. |
+| 6 | **Go-live handover** — promote the cutover snapshot to the contract's baseline in one action; the readiness board (every object × latest mock, worst step first) becomes the run-state board for production feeds. | Turns the project's contracts into the production team's. |
 
 ## Explicitly out of v2
 
-- **Database connectors.** Extracts arrive as files on every real project; a
-  connector moves client credentials into this tool and breaks the local-only
-  promise. The CLI reads whatever a pipeline already wrote.
-- **Transformation / loading.** This tool proves a load; it never performs one.
-- **An expression language.** Crosswalks + tolerances + scope cover every rule
-  collected so far. A future kind slots into the spec without a parser.
-- **Storing values.** Mismatch samples live in the local report and the evidence
-  pack only; anything persisted is counts and rates.
+- **Database or application connectors.** Extracts and load files are files on
+  every real project; a connector puts system credentials in this tool and
+  breaks the local-only promise. The CLIs read what a pipeline already wrote.
+- **Transformation or loading.** This tool proves a load; it never performs one.
+- **An expression language.** The six rule kinds, crosswalks, tolerances and
+  scope cover every rule collected so far.
+- **Storing values.** Example records live in the local report and evidence
+  pack only; anything persisted is counts, rates and rule outcomes.
 
-## Success measures for "market ready"
+## What "market ready" means here
 
-- An engineer reconciles a 5M-row object from the CLI in under 2 minutes on a laptop.
-- A spec written for Mock 1 runs unchanged on Mock 2.
-- A business owner reads the evidence pack with no tool knowledge and can say
-  what failed and whose job it is.
-- Every step has a negative control: a deliberately broken load that it catches.
+- A data engineer adds two lines to a load pipeline and it fails the run on a
+  predicted rejection or a broken reconciliation.
+- A contract and spec written for wave 1 run unchanged on wave 2.
+- A 5M-row object reconciles from the CLI in under 2 minutes on a laptop.
+- A business data owner reads the evidence pack with no tool knowledge and can
+  say what failed and whose job it is.
+- At go-live, the project's contracts become production checks without being
+  rewritten.
+- Every check has a negative control: a deliberately broken file it must catch.

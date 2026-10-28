@@ -244,6 +244,14 @@ matches RECORDS by business key, which `validate()` (profile drift) cannot.
 Five steps as a descent: keys → completeness → mapping → accuracy → totals.
 It is a sibling of `validate()`, not an extension of it: do not merge the two.
 
+The buyer is the IN-HOUSE transformation team, who own the system after
+go-live. The data contract is not superseded by reconciliation — it is used
+twice: as LOAD READINESS before each mock (rules run on the load file predict
+target rejections) and as the PRODUCTION CONTRACT after go-live (cutover
+snapshot becomes the baseline). Reconciliation sits between them. A contract
+describes one dataset; a reconciliation spec describes the correspondence
+between two — keep them separate files.
+
 Load-bearing distinctions:
 - An unmapped legacy value is a MAPPING gap (functional team's spec), never an
   accuracy mismatch (engineer's load). Counting it as a mismatch sends the
