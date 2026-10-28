@@ -91,6 +91,8 @@ select pg_temp.refused(format('select public.accept_invitation(%L)', :'bob_invit
 
 select pg_temp.act_as(:bob);
 select pg_temp.check((select count(*) = 1 from public.invitations), 'the invited person sees their own invitation (email matched without case)');
+select pg_temp.check((select array_agg(name) = array['Northwind'] from public.organizations), 'the invited person sees the name of the organisation inviting them, and no other');
+select pg_temp.check((select count(*) = 0 from public.submissions), 'but nothing inside it until they accept');
 select public.accept_invitation(:'bob_invite');
 select pg_temp.check((select count(*) = 1 from public.organizations), 'accepting an invitation joins the organisation');
 select pg_temp.refused(format('insert into public.memberships (org_id, user_id, role) values (%L, %L, %L)', :'northwind', :bob, 'admin'),
@@ -120,6 +122,7 @@ select id as def_s1 from public.definitions where sha256 = :s1 \gset
 
 select pg_temp.act_as(:carol);
 select pg_temp.check((select count(*) = 0 from public.definitions), 'another organisation reads none of Northwind''s definitions');
+select pg_temp.check((select array_agg(name) = array['Contoso'] from public.organizations), 'another organisation cannot even read Northwind''s name');
 
 -- Carol, an engineer in her own organisation, tries to hold a Contoso
 -- submission to Northwind's definitions by naming their ids.

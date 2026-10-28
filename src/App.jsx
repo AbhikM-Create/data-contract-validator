@@ -18,6 +18,7 @@ import { listRuns, saveRun } from './lib/runStore.js'
 import { ruleKey } from './lib/rules.js'
 import { DEFAULT_THRESHOLDS } from './lib/validate.js'
 import { useAuth } from './lib/useAuth.js'
+import { useSignoff } from './lib/useSignoff.js'
 import { go, useRoute } from './routes.js'
 import ContractsScreen from './screens/ContractsScreen.jsx'
 import HistoryScreen from './screens/HistoryScreen.jsx'
@@ -25,6 +26,7 @@ import LandingScreen from './screens/LandingScreen.jsx'
 import MigrationsScreen from './screens/MigrationsScreen.jsx'
 import { MIGRATION_SAMPLE, migrationLoadFile, migrationSampleObject, migrationSource, migrationTarget } from './samples/migrationSample.js'
 import SignInScreen from './screens/SignInScreen.jsx'
+import SignoffScreen from './screens/SignoffScreen.jsx'
 import ValidateScreen from './screens/ValidateScreen.jsx'
 
 // The shell owns the session: the contract being authored and the files being
@@ -33,6 +35,7 @@ import ValidateScreen from './screens/ValidateScreen.jsx'
 export default function App() {
   const route = useRoute()
   const { user, loading: authLoading } = useAuth()
+  const signoff = useSignoff(user)
 
   const [baseline, setBaseline] = useState(null)
   const [candidate, setCandidate] = useState(null)
@@ -499,10 +502,10 @@ export default function App() {
   // The evidence pack includes only checks whose results still match the
   // files and definitions on screen: a pack must never attest to files that
   // were not the ones checked.
-  const downloadEvidence = async () => {
+  const buildEvidence = async () => {
     const reconCurrent = recon && recon.stamp === reconStamp(migration, migrationFiles)
     const readyCurrent = readiness && readiness.stamp === readinessStamp(migration, migrationFiles)
-    if (!reconCurrent && !readyCurrent) return
+    if (!reconCurrent && !readyCurrent) return null
     const asFile = (f) => ({ name: f.name, rows: f.rowCount, bytes: f.bytes, sha256: f.sha256 })
     const objectFile = `${slug(migration.name, 'migration')}.migration.json`
     const key = migration.spec.key.target.filter(Boolean)
@@ -510,21 +513,36 @@ export default function App() {
       readyCurrent && `node scripts/check.mjs ${objectFile} ${migrationFiles.load.name}${key.length ? ` --key ${key.join(',')}` : ''}`,
       reconCurrent && `node scripts/reconcile.mjs ${objectFile} ${migrationFiles.source.name} ${migrationFiles.target.name}`,
     ].filter(Boolean)
+    const pack = await createEvidencePack({
+      object: migration,
+      readiness: readyCurrent ? { report: readiness.report, flaggedCount: readiness.report.flaggedCount, file: asFile(migrationFiles.load) } : null,
+      reconciliation: reconCurrent ? { report: recon.report, source: asFile(migrationFiles.source), target: asFile(migrationFiles.target) } : null,
+      generatedBy: `the workspace — data-contract-validator ${VERSION}${BUILD_COMMIT ? ` (${BUILD_COMMIT})` : ''}`,
+      reproduce: `# with ${objectFile} saved from the workspace\n${commands.join('\n')}`,
+    })
+    const left = [!readyCurrent && readiness && 'load readiness', !reconCurrent && recon && 'reconciliation'].filter(Boolean)
+    return { pack, left }
+  }
+
+  // Download the pack; with `submit`, also put it forward for sign-off in the
+  // active organisation. The pack is saved either way — the data owner needs
+  // it, and it is never uploaded.
+  const downloadEvidence = async ({ submit = false } = {}) => {
     setBusy('Building the evidence pack…')
     try {
-      const pack = await createEvidencePack({
-        object: migration,
-        readiness: readyCurrent ? { report: readiness.report, flaggedCount: readiness.report.flaggedCount, file: asFile(migrationFiles.load) } : null,
-        reconciliation: reconCurrent ? { report: recon.report, source: asFile(migrationFiles.source), target: asFile(migrationFiles.target) } : null,
-        generatedBy: `the workspace — data-contract-validator ${VERSION}${BUILD_COMMIT ? ` (${BUILD_COMMIT})` : ''}`,
-        reproduce: `# with ${objectFile} saved from the workspace\n${commands.join('\n')}`,
-      })
+      const built = await buildEvidence()
+      if (!built) return
+      const { pack, left } = built
       saveFile(pack.fileName, pack.html, 'text/html')
-      const left = [!readyCurrent && readiness && 'load readiness', !reconCurrent && recon && 'reconciliation'].filter(Boolean)
-      setMigrationNotice({
-        tone: left.length ? 'warn' : 'good',
-        text: `Evidence pack ${pack.reference} saved as ${pack.fileName}.${left.length ? ` It leaves out ${left.join(' and ')}, whose result no longer matches the files and definitions on screen — run it again to include it.` : ''}`,
-      })
+      const leftOut = left.length ? ` It leaves out ${left.join(' and ')}, whose result no longer matches the files and definitions on screen — run it again to include it.` : ''
+      if (submit) {
+        const ok = await signoff.submit(pack)
+        setMigrationNotice(ok
+          ? { tone: left.length ? 'warn' : 'good', text: `Evidence pack ${pack.reference} saved as ${pack.fileName} and submitted to ${signoff.active?.name} for sign-off. Send the pack to the data owner the way you share the data itself.${leftOut}` }
+          : { tone: 'bad', text: `Evidence pack ${pack.reference} saved as ${pack.fileName}, but it was not submitted — see Sign-off for why.` })
+        return
+      }
+      setMigrationNotice({ tone: left.length ? 'warn' : 'good', text: `Evidence pack ${pack.reference} saved as ${pack.fileName}.${leftOut}` })
     } catch (error) {
       setEngineError(error.message)
     } finally {
@@ -599,7 +617,13 @@ export default function App() {
           onUseSessionRules={useSessionRules}
           onEditRules={editRulesOnContracts}
           onLoadContract={loadContractIntoMigration}
-          onDownloadEvidence={downloadEvidence}
+          onDownloadEvidence={() => downloadEvidence()}
+          signoff={{
+            organization: signoff.active,
+            canSubmit: Boolean(signoff.active?.roles.includes('engineer')),
+            signedIn: Boolean(user),
+            onSubmit: () => downloadEvidence({ submit: true }),
+          }}
           onFormat={changeFormat}
         />
       )}
@@ -663,6 +687,8 @@ export default function App() {
           onRefresh={refreshRuns}
         />
       )}
+
+      {route === 'signoff' && <SignoffScreen user={user} signoff={signoff} />}
 
       {route === 'signin' && <SignInScreen user={user} />}
     </AppShell>

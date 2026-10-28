@@ -228,6 +228,7 @@ export function buildEvidencePack(input) {
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src data:; form-action 'none'; base-uri 'none'">
 <meta name="generator" content="data-contract-validator ${h(VERSION)} — evidence pack format ${EVIDENCE_FORMAT_VERSION}">
+<meta name="dcv-evidence-reference" content="${h(reference)}">
 <title>Evidence pack — ${h(title)}</title>
 <style>${STYLES}</style>
 </head>
@@ -362,5 +363,5 @@ export async function createEvidencePack(input) {
   // The subject is what a sign-off decision is recorded against: the same
   // fingerprints, files and verdicts as the pack, with no record in it.
   const subject = signoffSubject({ ...input, fingerprints, reference, generatedAt })
-  return { html, reference, subject, fileName: `${slug}-evidence-${reference.toLowerCase()}.html` }
+  return { html, reference, subject, fingerprints, fileName: `${slug}-evidence-${reference.toLowerCase()}.html` }
 }

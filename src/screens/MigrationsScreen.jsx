@@ -26,7 +26,7 @@ export default function MigrationsScreen(props) {
     onChange, onOpenFile, onDownload, onNew, onSample,
     onLoadFile, onClearFile, onCrosswalk,
     onReconcile, onCheckReadiness, onDownloadFixList, onExportFinding,
-    onUseSessionRules, onEditRules, onLoadContract, onDownloadEvidence, onFormat,
+    onUseSessionRules, onEditRules, onLoadContract, onDownloadEvidence, onFormat, signoff,
   } = props
   const formats = object.formats ?? { load: {}, source: {}, target: {} }
 
@@ -242,6 +242,7 @@ export default function MigrationsScreen(props) {
         >
           Download the evidence pack
         </button>
+        <SubmitLine signoff={signoff} ready={evidenceReady} />
       </div>
 
       {/* --- history ------------------------------------------------------- */}
@@ -289,6 +290,34 @@ function EvidenceLine({ title, state }) {
     <div style={{ display: 'flex', gap: 10, alignItems: 'baseline', marginTop: 4 }}>
       <span style={{ fontFamily: sans, fontSize: 13, fontWeight: 600, color: colors.ink, width: 130 }}>{title}</span>
       <span style={{ fontFamily: sans, fontSize: 13, color: s.color }}>{s.text}</span>
+    </div>
+  )
+}
+
+// Putting a check forward for a decision. The pack is downloaded either way:
+// what is submitted is its subject — fingerprints, verdicts and counts — and
+// the data owner decides against the pack they are sent.
+function SubmitLine({ signoff, ready }) {
+  if (!signoff) return null
+  const why = !signoff.signedIn
+    ? 'Sign in to submit it for sign-off in your organisation.'
+    : !signoff.organization
+      ? 'Join or create an organisation on Sign-off to submit it for a decision.'
+      : !signoff.canSubmit
+        ? `Only a migration engineer can submit in ${signoff.organization.name}.`
+        : null
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 10, flexWrap: 'wrap' }}>
+      <button
+        onClick={signoff.onSubmit}
+        disabled={!ready || Boolean(why)}
+        style={{ ...secondaryButton, opacity: ready && !why ? 1 : 0.45, cursor: ready && !why ? 'pointer' : 'default' }}
+      >
+        Download and submit for sign-off{signoff.organization && !why ? ` in ${signoff.organization.name}` : ''}
+      </button>
+      <span style={{ fontFamily: sans, fontSize: 12.5, color: colors.faint }}>
+        {why ?? 'Records the pack’s fingerprints and verdicts — never its records — for a business data owner to accept or reject.'}
+      </span>
     </div>
   )
 }

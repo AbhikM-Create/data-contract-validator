@@ -326,7 +326,10 @@ alter table public.audit_log     enable row level security;
 
 drop policy if exists "members read their organisation" on public.organizations;
 drop policy if exists "anyone signed in creates an organisation" on public.organizations;
-create policy "members read their organisation" on public.organizations for select using (public.is_member(id));
+-- Members read their organisation; so does someone with an open invitation,
+-- who needs to know who is inviting them before they accept.
+create policy "members read their organisation" on public.organizations for select
+  using (public.is_member(id) or exists (select 1 from public.invitations i where i.org_id = organizations.id and i.accepted_at is null and i.email = public.my_email()));
 create policy "anyone signed in creates an organisation" on public.organizations for insert
   with check (auth.uid() is not null and created_by = auth.uid());
 
