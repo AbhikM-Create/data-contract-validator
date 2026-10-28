@@ -23,6 +23,7 @@ import { canonicalJson, sha256Hex } from './hashing.js'
 import { cycleHistory, runnableContract, runnableSpec } from './migrationObject.js'
 import { RECON_STEPS } from './reconcile.js'
 import { describeRule } from './rules.js'
+import { VERSION } from './version.js'
 
 export const EVIDENCE_FORMAT_VERSION = 1
 const EXAMPLES = 25
@@ -225,7 +226,7 @@ export function buildEvidencePack(input) {
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src data:; form-action 'none'; base-uri 'none'">
-<meta name="generator" content="Data Contract Validator — evidence pack format ${EVIDENCE_FORMAT_VERSION}">
+<meta name="generator" content="data-contract-validator ${h(VERSION)} — evidence pack format ${EVIDENCE_FORMAT_VERSION}">
 <title>Evidence pack — ${h(title)}</title>
 <style>${STYLES}</style>
 </head>

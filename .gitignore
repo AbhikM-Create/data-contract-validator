@@ -16,3 +16,9 @@ dist-ssr
 
 # Contracts downloaded from the running app while testing
 *.contract.json
+
+# Playwright
+playwright-report/
+test-results/
+# SBOM output
+sbom.cdx.json

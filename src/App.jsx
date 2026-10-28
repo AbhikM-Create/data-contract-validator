@@ -12,6 +12,7 @@ import {
   migrationObjectToJson, newMigrationObject, parseMigrationObjectFile, readCrosswalk, runnableContract, runnableSpec, summariseReadiness, summariseReconciliation,
 } from './lib/migrationObject.js'
 import { parseCsv, toCsv } from './lib/parseCsv.js'
+import { BUILD_COMMIT, VERSION } from './lib/version.js'
 import { summariseRun } from './lib/runRecord.js'
 import { listRuns, saveRun } from './lib/runStore.js'
 import { ruleKey } from './lib/rules.js'
@@ -515,7 +516,7 @@ export default function App() {
         object: migration,
         readiness: readyCurrent ? { report: readiness.report, flaggedCount: readiness.report.flaggedCount, file: asFile(migrationFiles.load) } : null,
         reconciliation: reconCurrent ? { report: recon.report, source: asFile(migrationFiles.source), target: asFile(migrationFiles.target) } : null,
-        generatedBy: 'the workspace',
+        generatedBy: `the workspace — data-contract-validator ${VERSION}${BUILD_COMMIT ? ` (${BUILD_COMMIT})` : ''}`,
         reproduce: `# with ${objectFile} saved from the workspace\n${commands.join('\n')}`,
       })
       saveFile(pack.fileName, pack.html, 'text/html')

@@ -1,0 +1,17 @@
+# Weekly pull requests for outdated or vulnerable dependencies. Each one runs
+# CI — lint, unit and browser tests, the row-level-security check — before
+# anyone merges it.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      dev-dependencies:
+        dependency-type: development
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly

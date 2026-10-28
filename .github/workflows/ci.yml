@@ -44,3 +44,64 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: sh scripts/verify-rls.sh
+
+  # The browser suite (e2e/), against the PRODUCTION build under its
+  # Content-Security-Policy: the workflows a user runs, end to end, with every
+  # download checked.
+  e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report
+          path: test-results/
+
+  # What a pipeline installs: pack the CLI, install the tarball into an empty
+  # prefix, and run it. Catches a file missing from package.json "files" before
+  # anyone else does.
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm pack --pack-destination "$RUNNER_TEMP"
+      - run: npm install --global --prefix "$RUNNER_TEMP/dcv" "$RUNNER_TEMP"/data-contract-validator-*.tgz
+      - run: |
+          "$RUNNER_TEMP/dcv/bin/dcv" --version
+          "$RUNNER_TEMP/dcv/bin/dcv" odcs import src/lib/__fixtures__/odcs/enum.odcs.yaml > /dev/null || [ $? -eq 2 ]
+
+  # Production dependencies: fail on a high-severity advisory, and publish the
+  # CycloneDX SBOM procurement and security teams ask for.
+  supply-chain:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npm run audit:prod
+      - run: npm run sbom
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sbom
+          path: sbom.cdx.json
+
+  container:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build --build-arg DCV_COMMIT="$(git rev-parse --short=12 HEAD)" -t data-contract-validator:ci .
+      - run: docker run --rm data-contract-validator:ci --version
