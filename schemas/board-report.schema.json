@@ -1,0 +1,79 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:data-contract-validator:schema:board-report:1",
+  "title": "Readiness board (dcv board --json)",
+  "description": "Version 1. Fields may be ADDED within a version; removing or renaming one bumps it. Built from run summaries only: counts, rates and verdicts, never a record.",
+  "type": "object",
+  "required": ["$schema", "tool", "generatedAt", "files", "version", "verdict", "withSignoff", "counts", "rows", "headline"],
+  "properties": {
+    "$schema": { "const": "urn:data-contract-validator:schema:board-report:1" },
+    "tool": {
+      "type": "object",
+      "required": ["name", "version", "commit"],
+      "properties": {
+        "name": { "const": "data-contract-validator" },
+        "version": { "type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+" },
+        "commit": { "type": ["string", "null"] }
+      }
+    },
+    "generatedAt": { "type": "string", "format": "date-time" },
+    "files": { "type": "array", "items": { "type": "string" } },
+    "version": { "const": 1 },
+    "verdict": { "$ref": "#/$defs/verdict" },
+    "withSignoff": { "type": "boolean", "description": "False from the CLI: sign-off lives in the organisation's database, so the verdict judges the checks alone." },
+    "counts": {
+      "type": "object",
+      "required": ["GO", "NO_GO", "NOT_CONFIRMED"],
+      "additionalProperties": { "type": "integer", "minimum": 0 }
+    },
+    "headline": { "type": "string" },
+    "rows": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "wave", "cycle", "verdict", "reasons", "readiness", "reconciliation", "signoff"],
+        "properties": {
+          "name": { "type": "string" },
+          "wave": { "type": ["string", "null"] },
+          "cycle": { "type": ["string", "null"] },
+          "verdict": { "$ref": "#/$defs/verdict" },
+          "reasons": { "type": "array", "items": { "type": "string" } },
+          "readiness": {
+            "allOf": [{ "$ref": "#/$defs/cell" }],
+            "properties": {
+              "status": { "enum": ["READY", "NOT_READY", "UNVERIFIED", "NOT_RUN"] },
+              "acceptance": { "type": ["number", "null"] },
+              "records": { "type": ["integer", "null"] },
+              "rejected": { "type": ["integer", "null"] }
+            }
+          },
+          "reconciliation": {
+            "allOf": [{ "$ref": "#/$defs/cell" }],
+            "properties": {
+              "status": { "enum": ["PASS", "FAIL", "NOT_RUN"] },
+              "stoppedAt": { "enum": ["keys", "completeness", "mapping", "accuracy", "totals", null] },
+              "completeness": { "type": ["number", "null"] },
+              "accuracy": { "type": ["number", "null"] }
+            }
+          },
+          "signoff": { "type": ["object", "null"] }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "verdict": { "enum": ["GO", "NO_GO", "NOT_CONFIRMED"] },
+    "cell": {
+      "type": "object",
+      "required": ["ran", "status", "verdict", "reason"],
+      "properties": {
+        "ran": { "type": "boolean" },
+        "verdict": { "$ref": "#/$defs/verdict" },
+        "reason": { "type": ["string", "null"] },
+        "at": { "type": ["string", "null"] },
+        "change": { "type": ["number", "null"] },
+        "previousCycle": { "type": ["string", "null"] }
+      }
+    }
+  }
+}

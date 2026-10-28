@@ -69,3 +69,13 @@ export function readinessJunit(report, { seconds = 0, build, file } = {}) {
   }))
   return suite(name, cases, seconds, props)
 }
+
+// One test case per migration object. Not confirmed fails too: a pipeline
+// gated on the board must not go live on a check that did not run.
+export function boardJunit(board, { build } = {}) {
+  const cases = board.rows.map((row) => ({
+    name: `${row.name} — ${[row.wave, row.cycle].filter(Boolean).join(' ')}`,
+    ...(row.verdict === 'GO' ? {} : { failure: { message: row.reasons.join('; '), type: row.verdict, detail: row.reasons.join('\n') } }),
+  }))
+  return suite('board: migration readiness', cases, 0, { tool: build?.name, version: build?.version, commit: build?.commit, status: board.verdict, signoff: board.withSignoff ? 'included' : 'not included' })
+}

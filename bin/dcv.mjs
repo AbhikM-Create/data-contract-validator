@@ -3,6 +3,7 @@
 //
 //   dcv check <contract> <load.csv> [...]           will the target accept this load file?
 //   dcv reconcile <spec> <source.csv> <target.csv>   did the load arrive whole and correct?
+//   dcv board <object.migration.json>...             is the programme ready to go live?
 //   dcv odcs export|import <file>                    Open Data Contract Standard in and out
 //   dcv --version
 //
@@ -15,14 +16,16 @@ import { describeBuild } from '../cli/buildInfo.mjs'
 const COMMANDS = {
   check: () => import('../cli/check.mjs'),
   reconcile: () => import('../cli/reconcile.mjs'),
+  board: () => import('../cli/board.mjs'),
   odcs: () => import('../cli/odcs.mjs'),
 }
 
 const HELP = `${describeBuild()}
 
 Usage:
-  dcv check <contract.json> <load.csv> [--key col] [--json] [--junit out.xml] [--rejects fixes.csv] [--evidence pack.html]
-  dcv reconcile <spec.json> <source.csv> <target.csv> [--json] [--junit out.xml] [--evidence pack.html]
+  dcv check <contract.json> <load.csv> [--key col] [--json] [--junit out.xml] [--rejects fixes.csv] [--evidence pack.html] [--record]
+  dcv reconcile <spec.json> <source.csv> <target.csv> [--json] [--junit out.xml] [--evidence pack.html] [--record]
+  dcv board <object.migration.json>... [--json] [--junit out.xml]
   dcv odcs export <contract.json> [--out contract.odcs.yaml]
   dcv odcs import <contract.odcs.yaml> [--out contract.json] [--object name]
   dcv --version

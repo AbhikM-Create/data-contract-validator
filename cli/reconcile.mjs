@@ -10,31 +10,33 @@
 import { readFileSync, writeFileSync } from 'node:fs'
 import { basename } from 'node:path'
 import { createEvidencePack } from '../src/lib/evidencePack.js'
-import { isMigrationObjectFile, readMigrationObject, runnableSpec } from '../src/lib/migrationObject.js'
+import { isMigrationObjectFile, readMigrationObject, runnableSpec, summariseReconciliation } from '../src/lib/migrationObject.js'
 import { REPORT_SCHEMAS } from '../src/lib/version.js'
 import { fileInfo } from '../scripts/lib/fileInfo.mjs'
 import { reconcileFiles } from '../scripts/lib/reconcileFiles.mjs'
 import { EXIT, parse, UsageError } from './args.mjs'
 import { buildInfo, describeBuild } from './buildInfo.mjs'
 import { reconcileJunit } from './junit.mjs'
+import { assertRecordable, recordRun } from './record.mjs'
 
-export const USAGE = 'dcv reconcile <spec.json> <source.csv> <target.csv> [--json] [--junit out.xml] [--evidence pack.html] [--tmp dir] [--partitions n]'
+export const USAGE = 'dcv reconcile <spec.json> <source.csv> <target.csv> [--json] [--junit out.xml] [--evidence pack.html] [--record] [--tmp dir] [--partitions n]'
 
 export async function run(argv) {
   const parsed = parse(argv, {
     usage: USAGE,
     positionals: 3,
-    options: { json: { type: 'boolean' }, junit: { type: 'string' }, evidence: { type: 'string' }, tmp: { type: 'string' }, partitions: { type: 'string' } },
+    options: { json: { type: 'boolean' }, junit: { type: 'string' }, evidence: { type: 'string' }, record: { type: 'boolean' }, tmp: { type: 'string' }, partitions: { type: 'string' } },
   })
   if (parsed.help) {
     console.log(`Usage: ${USAGE}\n\n<spec.json> may be a reconciliation spec or a migration object saved from the workspace.`)
     return EXIT.OK
   }
   const [specPath, sourcePath, targetPath] = parsed.args
-  const { json, junit, evidence, tmp, partitions } = parsed.values
+  const { json, junit, evidence, record, tmp, partitions } = parsed.values
 
   let spec
   let object = null
+  let skipped = []
   try {
     spec = JSON.parse(readFileSync(specPath, 'utf8'))
   } catch (error) {
@@ -46,8 +48,10 @@ export async function run(argv) {
     const opened = readMigrationObject(spec)
     if (opened.error) throw new UsageError(`${specPath}: ${opened.error}`)
     object = opened.object
+    skipped = opened.skipped
     spec = runnableSpec(opened.object)
   }
+  if (record) assertRecordable(specPath, object, skipped)
 
   // An evidence pack quotes more records per finding than a terminal summary.
   const outcome = await reconcileFiles(spec, sourcePath, targetPath, { tmpDir: tmp, partitions, exampleLimit: evidence ? 25 : undefined })
@@ -70,6 +74,10 @@ export async function run(argv) {
     })
     writeFileSync(evidence, pack.html, { mode: 0o600 })
     notes.push(`Evidence pack ${pack.reference} written to ${evidence}`)
+  }
+  if (record) {
+    const note = recordRun(specPath, object, summariseReconciliation(report, { wave: object.wave, cycle: object.cycle, sourceName: files.source, targetName: files.target }))
+    if (note) notes.push(note)
   }
   if (junit) {
     writeFileSync(junit, reconcileJunit(report, { seconds: outcome.seconds, build, files }))

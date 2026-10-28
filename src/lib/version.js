@@ -14,4 +14,5 @@ export const BUILD_COMMIT = typeof __DCV_COMMIT__ === 'string' ? __DCV_COMMIT__ 
 export const REPORT_SCHEMAS = {
   reconcile: 'urn:data-contract-validator:schema:reconcile-report:1',
   readiness: 'urn:data-contract-validator:schema:readiness-report:1',
+  board: 'urn:data-contract-validator:schema:board-report:1',
 }

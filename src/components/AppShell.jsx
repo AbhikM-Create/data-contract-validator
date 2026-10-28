@@ -139,7 +139,7 @@ export default function AppShell({ route, user, authLoading, busy, engineError, 
       <footer style={{ borderTop: `1px solid ${colors.panelEdge}`, background: colors.panel }}>
         <div style={{ maxWidth: 1080, margin: '0 auto', padding: '16px 24px' }}>
           <span style={{ fontFamily: mono, fontSize: 11, color: colors.faint }}>
-            Parsing and checking happen in this page. No backend, no data storage.
+            Parsing and checking happen in this page; files are never uploaded. An account stores only what you author and counts.
           </span>
         </div>
       </footer>

@@ -14,8 +14,11 @@ export function parse(argv, { usage, positionals: count, options }) {
     throw new UsageError(`${error.message.replace(/\. To specify.*$/s, '')}\n\nUsage: ${usage}`)
   }
   if (parsed.values.help) return { help: true }
-  if (parsed.positionals.length !== count) {
-    throw new UsageError(`Expected ${count} file argument${count === 1 ? '' : 's'}, got ${parsed.positionals.length}.\n\nUsage: ${usage}`)
+  // `positionals` is an exact count, or { min } for a command taking a list.
+  const min = typeof count === 'object' ? count.min : count
+  if (typeof count === 'object' ? parsed.positionals.length < min : parsed.positionals.length !== count) {
+    const wanted = typeof count === 'object' ? `at least ${min}` : String(count)
+    throw new UsageError(`Expected ${wanted} file argument${min === 1 && typeof count !== 'object' ? '' : 's'}, got ${parsed.positionals.length}.\n\nUsage: ${usage}`)
   }
   const partitions = parsed.values.partitions === undefined ? undefined : Number(parsed.values.partitions)
   if (partitions !== undefined && !(Number.isInteger(partitions) && partitions >= 1 && partitions <= 256)) {

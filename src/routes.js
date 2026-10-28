@@ -8,6 +8,7 @@ export const ROUTES = [
   { id: 'migrations', label: 'Migrations', blurb: 'Check a migration object, cycle by cycle' },
   { id: 'contracts', label: 'Contracts', blurb: 'Author the rules a file must obey' },
   { id: 'validate', label: 'Validate', blurb: 'Check a file and read the result' },
+  { id: 'board', label: 'Board', blurb: 'Every object’s latest cycle, for go/no-go' },
   { id: 'signoff', label: 'Sign-off', blurb: 'Who accepted each cycle, and the audit log' },
   { id: 'history', label: 'History', blurb: 'Runs you have saved' },
 ]

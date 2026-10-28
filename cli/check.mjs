@@ -12,7 +12,7 @@ import { readFileSync, writeFileSync } from 'node:fs'
 import { basename } from 'node:path'
 import { parseContractFile } from '../src/lib/contractFile.js'
 import { createEvidencePack } from '../src/lib/evidencePack.js'
-import { isMigrationObjectFile, readMigrationObject, runnableContract } from '../src/lib/migrationObject.js'
+import { isMigrationObjectFile, readMigrationObject, runnableContract, summariseReadiness } from '../src/lib/migrationObject.js'
 import { READINESS } from '../src/lib/readiness.js'
 import { REPORT_SCHEMAS } from '../src/lib/version.js'
 import { fileInfo } from '../scripts/lib/fileInfo.mjs'
@@ -20,8 +20,9 @@ import { checkReadinessFile } from '../scripts/lib/readinessFile.mjs'
 import { EXIT, parse, UsageError } from './args.mjs'
 import { buildInfo, describeBuild } from './buildInfo.mjs'
 import { readinessJunit } from './junit.mjs'
+import { assertRecordable, recordRun } from './record.mjs'
 
-export const USAGE = 'dcv check <contract.json> <load.csv> [--key col[,col]] [--json] [--junit out.xml] [--rejects fixes.csv] [--evidence pack.html] [--tmp dir] [--partitions n]'
+export const USAGE = 'dcv check <contract.json> <load.csv> [--key col[,col]] [--json] [--junit out.xml] [--rejects fixes.csv] [--evidence pack.html] [--record] [--tmp dir] [--partitions n]'
 
 export async function run(argv) {
   const parsed = parse(argv, {
@@ -29,7 +30,7 @@ export async function run(argv) {
     positionals: 2,
     options: {
       key: { type: 'string' }, json: { type: 'boolean' }, junit: { type: 'string' }, rejects: { type: 'string' },
-      evidence: { type: 'string' }, tmp: { type: 'string' }, partitions: { type: 'string' },
+      evidence: { type: 'string' }, record: { type: 'boolean' }, tmp: { type: 'string' }, partitions: { type: 'string' },
     },
   })
   if (parsed.help) {
@@ -37,7 +38,7 @@ export async function run(argv) {
     return EXIT.OK
   }
   const [contractPath, loadPath] = parsed.args
-  const { key: keyArg, json, junit, rejects, evidence, tmp, partitions } = parsed.values
+  const { key: keyArg, json, junit, rejects, evidence, record, tmp, partitions } = parsed.values
 
   let text
   try {
@@ -49,6 +50,7 @@ export async function run(argv) {
   // spec's target key, used when --key is not given.
   let contract
   let object = null
+  let skipped = []
   let defaultKey = []
   let json0 = null
   try {
@@ -60,12 +62,15 @@ export async function run(argv) {
     const opened = readMigrationObject(json0)
     if (opened.error) throw new UsageError(`${contractPath}: ${opened.error}`)
     object = opened.object
+    skipped = opened.skipped
     contract = { ...runnableContract(opened.object), skipped: opened.skipped }
     defaultKey = opened.object.spec.key.target.filter(Boolean)
   } else {
     contract = parseContractFile(text)
     if (contract.error) throw new UsageError(`${contractPath}: ${contract.error}`)
   }
+
+  if (record) assertRecordable(contractPath, object, skipped)
 
   const key = keyArg ? keyArg.split(',').map((c) => c.trim()).filter(Boolean) : defaultKey
   const outcome = await checkReadinessFile(contract, loadPath, { key, rejectsPath: rejects, tmpDir: tmp, partitions })
@@ -88,6 +93,10 @@ export async function run(argv) {
     })
     writeFileSync(evidence, pack.html, { mode: 0o600 })
     notes.push(`Evidence pack ${pack.reference} written to ${evidence}`)
+  }
+  if (record) {
+    const note = recordRun(contractPath, object, summariseReadiness(report, { wave: object.wave, cycle: object.cycle, fileName: file }))
+    if (note) notes.push(note)
   }
   if (junit) {
     writeFileSync(junit, readinessJunit(report, { seconds: outcome.seconds, build, file }))

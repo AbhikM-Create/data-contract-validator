@@ -31,6 +31,7 @@ const ajv = new Ajv2020({ strict: false, allErrors: true })
 const schema = (name) => ajv.compile(JSON.parse(readFileSync(join(root, 'schemas', name), 'utf8')))
 const reconcileSchema = schema('reconcile-report.schema.json')
 const readinessSchema = schema('readiness-report.schema.json')
+const boardSchema = schema('board-report.schema.json')
 const errors = (validate, doc) => (validate(doc) ? [] : validate.errors.map((e) => `${e.instancePath} ${e.message}`))
 
 describe('dcv', () => {
@@ -115,6 +116,74 @@ describe('--junit', () => {
     const xml = readFileSync(out, 'utf8')
     expect(xml).toMatch(/failures="1"/) // last_name blank: rejects
     expect(xml).toMatch(/<skipped message="1 of 46 records would load with a warning"\/>/)
+  })
+})
+
+describe('--record and dcv board', () => {
+  const copy = (name) => file(name, migrationObjectToJson(migrationSampleObject()))
+
+  it('records each pipeline run in the object, with counts and no record from the files', () => {
+    const rec = copy('recorded.migration.json')
+    expect(dcv('check', rec, load, '--record').code).toBe(1)
+    expect(dcv('reconcile', rec, source, target, '--record').code).toBe(1)
+    const saved = readFileSync(rec, 'utf8')
+    const runs = JSON.parse(saved).runs
+    expect(runs.map((r) => [r.kind, r.status, r.cycle])).toEqual([['readiness', 'NOT_READY', 'Mock 2'], ['reconcile', 'FAIL', 'Mock 2']])
+    expect(saved).not.toMatch(/40117|40133|Okafor|OKAFOR/)
+  })
+
+  it('the board reads them: a no-go, named, matching the published schema, exit 1', () => {
+    const rec = copy('board-nogo.migration.json')
+    dcv('check', rec, load, '--record')
+    dcv('reconcile', rec, source, target, '--record')
+    const r = dcv('board', rec, '--json')
+    expect(r.code).toBe(1)
+    const report = JSON.parse(r.out)
+    expect(errors(boardSchema, report)).toEqual([])
+    expect(report.verdict).toBe('NO_GO')
+    expect(report.withSignoff).toBe(false)
+    expect(report.rows[0].reasons).toEqual(['2 of 46 records would be rejected', 'reconciliation stopped at Mapping'])
+    // Negative control: the schema notices a field that disappears.
+    delete report.rows[0].reasons
+    expect(errors(boardSchema, report)).toEqual(["/rows/0 must have required property 'reasons'"])
+  })
+
+  it('an object with no checks in its cycle is not confirmed: exit 2', () => {
+    const r = dcv('board', copy('fresh.migration.json'), '--json')
+    expect(r.code).toBe(2)
+    const report = JSON.parse(r.out)
+    expect(errors(boardSchema, report)).toEqual([])
+    expect(report.rows[0].reasons).toEqual(['load readiness was not checked in this cycle', 'reconciliation was not run in this cycle'])
+  })
+
+  it('passes, exit 0, only when every object passed both checks in its cycle — and says sign-off was not judged', () => {
+    const passing = JSON.parse(migrationObjectToJson(migrationSampleObject()))
+    passing.name = 'Cost centres'
+    passing.runs = [
+      { kind: 'readiness', at: '2026-10-20T09:00:00Z', wave: 'Wave 1', cycle: 'Mock 2', status: 'READY', files: { load: 'l.csv' }, counts: { records: 10, rejected: 0, warned: 0, clean: 10, checksFailing: 0, checksUnchecked: 0 }, acceptance: 1 },
+      { kind: 'reconcile', at: '2026-10-20T09:30:00Z', wave: 'Wave 1', cycle: 'Mock 2', status: 'PASS', files: { source: 's.csv', target: 't.csv' }, steps: { keys: 'PASS', completeness: 'PASS', mapping: 'PASS', accuracy: 'PASS', totals: 'PASS' }, counts: {}, completeness: 1, accuracy: 1 },
+    ]
+    const path = file('passing.migration.json', JSON.stringify(passing))
+    const r = dcv('board', path)
+    expect(r.code).toBe(0)
+    expect(r.out).toMatch(/Sign-off is not part of this board, so this is not yet a go\./)
+    const xml = join(dir, 'board.xml')
+    expect(dcv('board', path, copy('fresh2.migration.json'), '--junit', xml).code).toBe(2)
+    expect(readFileSync(xml, 'utf8')).toMatch(/tests="2" failures="1"/)
+  })
+
+  it('refuses --record where there is nowhere to record, before running anything', () => {
+    const plain = file('plain.contract.json', JSON.stringify({ name: 'c', rules: [{ kind: 'nullRule', column: 'employee_id', op: 'notNull' }] }))
+    const r = dcv('check', plain, load, '--record')
+    expect(r.code).toBe(2)
+    expect(r.err).toMatch(/--record needs a migration object/)
+  })
+
+  it('refuses a board file that is not a migration object, and the same object twice', () => {
+    expect(dcv('board', load).code).toBe(2)
+    const twice = dcv('board', object, object)
+    expect(twice.code).toBe(2)
+    expect(twice.err).toMatch(/Two files describe the object "Employees"/)
   })
 })
 

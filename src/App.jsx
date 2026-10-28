@@ -27,6 +27,7 @@ import MigrationsScreen from './screens/MigrationsScreen.jsx'
 import { MIGRATION_SAMPLE, migrationLoadFile, migrationSampleObject, migrationSource, migrationTarget } from './samples/migrationSample.js'
 import SignInScreen from './screens/SignInScreen.jsx'
 import SignoffScreen from './screens/SignoffScreen.jsx'
+import BoardScreen from './screens/BoardScreen.jsx'
 import ValidateScreen from './screens/ValidateScreen.jsx'
 
 // The shell owns the session: the contract being authored and the files being
@@ -687,6 +688,8 @@ export default function App() {
           onRefresh={refreshRuns}
         />
       )}
+
+      {route === 'board' && <BoardScreen currentObject={migration} signoff={signoff} />}
 
       {route === 'signoff' && <SignoffScreen user={user} signoff={signoff} />}
 
