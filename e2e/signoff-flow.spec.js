@@ -42,7 +42,7 @@ test('a data owner opens the pack they were sent and records a decision against 
   }
   const decisions = []
   await project(page, {
-    rest: ({ method, path, query, body, single }) => {
+    rest: ({ method, path, body, single }) => {
       if (path === 'memberships') return { data: [{ role: 'data_owner', organizations: { id: ORG, name: 'Northwind' } }] }
       if (path === 'rpc/organization_members') return { data: [{ user_id: user.id, email: user.email, role: 'data_owner' }, { user_id: ENGINEER, email: 'eng@northwind.example', role: 'engineer' }] }
       if (path === 'submissions') return { data: [submission] }
