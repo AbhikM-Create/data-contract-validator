@@ -1,7 +1,7 @@
 import { useState } from 'react'
-import { isConfigured, signIn, signUp } from '../lib/supabase.js'
+import { isConfigured, signIn, signInWithCompanySso, signInWithMicrosoft, signUp, sso } from '../lib/supabase.js'
 import { go } from '../routes.js'
-import { colors, panel, primaryButton, sans } from '../theme.js'
+import { colors, panel, primaryButton, sans, secondaryButton } from '../theme.js'
 import { ScreenHead } from './ValidateScreen.jsx'
 
 // Signing in buys you saved contracts and saved runs. It buys nothing else —
@@ -34,7 +34,9 @@ export default function SignInScreen({ user }) {
       setMode('in')
       return
     }
-    go('contracts')
+    // useAuth has already sent the person back where they came from, if
+    // anywhere was remembered; otherwise, to their contracts.
+    if (window.location.hash === '#/signin') go('contracts')
   }
 
   if (user) {
@@ -62,7 +64,14 @@ export default function SignInScreen({ user }) {
         </Notice>
       )}
 
-      <form onSubmit={submit} style={{ ...panel, padding: '20px 22px', marginTop: 20, maxWidth: 420 }}>
+      {sso.any && !creating && <CompanySignIn />}
+
+      {sso.passwordForm && (
+      <>
+      {sso.any && !creating && (
+        <p style={{ fontFamily: sans, fontSize: 12.5, color: colors.faint, marginTop: 18 }}>Or with an email and password:</p>
+      )}
+      <form onSubmit={submit} style={{ ...panel, padding: '20px 22px', marginTop: sso.any && !creating ? 8 : 20, maxWidth: 420 }}>
         <Field label="Email" type="email" value={email} onChange={setEmail} autoComplete="email" />
         <Field
           label="Password"
@@ -103,7 +112,53 @@ export default function SignInScreen({ user }) {
           {creating ? 'Sign in' : 'Create one'}
         </button>
       </p>
+      </>
+      )}
     </>
+  )
+}
+
+// Company sign-in: SAML by email domain, and/or Microsoft Entra ID. Both leave
+// for the identity provider and come back signed in; the identity provider
+// decides who may, so a leaver it has disabled cannot sign in again.
+function CompanySignIn() {
+  const [email, setEmail] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [problem, setProblem] = useState(null)
+
+  const start = async (work) => {
+    setBusy(true)
+    setProblem(null)
+    const { error } = await work()
+    // On success the page is already on its way to the identity provider.
+    if (error) {
+      setProblem(error)
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div style={{ ...panel, padding: '20px 22px', marginTop: 20, maxWidth: 420 }}>
+      <div style={{ fontFamily: sans, fontSize: 14, fontWeight: 600, color: colors.ink }}>Sign in with your company account</div>
+      {sso.saml && (
+        <form onSubmit={(e) => { e.preventDefault(); start(() => signInWithCompanySso(email)) }}>
+          <Field label="Work email" type="email" value={email} onChange={setEmail} autoComplete="email" />
+          <button type="submit" disabled={busy || !email} style={{ ...primaryButton, width: '100%', marginTop: 14, opacity: busy || !email ? 0.55 : 1 }}>
+            {busy ? 'Opening your company sign-in…' : 'Continue with SSO'}
+          </button>
+        </form>
+      )}
+      {sso.microsoft && (
+        <button
+          onClick={() => start(signInWithMicrosoft)}
+          disabled={busy}
+          style={{ ...(sso.saml ? secondaryButton : primaryButton), width: '100%', marginTop: sso.saml ? 10 : 14, opacity: busy ? 0.55 : 1 }}
+        >
+          Sign in with Microsoft
+        </button>
+      )}
+      {problem && <p style={{ fontFamily: sans, fontSize: 12.5, lineHeight: 1.5, marginTop: 12, color: colors.fail }}>{problem}</p>}
+    </div>
   )
 }
 

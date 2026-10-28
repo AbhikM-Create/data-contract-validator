@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { rememberRoute } from './lib/sso.js'
 
 // Hash routing, ~30 lines instead of a router dependency. The app is served as
 // static files (an Artifact, a CDN, any static host), and a hash route needs no
@@ -37,6 +38,10 @@ export function useRoute() {
 // Navigating writes the hash and lets the listener update state, so the back
 // button and a pasted link behave identically to a click.
 export function go(id) {
+  // Signing in is a detour: remember where from, so the person lands back
+  // there — after a password, or after a round trip to their company's
+  // identity provider (sso.js).
+  if (id === 'signin') rememberRoute(globalThis.sessionStorage, window.location.hash)
   window.location.hash = id === 'home' ? '/' : `/${id}`
   window.scrollTo({ top: 0 })
 }

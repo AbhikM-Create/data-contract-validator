@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { takeRoute } from './sso.js'
 import { isConfigured, supabase } from './supabase.js'
 
 // Who is signed in, kept in sync with Supabase.
@@ -23,10 +24,15 @@ export function useAuth() {
 
     // Fires on sign-in, sign-out, and token refresh — including in another tab,
     // so signing out once signs out everywhere this app is open.
-    const { data } = supabase.auth.onAuthStateChange((_event, next) => {
+    const { data } = supabase.auth.onAuthStateChange((event, next) => {
       if (!active) return
       setSession(next)
       setLoading(false)
+      // Back from single sign-on: return to the screen the person left from.
+      if (next && (event === 'SIGNED_IN' || event === 'INITIAL_SESSION')) {
+        const route = takeRoute(globalThis.sessionStorage)
+        if (route) window.location.hash = route
+      }
     })
 
     return () => {

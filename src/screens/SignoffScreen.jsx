@@ -297,7 +297,7 @@ function DecisionForm({ submission, onDecide }) {
             <div style={{ marginTop: 10 }}>
               {exceptions.map((ex, i) => (
                 <div key={i} style={{ display: 'flex', gap: 6, marginTop: 6, flexWrap: 'wrap' }}>
-                  <select aria-label="Finding accepted" value={ex.finding} onChange={(e) => setException(i, { finding: e.target.value })} style={field(240)}>
+                  <select aria-label="Finding accepted" value={ex.finding} onChange={(e) => setException(i, { finding: e.target.value })} style={field(300)}>
                     {choices.map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
                   </select>
                   <input aria-label="Why it is acceptable" placeholder="Why it is acceptable" value={ex.reason} onChange={(e) => setException(i, { reason: e.target.value })} style={field(240)} />

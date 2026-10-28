@@ -22,3 +22,4 @@ playwright-report/
 test-results/
 # SBOM output
 sbom.cdx.json
+dist-sso

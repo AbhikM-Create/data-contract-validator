@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js'
+import { emailDomain, readSsoConfig, rememberRoute, returnUrl, ssoProblem } from './sso.js'
 
 // The Supabase client, and the account actions built on it.
 //
@@ -16,17 +17,21 @@ const key = import.meta.env.VITE_SUPABASE_ANON_KEY
 // with no .env.local. Nothing here may throw at import time.
 export const isConfigured = Boolean(url && key)
 
+// Which company sign-in this build offers (sso.js). Off without Supabase.
+export const sso = isConfigured ? readSsoConfig(import.meta.env.VITE_SSO, import.meta.env.VITE_SSO_ONLY) : readSsoConfig('')
+
 export const supabase = isConfigured
   ? createClient(url, key, {
       auth: {
         persistSession: true,
         autoRefreshToken: true,
-        // This app routes on the URL fragment (#/validate), and Supabase returns
-        // auth tokens in that same fragment. Letting it parse the URL would put
-        // the two in conflict. With email + password there is no redirect to
-        // parse; turning this on later (magic links, OAuth) means teaching
-        // routes.js to recognise and clear a token fragment first.
-        detectSessionInUrl: false,
+        // PKCE: a redirect back from single sign-on (or an email link) carries
+        // a one-time ?code= in the QUERY, which the client exchanges for a
+        // session and then removes from the address bar. The app routes on the
+        // fragment (#/validate), so the two never meet — the older implicit
+        // flow put tokens in the fragment, which is why this was once off.
+        flowType: 'pkce',
+        detectSessionInUrl: true,
       },
     })
   : null
@@ -71,4 +76,27 @@ export async function signOut() {
   if (!isConfigured) return notConfigured
   const { error } = await supabase.auth.signOut()
   return { error: readable(error) }
+}
+
+// Single sign-on. Both leave the page for the identity provider and come back
+// with a code (see flowType above); where the person was is remembered so
+// they land back there.
+const leaving = () => {
+  // From the sign-in screen, go('signin') has already remembered where from.
+  if (window.location.hash !== '#/signin') rememberRoute(globalThis.sessionStorage, window.location.hash)
+  return returnUrl(window.location)
+}
+
+export async function signInWithCompanySso(email) {
+  if (!isConfigured) return notConfigured
+  const domain = emailDomain(email)
+  if (!domain) return { error: 'Enter your work email address — its domain picks your company’s sign-in.' }
+  const { error } = await supabase.auth.signInWithSSO({ domain, options: { redirectTo: leaving() } })
+  return { error: error ? ssoProblem(error.message, domain) : null }
+}
+
+export async function signInWithMicrosoft() {
+  if (!isConfigured) return notConfigured
+  const { error } = await supabase.auth.signInWithOAuth({ provider: 'azure', options: { scopes: 'email', redirectTo: leaving() } })
+  return { error: error ? ssoProblem(error.message) : null }
 }
