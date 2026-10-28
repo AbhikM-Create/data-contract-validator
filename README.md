@@ -49,8 +49,7 @@ Needs Node 20.19+ or 22.12+.
 ## The command line — for pipelines
 
 ```bash
-npm pack                                   # data-contract-validator-2.0.0.tgz
-npm install --global ./data-contract-validator-2.0.0.tgz
+npm install --global data-contract-validator    # once published; until then: npm pack, then install the .tgz
 
 dcv check employees.migration.json load.csv --rejects fixes.csv --junit readiness.xml
 dcv reconcile employees.migration.json legacy.csv target.csv --evidence pack.html --junit reconcile.xml

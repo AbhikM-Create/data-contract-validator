@@ -2,7 +2,27 @@
   "name": "data-contract-validator",
   "version": "2.0.0",
   "description": "Check data contracts and reconcile migrations: load readiness, record-by-record reconciliation, evidence packs. Runs locally; data never leaves the machine.",
-  "private": true,
+  "keywords": [
+    "data-contract",
+    "data-quality",
+    "data-migration",
+    "reconciliation",
+    "etl",
+    "sap",
+    "odcs",
+    "open-data-contract-standard",
+    "csv",
+    "evidence",
+    "cli"
+  ],
+  "homepage": "https://github.com/AbhikM-Create/data-contract-validator#readme",
+  "bugs": {
+    "url": "https://github.com/AbhikM-Create/data-contract-validator/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/AbhikM-Create/data-contract-validator.git"
+  },
   "type": "module",
   "bin": {
     "dcv": "bin/dcv.mjs"
@@ -25,6 +45,10 @@
     "schemas/",
     "README.md"
   ],
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
   "scripts": {
     "dev": "vite",
     "build": "vite build",

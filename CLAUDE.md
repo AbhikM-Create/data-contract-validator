@@ -247,7 +247,11 @@ Static app (`vite.config.js`: `base: './'`, fixed names `dist/app.js`,
 `dist/app.css`). `publish/artifact.html` is the Artifact-host entry: page
 content only, stylesheet inlined. To republish: `npm run build`, then publish it
 with `files: { "app.js": "dist/app.js" }` and the same URL.
-CLI: `npm pack` (the `files` list decides what ships), or the `Dockerfile`.
+CLI: published to public npm as `data-contract-validator` (command `dcv`) by
+`.github/workflows/release.yml` on a `v*` tag matching package.json, with npm
+provenance; it refuses to publish without a LICENSE file and `license` field.
+`npm pack` (the `files` list decides what ships) and the `Dockerfile` build the
+same package.
 
 ## Out of scope — do not build without a decision
 Data connectors in the browser; transforming or loading data (this tool proves
