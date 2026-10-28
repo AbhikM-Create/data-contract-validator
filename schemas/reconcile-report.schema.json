@@ -1,0 +1,112 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:data-contract-validator:schema:reconcile-report:1",
+  "title": "Reconciliation report (dcv reconcile --json)",
+  "description": "Version 1. Fields may be ADDED within a version; removing or renaming one bumps it. Examples quote records from the files.",
+  "type": "object",
+  "required": ["$schema", "tool", "generatedAt", "files", "status", "name", "headline", "issues", "steps", "findings", "counts", "fields", "totals", "thresholds"],
+  "properties": {
+    "$schema": { "const": "urn:data-contract-validator:schema:reconcile-report:1" },
+    "tool": { "$ref": "#/$defs/tool" },
+    "generatedAt": { "type": "string", "format": "date-time" },
+    "files": {
+      "type": "object",
+      "required": ["source", "target"],
+      "properties": { "source": { "type": "string" }, "target": { "type": "string" } }
+    },
+    "partitions": { "type": "integer", "minimum": 0 },
+    "status": { "enum": ["PASS", "FAIL", "INVALID"] },
+    "name": { "type": ["string", "null"] },
+    "headline": { "type": "string" },
+    "issues": { "type": "array", "items": { "type": "string" }, "description": "Why the spec could not run; non-empty only when status is INVALID." },
+    "steps": {
+      "type": "array",
+      "minItems": 5,
+      "maxItems": 5,
+      "items": {
+        "type": "object",
+        "required": ["id", "label", "question", "status", "findings"],
+        "properties": {
+          "id": { "enum": ["keys", "completeness", "mapping", "accuracy", "totals"] },
+          "label": { "type": "string" },
+          "question": { "type": "string" },
+          "status": { "enum": ["PASS", "FAIL", "SKIPPED"] },
+          "reason": { "type": "string" },
+          "findings": { "type": "array", "items": { "$ref": "#/$defs/finding" } }
+        }
+      }
+    },
+    "findings": { "type": "array", "items": { "$ref": "#/$defs/finding" } },
+    "counts": {
+      "oneOf": [
+        { "type": "null" },
+        {
+          "type": "object",
+          "required": ["sourceRows", "targetRows", "sourceOutOfScope", "targetOutOfScope", "expected", "matched", "missing", "extra", "sourceBlankKeys", "targetBlankKeys", "sourceDuplicateKeys", "targetDuplicateKeys", "rowsWithDifference", "rowsUnverified", "rowsFullyMatched"],
+          "additionalProperties": { "type": "integer", "minimum": 0 }
+        }
+      ]
+    },
+    "fields": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["source", "target", "compared", "agreed", "mismatched", "unmapped", "examples", "matchRate"],
+        "properties": {
+          "source": { "type": "string" },
+          "target": { "type": "string" },
+          "compared": { "type": "integer", "minimum": 0 },
+          "agreed": { "type": "integer", "minimum": 0 },
+          "mismatched": { "type": "integer", "minimum": 0 },
+          "unmapped": { "type": "integer", "minimum": 0 },
+          "examples": { "type": "array" },
+          "matchRate": { "type": ["number", "null"], "minimum": 0, "maximum": 1 }
+        }
+      }
+    },
+    "totals": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["source", "target", "groupBy", "groups"],
+        "properties": {
+          "groups": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["group", "source", "target", "difference", "sourceCount", "targetCount", "ties"],
+              "properties": { "ties": { "type": "boolean" }, "source": { "type": "number" }, "target": { "type": "number" }, "difference": { "type": "number" } }
+            }
+          }
+        }
+      }
+    },
+    "thresholds": {
+      "type": "object",
+      "required": ["missingShare", "extraShare", "mismatchShare", "totalsTolerance"],
+      "additionalProperties": { "type": "number" }
+    }
+  },
+  "$defs": {
+    "tool": {
+      "type": "object",
+      "required": ["name", "version", "commit"],
+      "properties": {
+        "name": { "const": "data-contract-validator" },
+        "version": { "type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+" },
+        "commit": { "type": ["string", "null"] }
+      }
+    },
+    "finding": {
+      "type": "object",
+      "required": ["step", "code", "column", "message", "examples"],
+      "properties": {
+        "step": { "enum": ["keys", "completeness", "mapping", "accuracy", "totals"] },
+        "code": { "enum": ["blank-key-source", "blank-key-target", "duplicate-key-source", "duplicate-key-target", "missing-in-target", "extra-in-target", "unmapped-value", "field-mismatch", "total-mismatch", "unreadable-amount"] },
+        "column": { "type": ["string", "null"] },
+        "message": { "type": "string" },
+        "examples": { "type": "array", "items": { "type": "object" } }
+      }
+    }
+  }
+}

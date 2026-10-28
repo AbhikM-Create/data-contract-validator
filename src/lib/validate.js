@@ -582,7 +582,11 @@ export function validate(rawContract, candidateRows, options = {}) {
         distribution: { violations: [], skipped: null },
       }
 
-  const ruleOutcomes = checkRules(contract.rules, rows)
+  // The candidate's header is passed so a rule over a column the file does not
+  // have reports itself as unchecked. Without a baseline, no schema layer runs
+  // to name the missing column, and such a rule used to PASS having tested
+  // nothing.
+  const ruleOutcomes = checkRules(contract.rules, rows, { columns: options.columns ?? names })
   const ruleViolations = ruleOutcomes.map((outcome) => outcome.violation).filter(Boolean)
 
   const layers = LAYERS.map((layer) => {

@@ -1,0 +1,61 @@
+name: Release
+
+# Publishes data-contract-validator to the public npm registry when a version
+# tag is pushed:  git tag v2.0.0 && git push origin v2.0.0
+#
+# Licensed Apache-2.0 (LICENSE, and "license" in package.json). The workflow
+# refuses to publish without both: a public package with no licence is
+# "all rights reserved", which nobody can legally use.
+#
+# Publishing needs the repository secret NPM_TOKEN: an npm automation token
+# (npmjs.com → Access Tokens → Granular, publish rights for this package).
+# After the first publish you can switch to npm trusted publishing (no
+# long-lived token) in the package's settings on npmjs.com.
+#
+# Every release carries npm provenance: a signed statement, visible on the
+# package page, that it was built from this repository by this workflow.
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+  id-token: write # npm provenance
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    environment: npm
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          registry-url: 'https://registry.npmjs.org'
+          cache: npm
+
+      - name: The tag must match package.json, and there must be a licence
+        run: |
+          version="$(node -p "require('./package.json').version")"
+          if [ "v$version" != "$GITHUB_REF_NAME" ]; then
+            echo "Tag $GITHUB_REF_NAME does not match package.json version $version." >&2; exit 1
+          fi
+          if [ ! -f LICENSE ] || [ -z "$(node -p "require('./package.json').license || ''")" ]; then
+            echo "No LICENSE file or no license field in package.json — refusing to publish an unlicensed package." >&2; exit 1
+          fi
+
+      - run: npm ci
+      - run: npm run lint
+      - run: npm test
+      - run: npm run audit:prod
+
+      - name: The packed CLI installs and runs
+        run: |
+          npm pack --pack-destination "$RUNNER_TEMP"
+          npm install --global --prefix "$RUNNER_TEMP/dcv" "$RUNNER_TEMP"/data-contract-validator-*.tgz
+          "$RUNNER_TEMP/dcv/bin/dcv" --version
+
+      - run: npm publish --provenance --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

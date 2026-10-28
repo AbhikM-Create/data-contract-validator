@@ -1,4 +1,4 @@
-import { describeRule, ruleKey } from '../lib/rules.js'
+import { describeRule, ruleKey, ruleSeverity } from '../lib/rules.js'
 import { colors, ghostButton, mono, panel, sans, statusColor } from '../theme.js'
 
 // Results for the rules a human authored, reported RULE BY RULE rather than by
@@ -30,6 +30,12 @@ export default function RuleResults({ outcomes, onRemove }) {
               <span style={{ fontFamily: sans, fontSize: 14, color: colors.ink, flex: 1, minWidth: 220 }}>
                 {describeRule(rule)}
               </span>
+              {ruleSeverity(rule) === 'warn' && (
+                // Neutral on purpose: green and red belong to the verdict alone.
+                <span style={{ fontFamily: mono, fontSize: 10.5, letterSpacing: '0.06em', color: colors.mute }}>
+                  WARNING ONLY
+                </span>
+              )}
               <span
                 style={{
                   fontFamily: mono, fontSize: 10.5, letterSpacing: '0.08em', color: tone,

@@ -9,12 +9,16 @@ import { chip, colors, mono, panel, sans, statusColor } from '../theme.js'
 // staircase, that reads instantly.
 //
 // The steps are joined by a drawn path — a tread across each step and a riser
-// down into the next. Without it the four cards float at different heights and
+// down into the next. Without it the cards float at different heights and
 // read as a ragged list rather than a descent.
+//
+// Any number of steps: the four drift layers, or reconciliation's five. A step
+// is { id, label, status, violations } and may carry its own `question`;
+// `subject` names what came down the stairs — a file, or a load.
 
 const STEP_DROP = 30
 
-export default function Staircase({ layers, title = 'How far the file got', note }) {
+export default function Staircase({ layers, title = 'How far the file got', note, subject = 'file' }) {
   const firstFailure = layers.findIndex((layer) => layer.status === 'FAIL')
   const passedAbove = firstFailure > 0 ? layers.slice(0, firstFailure).filter((l) => l.status === 'PASS') : []
 
@@ -28,10 +32,10 @@ export default function Staircase({ layers, title = 'How far the file got', note
       </div>
 
       <p style={{ fontFamily: sans, fontSize: 13.5, color: colors.mute, lineHeight: 1.55, margin: '8px 0 0', maxWidth: 700 }}>
-        {caption(layers, firstFailure, passedAbove)}
+        {caption(layers, firstFailure, passedAbove, subject)}
       </p>
 
-      <div className="staircase-grid" style={{ marginTop: 26 }}>
+      <div className="staircase-grid" style={{ marginTop: 26, '--steps': layers.length }}>
         {layers.map((layer, index) => (
           <Step
             key={layer.id}
@@ -49,7 +53,7 @@ export default function Staircase({ layers, title = 'How far the file got', note
 
 function Step({ layer, index, isLead, isAboveFailure, drop }) {
   const tone = statusColor[layer.status] ?? colors.faint
-  const problems = layer.violations.length
+  const problems = layer.violations?.length ?? 0
   // The path runs grey until the step that caught the file, where it turns the
   // colour of the verdict — so the eye follows the descent straight to it.
   const pathColor = isLead ? tone : '#C6D0D8'
@@ -113,24 +117,26 @@ function Step({ layer, index, isLead, isAboveFailure, drop }) {
               ? 'Not judged on this file'
               : isAboveFailure
                 ? 'Passed — and let it through'
-                : shortQuestion(layer.id)}
+                : shortQuestion(layer)}
         </p>
       </div>
     </div>
   )
 }
 
-function shortQuestion(id) {
-  const plain = CHECK_COPY[id]?.plain ?? ''
+function shortQuestion(layer) {
+  const plain = layer.question ?? CHECK_COPY[layer.id]?.plain ?? ''
   return plain.length > 52 ? `${plain.slice(0, 49)}…` : plain
 }
 
-function caption(layers, firstFailure, passedAbove) {
+const COUNT_WORDS = ['no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven']
+
+function caption(layers, firstFailure, passedAbove, subject) {
   if (firstFailure < 0) {
     const skipped = layers.filter((layer) => layer.status === 'SKIPPED')
     return skipped.length === 0
-      ? 'The file came down all four steps without catching on any of them.'
-      : `No check objected. ${skipped.map((s) => s.label).join(' and ')} could not be judged on this file.`
+      ? `The ${subject} came down all ${COUNT_WORDS[layers.length] ?? layers.length} steps without catching on any of them.`
+      : `No check objected. ${skipped.map((s) => s.label).join(' and ')} could not be judged on this ${subject}.`
   }
 
   const lead = layers[firstFailure]
@@ -140,5 +146,5 @@ function caption(layers, firstFailure, passedAbove) {
   const names = passedAbove.map((layer) => layer.label)
   const joined = names.length === 1 ? names[0] : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`
   const verb = names.length === 1 ? 'passed' : names.length === 2 ? 'both passed' : 'all passed'
-  return `${joined} ${verb}, and ${lead.label} is where the file stopped. A check that looked only at ${names[0].toLowerCase()} would have called this file fine.`
+  return `${joined} ${verb}, and ${lead.label} is where the ${subject} stopped. A check that looked only at ${names[0].toLowerCase()} would have called this ${subject} fine.`
 }

@@ -1,0 +1,6 @@
+The *.odcs.yaml files in this directory are examples from the Open Data
+Contract Standard (https://github.com/bitol-io/open-data-contract-standard),
+Copyright The Bitol Contributors, licensed under the Apache License 2.0. They
+are used unmodified as test fixtures. schemas/vendor/odcs-json-schema-v3.2.0.json
+is the standard's JSON Schema, from the same repository and under the same
+licence.

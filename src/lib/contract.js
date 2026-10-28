@@ -39,9 +39,35 @@ export function isBlank(value) {
   return value === null || value === undefined || String(value).trim() === ''
 }
 
+// Two fast paths, both returning exactly what the full path below would — a
+// test holds them to the original over a large corpus of awkward inputs. They
+// exist because this runs on every cell of every comparison: on a five-million-
+// row reconciliation the three replaces below were the largest single cost,
+// spent mostly on names and dates that could never be numbers.
+//
+// PLAIN_NUMBER: already clean, so cleaning would not change it.
+// NOT_A_NUMBER: holds a character cleaning would leave in place and the final
+// pattern would refuse — a letter other than e/E, a slash, a colon.
+const PLAIN_NUMBER = /^[+-]?\d+(\.\d+)?$/
+const WELL_GROUPED = /^[+-]?\d{1,3}(,\d{3})+(\.\d*)?$/
+const NOT_A_NUMBER = /[^\d+\-.eE,%\s\p{Sc}]/u
+
 export function parseNumber(raw) {
   if (isBlank(raw)) return null
-  const cleaned = String(raw).trim().replace(CURRENCY_RE, '').replace(PERCENT_RE, '').replace(THOUSANDS_RE, '').trim()
+  const text = String(raw)
+  if (PLAIN_NUMBER.test(text)) {
+    const value = Number(text)
+    return Number.isFinite(value) ? value : null
+  }
+  if (NOT_A_NUMBER.test(text)) return null
+  const unsymboled = text.trim().replace(CURRENCY_RE, '').replace(PERCENT_RE, '').trim()
+  // A comma here can only be a thousands separator, so it must sit in
+  // well-formed groups of three. "1,5" is a decimal comma, and reading it as 15
+  // turns a European file's values ten or a hundred times too large without a
+  // word; refused, it is reported as unreadable instead. A file that really is
+  // in decimal-comma notation declares so (formats.js) and is read correctly.
+  if (unsymboled.includes(',') && !WELL_GROUPED.test(unsymboled)) return null
+  const cleaned = unsymboled.replace(THOUSANDS_RE, '').trim()
   if (cleaned === '' || !/^[+-]?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?$/.test(cleaned)) return null
   const value = Number(cleaned)
   return Number.isFinite(value) ? value : null

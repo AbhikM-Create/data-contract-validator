@@ -1,0 +1,58 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:data-contract-validator:schema:readiness-report:1",
+  "title": "Load readiness report (dcv check --json)",
+  "description": "Version 1. Fields may be ADDED within a version; removing or renaming one bumps it. Examples quote records from the file; the full list of flagged records is written by --rejects, not here.",
+  "type": "object",
+  "required": ["$schema", "tool", "generatedAt", "file", "status", "name", "headline", "issues", "counts", "checks", "missingColumns"],
+  "properties": {
+    "$schema": { "const": "urn:data-contract-validator:schema:readiness-report:1" },
+    "tool": {
+      "type": "object",
+      "required": ["name", "version", "commit"],
+      "properties": {
+        "name": { "const": "data-contract-validator" },
+        "version": { "type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+" },
+        "commit": { "type": ["string", "null"] }
+      }
+    },
+    "generatedAt": { "type": "string", "format": "date-time" },
+    "file": { "type": "string" },
+    "status": { "enum": ["READY", "NOT_READY", "UNVERIFIED", "INVALID"] },
+    "name": { "type": ["string", "null"] },
+    "headline": { "type": "string" },
+    "issues": { "type": "array", "items": { "type": "string" } },
+    "counts": {
+      "oneOf": [
+        { "type": "null" },
+        {
+          "type": "object",
+          "required": ["records", "rejected", "warned", "clean"],
+          "additionalProperties": { "type": "integer", "minimum": 0 }
+        }
+      ]
+    },
+    "checks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["kind", "description", "severity", "status", "applicable", "failing", "share", "examples", "reason"],
+        "properties": {
+          "kind": { "type": "string" },
+          "description": { "type": "string" },
+          "severity": { "enum": ["reject", "warn"] },
+          "status": { "enum": ["PASS", "FAIL", "UNCHECKED"] },
+          "applicable": { "type": "integer", "minimum": 0 },
+          "failing": { "type": "integer", "minimum": 0 },
+          "share": { "type": "number", "minimum": 0, "maximum": 1 },
+          "examples": {
+            "type": "array",
+            "items": { "type": "object", "required": ["row", "record", "value"], "properties": { "row": { "type": "integer", "minimum": 1 }, "record": { "type": "string" }, "value": { "type": "string" } } }
+          },
+          "reason": { "type": ["string", "null"] }
+        }
+      }
+    },
+    "missingColumns": { "type": "array", "items": { "type": "string" } }
+  }
+}

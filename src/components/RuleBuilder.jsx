@@ -32,7 +32,16 @@ const blank = (columns) => ({
   targetIsColumn: false,
   whenOn: false,
   when: { column: columns[0] ?? '', op: '=', target: '', targetIsColumn: false },
+  severity: 'reject',
 })
+
+// What the target system does with a record that breaks the rule. Reject is the
+// default and is left out of the saved rule, so a contract written before
+// severities existed reads exactly as it did.
+const SEVERITY_OPTIONS = [
+  { id: 'reject', label: 'rejects the record' },
+  { id: 'warn', label: 'loads it with a warning' },
+]
 
 // The draft carries UI-only fields (a comma-separated string for value sets, a
 // whenOn switch). This turns it into the plain rule object the engine reads.
@@ -57,6 +66,8 @@ function toRule(draft) {
   }
 
   if (draft.kind === RULE_KINDS.CROSS_COLUMN) rule.targetIsColumn = true
+
+  if (draft.severity === 'warn') rule.severity = 'warn'
 
   if (draft.whenOn && draft.when.column) {
     rule.when = {
@@ -141,6 +152,11 @@ export default function RuleBuilder({ columns, onAdd, onCancel }) {
           )}
         </div>
       )}
+
+      <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8, marginTop: 12 }}>
+        <span style={{ fontFamily: sans, fontSize: 13, color: colors.ink }}>If a record breaks this rule, the target system</span>
+        <Select value={draft.severity} onChange={(v) => set({ severity: v })} options={SEVERITY_OPTIONS} width={200} />
+      </div>
 
       <div style={{ marginTop: 14, padding: '10px 12px', background: colors.ground, border: `1px solid ${colors.panelEdge}`, borderRadius: 6 }}>
         <div style={{ fontFamily: mono, fontSize: 10, color: colors.faint, letterSpacing: '0.06em' }}>THE RULE READS</div>

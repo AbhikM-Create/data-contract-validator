@@ -12,11 +12,24 @@
 // rows are already parsed.
 
 import { inferContract } from './contract.js'
-import { parseCsv } from './parseCsv.js'
+import { parseCsv, toCsv } from './parseCsv.js'
 import { defineContract, withRules } from './authoredContract.js'
+import { checkReadiness } from './readiness.js'
+import { reconcile } from './reconcile.js'
 import { validate } from './validate.js'
 
-const files = { baseline: null, candidate: null }
+// baseline/candidate for Validate; load/source/target for the migration
+// workspace — the load file before a load, and the source and target extracts
+// reconciled after it.
+const files = { baseline: null, candidate: null, load: null, source: null, target: null }
+
+// The last readiness check's flagged records stay here, with the rows they
+// point at; the page asks for the fix list only when someone wants it.
+let lastFlagged = null
+
+// The workspace drills into a finding's records, so it asks for more examples
+// than a CLI summary needs. Bounded, because they cross to the page.
+const DRILL_DOWN_LIMIT = 1000
 
 // A profile carries every value of every numeric column. The main thread only
 // ever displays summaries, so the arrays are stripped before crossing — sending
@@ -54,7 +67,44 @@ function handle(message) {
 
   if (type === 'clear') {
     files[message.which] = null
+    if (message.which === 'load') lastFlagged = null
     return { file: null, draft: null }
+  }
+
+  if (type === 'reconcile') {
+    const { source, target } = files
+    if (!source?.rows.length || !target?.rows.length) return { report: null }
+    const report = reconcile(message.spec, source.rows, target.rows, {
+      sourceColumns: source.columns,
+      targetColumns: target.columns,
+      exampleLimit: DRILL_DOWN_LIMIT,
+    })
+    return { report }
+  }
+
+  if (type === 'readiness') {
+    const load = files.load
+    if (!load?.rows.length) return { report: null }
+    const { flagged, ...report } = checkReadiness(message.contract, load.rows, { columns: load.columns, key: message.key })
+    lastFlagged = { flagged, rows: load.rows, columns: load.columns }
+    return { report: { ...report, flaggedCount: flagged.length } }
+  }
+
+  // The fix list: every flagged record, its own columns plus why — the same
+  // file the CLI's --rejects writes. Built here, so the rows never cross.
+  if (type === 'fixList') {
+    if (!lastFlagged || lastFlagged.flagged.length === 0) return { csv: null }
+    const { flagged, rows, columns } = lastFlagged
+    const csv = toCsv(
+      [...columns, '_row', '_readiness', '_reasons'],
+      flagged.map((f) => [
+        ...columns.map((column) => rows[f.row - 1][column]),
+        f.row,
+        f.severity === 'reject' ? 'REJECT' : 'WARN',
+        f.reasons.join('; '),
+      ]),
+    )
+    return { csv }
   }
 
   if (type === 'validate') {

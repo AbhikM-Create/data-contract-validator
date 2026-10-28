@@ -23,26 +23,54 @@ export function parseCsv(csvText) {
 
   const parsed = Papa.parse(text, { header: true, skipEmptyLines: 'greedy', dynamicTyping: false })
 
-  // "day, amount" is a perfectly ordinary header, and its second column is
-  // keyed as " amount " in every parsed row. Column names are reported trimmed,
-  // but each row must still be read by the raw key it was stored under —
-  // reading by the trimmed name returns undefined for every cell, which would
-  // look like a column that has silently gone blank.
-  const fields = (parsed.meta.fields ?? [])
-    .map((field) => ({ raw: field, name: String(field ?? '').trim() }))
+  const header = readHeader(parsed.meta.fields, parsed.meta.renamedHeaders)
+  if (header.error) return { rows: [], columns: header.columns, errors: [header.error] }
+  const { fields, columns } = header
+
+  // Papa reports a field-count problem per offending row; one sentence naming
+  // the first bad line is more use to a reader than fifty.
+  const structural = parsed.errors.filter(isMisaligned)
+  if (structural.length > 0) {
+    return { rows: [], columns, errors: [misalignedRowError((structural[0].row ?? 0) + 2)] }
+  }
+
+  const rows = []
+  for (const raw of parsed.data) {
+    const row = cleanRow(raw, fields)
+    if (row) rows.push(row)
+  }
+
+  if (rows.length === 0) {
+    return { rows: [], columns, errors: [readError('it has a header row but no data rows')] }
+  }
+
+  return { rows, columns, errors: [] }
+}
+
+// readHeader(rawFields, renamedHeaders) -> { fields, columns, error }
+//
+// The header rules, shared by parseCsv and by the Node reader that streams
+// files too large to hold (scripts/lib/csvStream.mjs), so a file means the same
+// thing however it is read.
+//
+// "day, amount" is a perfectly ordinary header, and its second column is
+// keyed as " amount " in every parsed row. Column names are reported trimmed,
+// but each row must still be read by the raw key it was stored under —
+// reading by the trimmed name returns undefined for every cell, which would
+// look like a column that has silently gone blank.
+export function readHeader(rawFields, renamedHeaders) {
+  const fields = (rawFields ?? [])
+    .map((field) => ({ raw: field, name: String(field ?? '').replace(/^\uFEFF/, '').trim() }))
     .filter((field) => field.name !== '')
   const columns = fields.map((field) => field.name)
 
   if (columns.length === 0) {
-    return { rows: [], columns: [], errors: [readError('it has no header row')] }
+    return { fields, columns, error: readError('it has no header row') }
   }
 
   const collision = columns.find((name, i) => columns.indexOf(name) !== i)
   if (collision) {
-    return {
-      rows: [], columns,
-      errors: [readError(`the header uses the name "${collision}" more than once, so those columns can’t be told apart`)],
-    }
+    return { fields, columns, error: readError(`the header uses the name "${collision}" more than once, so those columns can’t be told apart`) }
   }
 
   // Papa does not hand back a repeated header name twice — it silently renames
@@ -50,41 +78,53 @@ export function parseCsv(csvText) {
   // meta.renamedHeaders. Left alone, the rename would sail through as a normal
   // column and surface later as a baffling "extra column" violation, so the
   // real problem is reported here instead.
-  const renamed = Object.values(parsed.meta.renamedHeaders ?? {})
+  const renamed = Object.values(renamedHeaders ?? {})
   if (renamed.length > 0) {
-    return {
-      rows: [], columns,
-      errors: [readError(`the header uses the name "${renamed[0]}" more than once, so those columns can’t be told apart`)],
-    }
+    return { fields, columns, error: readError(`the header uses the name "${renamed[0]}" more than once, so those columns can’t be told apart`) }
   }
 
-  // Papa reports a delimiter/field-count problem per offending row; one sentence
-  // naming the first bad line is more use to a reader than fifty.
-  const structural = parsed.errors.filter((error) => error.type === 'Delimiter' || error.code === 'TooManyFields' || error.code === 'TooFewFields')
-  if (structural.length > 0) {
-    const line = (structural[0].row ?? 0) + 2
-    return {
-      rows: [], columns,
-      errors: [readError(`row ${line} doesn’t line up with the header — check for an extra or missing comma`)],
-    }
+  return { fields, columns, error: null }
+}
+
+// cleanRow(parsedRow, fields) -> { column: trimmed value } | null
+//
+// null for a row with nothing in it: a line of commas is not a record.
+export function cleanRow(raw, fields) {
+  const clean = {}
+  let any = false
+  for (const field of fields) {
+    const value = raw[field.raw]
+    const text = value === null || value === undefined ? '' : String(value).trim()
+    clean[field.name] = text
+    if (text !== '') any = true
   }
+  return any ? clean : null
+}
 
-  const rows = parsed.data
-    .map((row) => {
-      const clean = {}
-      for (const field of fields) {
-        const value = row[field.raw]
-        clean[field.name] = value === null || value === undefined ? '' : String(value).trim()
-      }
-      return clean
-    })
-    .filter((row) => columns.some((name) => row[name] !== ''))
+// A row that does not line up with the header. Papa's "Delimiter" errors are
+// NOT this: "UndetectableDelimiter" is a warning that it could not guess the
+// separator and used a comma — which is what every single-column file gets,
+// a plain list of employee ids included. Counting it as a broken row rejected
+// valid single-column files, and blamed a row that did not exist.
+export function isMisaligned(error) {
+  return error.code === 'TooManyFields' || error.code === 'TooFewFields'
+}
 
-  if (rows.length === 0) {
-    return { rows: [], columns, errors: [readError('it has a header row but no data rows')] }
-  }
+// The sentence for a row that does not line up with the header. `line` is the
+// line number a reader sees in an editor, the header being line 1.
+export function misalignedRowError(line) {
+  return readError(`row ${line} doesn’t line up with the header — check for an extra or missing comma`)
+}
 
-  return { rows, columns, errors: [] }
+export function readErrorFor(reason) {
+  return readError(reason)
+}
+
+// toCsv(fields, rows) -> CSV text, quoting whatever needs quoting. The other
+// direction of the same library, kept here so this stays the one module that
+// knows about it. rows are arrays, in the order of fields.
+export function toCsv(fields, rows) {
+  return `${Papa.unparse({ fields, data: rows })}\n`
 }
 
 // Reads a File/Blob from an <input type="file"> or a drop, entirely in-browser.

@@ -15,7 +15,8 @@
 // future 'expression' kind slots into the same array without touching anything
 // that reads it.
 
-import { isBlank, parseBoolean, parseDate, parseNumber } from './contract.js'
+import { isBlank } from './contract.js'
+import { DEFAULT_READER } from './formats.js'
 
 export const RULE_KINDS = {
   TYPE: 'type',
@@ -29,6 +30,30 @@ export const RULE_KINDS = {
 export const OPS = ['=', '!=', '>', '<', '>=', '<=', 'between', 'in', 'notNull']
 
 export const RULE_TYPES = ['numeric', 'string', 'date', 'boolean']
+
+// What happens to a record that breaks the rule when it is loaded into the
+// target system: rejected outright, or accepted with a warning. Load readiness
+// (readiness.js) predicts rejections from this; validate() reads every rule the
+// same way, so a contract without severities behaves exactly as before.
+export const SEVERITIES = ['reject', 'warn']
+
+export function ruleSeverity(rule) {
+  return rule?.severity === 'warn' ? 'warn' : 'reject'
+}
+
+// Every column a rule reads — its own, a compared column, and its WHEN
+// condition's. A rule over a column the file does not have must be reported as
+// unchecked by whoever calls it: evaluated anyway, every cell reads blank and
+// the rule "passes" without testing anything.
+export function ruleColumns(rule) {
+  const columns = [rule?.column]
+  if (rule?.targetIsColumn) columns.push(rule.target)
+  if (rule?.when) {
+    columns.push(rule.when.column)
+    if (rule.when.targetIsColumn) columns.push(rule.when.target)
+  }
+  return [...new Set(columns.filter((c) => typeof c === 'string' && c.trim() !== ''))]
+}
 
 // Which of the four layers each kind reports through. The layers keep their v1
 // meaning: structure, meaning, recency, magnitude. A rule may override this with
@@ -113,20 +138,25 @@ function describeCondition(when) {
 // "2024-08-31" vs "2023-03-01" as dates, while anything else falls back to
 // trimmed text. Coercing each side independently is what produces the classic
 // "10" < "9" bug.
-function coerce(left, right) {
-  const leftNumber = parseNumber(left)
-  const rightNumber = parseNumber(right)
+//
+// Each side is read by its own reader (formats.js): a cell by its file's
+// declared format, a literal the author typed by the canonical one. A file in
+// 1.234,56 notation compared with a bound typed as 400000 must read each in its
+// own notation, or one of them is wrong.
+function coerce(left, right, leftReader = DEFAULT_READER, rightReader = DEFAULT_READER) {
+  const leftNumber = leftReader.number(left)
+  const rightNumber = rightReader.number(right)
   if (leftNumber !== null && rightNumber !== null) return [leftNumber, rightNumber]
 
-  const leftDate = parseDate(left)
-  const rightDate = parseDate(right)
+  const leftDate = leftReader.date(left)
+  const rightDate = rightReader.date(right)
   if (leftDate !== null && rightDate !== null) return [leftDate, rightDate]
 
   return [String(left).trim(), String(right).trim()]
 }
 
-function compare(rawLeft, rawRight, op) {
-  const [left, right] = coerce(rawLeft, rawRight)
+export function compare(rawLeft, rawRight, op, leftReader, rightReader) {
+  const [left, right] = coerce(rawLeft, rawRight, leftReader, rightReader)
   switch (op) {
     case '=': return left === right
     case '!=': return left !== right
@@ -138,11 +168,11 @@ function compare(rawLeft, rawRight, op) {
   }
 }
 
-function matchesType(value, type) {
+function matchesType(value, type, reader) {
   switch (type) {
-    case 'numeric': return parseNumber(value) !== null
-    case 'date': return parseDate(value) !== null
-    case 'boolean': return parseBoolean(value) !== null
+    case 'numeric': return reader.number(value) !== null
+    case 'date': return reader.date(value) !== null
+    case 'boolean': return reader.boolean(value) !== null
     case 'string': return true
     default: return null
   }
@@ -157,7 +187,7 @@ function resolveTarget(rule, row) {
 // A WHEN condition gates the rule to the rows it describes. A row whose
 // condition is blank or unreadable is NOT tested — the author said "check this
 // where X holds", and where X is unknown it does not hold.
-function conditionHolds(when, row) {
+export function conditionHolds(when, row, reader = DEFAULT_READER) {
   if (!when) return true
   const value = row[when.column]
   if (when.op === 'notNull') return !isBlank(value)
@@ -165,7 +195,7 @@ function conditionHolds(when, row) {
 
   const target = when.targetIsColumn ? row[when.target] : when.target
   if (when.targetIsColumn && isBlank(target)) return false
-  return compare(value, target, when.op) === true
+  return compare(value, target, when.op, reader, when.targetIsColumn ? reader : DEFAULT_READER) === true
 }
 
 // --- rule shape -------------------------------------------------------------
@@ -199,6 +229,7 @@ export function ruleIssue(rule) {
       break
   }
   if (rule.when && (typeof rule.when !== 'object' || !rule.when.column)) return 'the WHEN condition names no column'
+  if (rule.severity !== undefined && !SEVERITIES.includes(rule.severity)) return `"${rule.severity}" is not a severity — use reject or warn`
   return null
 }
 
@@ -207,7 +238,18 @@ export function ruleIssue(rule) {
 // failure. A blank is the absence of a value, so there is nothing to compare;
 // requiring a value is what the null-rule is for, and saying so once here keeps
 // authors from having to guard every other rule against blanks.
-function evaluateRow(rule, row) {
+const ORDERING = new Set(['>', '<', '>=', '<='])
+
+// Both bounds readable as one kind (number, date) -> that kind's values, with
+// the cell read by its file's reader; otherwise null.
+function typedBounds(low, high, value, readBound, readValue) {
+  const lowValue = readBound(low)
+  const highValue = readBound(high)
+  if (lowValue === null || highValue === null) return null
+  return { low: lowValue, high: highValue, value: readValue(value) }
+}
+
+function evaluateRow(rule, row, reader) {
   const value = row[rule.column]
 
   if (rule.kind === RULE_KINDS.NULL_RULE) {
@@ -219,15 +261,23 @@ function evaluateRow(rule, row) {
 
   switch (rule.kind) {
     case RULE_KINDS.TYPE:
-      return matchesType(value, rule.target)
+      return matchesType(value, rule.target, reader)
 
     case RULE_KINDS.VALUE_SET:
       return rule.target.map((allowed) => String(allowed).trim()).includes(String(value).trim())
 
     case RULE_KINDS.RANGE: {
       const [low, high] = rule.target
-      const aboveLow = compare(value, low, '>=')
-      const belowHigh = compare(value, high, '<=')
+      // Numeric or date bounds make a numeric or date range. A value that
+      // cannot be read that way is OUTSIDE it — never compared as text, where
+      // "250.000,00" >= "100" holds alphabetically and an unreadable amount
+      // would pass. Bounds that are neither stay a text range ("A" to "M").
+      const asNumber = typedBounds(low, high, value, DEFAULT_READER.number, reader.number)
+      if (asNumber) return asNumber.value !== null && asNumber.value >= asNumber.low && asNumber.value <= asNumber.high
+      const asDate = typedBounds(low, high, value, DEFAULT_READER.date, reader.date)
+      if (asDate) return asDate.value !== null && asDate.value >= asDate.low && asDate.value <= asDate.high
+      const aboveLow = compare(value, low, '>=', reader, DEFAULT_READER)
+      const belowHigh = compare(value, high, '<=', reader, DEFAULT_READER)
       return aboveLow === true && belowHigh === true
     }
 
@@ -238,7 +288,13 @@ function evaluateRow(rule, row) {
       // same way a blank value is: "effective_to > effective_from" says nothing
       // about a row that has no effective_from.
       if (rule.targetIsColumn && isBlank(target)) return null
-      return compare(value, target, rule.op)
+      const targetReader = rule.targetIsColumn ? reader : DEFAULT_READER
+      // An ordering against a number is a numeric claim: a value that is not a
+      // number fails it rather than being ordered as text. (= and != may still
+      // compare text — "status != 5" is meaningful for "closed".)
+      if (ORDERING.has(rule.op) && targetReader.number(target) !== null && reader.number(value) === null
+        && !(targetReader.date(target) !== null && reader.date(value) !== null)) return false
+      return compare(value, target, rule.op, reader, targetReader)
     }
 
     default:
@@ -248,7 +304,9 @@ function evaluateRow(rule, row) {
 
 const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`
 
-function violationFor(rule, failures, applicable, rowCount) {
+// failing is the full count; failures may hold only the first few when a
+// streaming caller caps them, so the count never comes from the array.
+function violationFor(rule, failures, failing, applicable, rowCount) {
   const examples = failures.slice(0, 3)
   const shown = examples
     .map((f) => `row ${f.row}${f.value === '' ? ' (blank)' : `: ${f.value}`}`)
@@ -269,8 +327,92 @@ function violationFor(rule, failures, applicable, rowCount) {
     code: `rule:${rule.kind}`,
     column: rule.column,
     rule,
-    message: `The contract says ${describeRule(rule)}, and ${plural(failures.length, 'row')}${gated} break${failures.length === 1 ? 's' : ''} that.`,
-    evidence: `${shown}${failures.length > examples.length ? ` · and ${failures.length - examples.length} more` : ''}`,
+    message: `The contract says ${describeRule(rule)}, and ${plural(failing, 'row')}${gated} break${failing === 1 ? 's' : ''} that.`,
+    evidence: `${shown}${failing > examples.length ? ` · and ${failing - examples.length} more` : ''}`,
+  }
+}
+
+function uncheckedOutcome(rule, problem, code = 'rule:invalid') {
+  return {
+    rule,
+    status: 'UNCHECKED',
+    applicable: 0,
+    failures: [],
+    violation: {
+      layer: ruleLayer(rule ?? {}),
+      source: 'rule',
+      code,
+      column: rule?.column ?? null,
+      rule,
+      message: `A rule in this contract can't be checked because ${problem}. Nothing was verified for it, so treat this column as unchecked.`,
+      evidence: JSON.stringify(rule ?? null),
+    },
+  }
+}
+
+// createRuleChecker(rules, { keepFailures }) -> { row, states, outcomes }
+//
+// THE rule evaluator: checkRules() below is a loop over it, and load readiness
+// streams a file through it a row at a time. One evaluator means a rule cannot
+// mean one thing in a report and another in a pipeline.
+//
+// row(row, rowNumber) evaluates every rule on one row and returns the indexes
+// of the rules it broke. keepFailures caps how many failing rows each rule
+// remembers — a streaming caller over twenty million rows wants the count and
+// a few examples, not a list as long as the file. Counts are always exact.
+//
+// columns: the file's header. A rule that reads a column the file does not
+// have is UNCHECKED, never evaluated: every cell would read as blank, and a
+// rule that tested nothing would report PASS.
+// reader: how the file's cells are read (formats.js); the default is the
+// notation rules have always used.
+export function createRuleChecker(rules, { keepFailures = Infinity, columns = null, reader = DEFAULT_READER } = {}) {
+  const present = columns ? new Set(columns) : null
+  const states = (Array.isArray(rules) ? rules : []).map((rule) => {
+    let problem = ruleIssue(rule)
+    let code = 'rule:invalid'
+    if (!problem && present) {
+      const missing = ruleColumns(rule).filter((column) => !present.has(column))
+      if (missing.length > 0) {
+        problem = `the file has no column ${missing.map((c) => `"${c}"`).join(', ')}`
+        code = 'rule:missing-column'
+      }
+    }
+    return { rule, problem, code, applicable: 0, failing: 0, failures: [] }
+  })
+
+  return {
+    states,
+    row(row, rowNumber) {
+      const broken = []
+      for (let i = 0; i < states.length; i += 1) {
+        const state = states[i]
+        if (state.problem || !conditionHolds(state.rule.when, row, reader)) continue
+        state.applicable += 1
+        if (evaluateRow(state.rule, row, reader) === false) {
+          state.failing += 1
+          if (state.failures.length < keepFailures) {
+            state.failures.push({ row: rowNumber, value: String(row[state.rule.column] ?? '').trim() })
+          }
+          broken.push(i)
+        }
+      }
+      return broken
+    },
+    outcomes(rowCount) {
+      return states.map((state) => {
+        if (state.problem) return uncheckedOutcome(state.rule, state.problem, state.code)
+        return {
+          rule: state.rule,
+          status: state.failing > 0 ? 'FAIL' : 'PASS',
+          applicable: state.applicable,
+          failures: state.failures,
+          violation: state.failing > 0
+            ? violationFor(state.rule, state.failures, state.failing, state.applicable, rowCount)
+            : null,
+        }
+      })
+    },
   }
 }
 
@@ -282,48 +424,11 @@ function violationFor(rule, failures, applicable, rowCount) {
 //
 // Row numbers are 1-based over the data rows, matching what a reader counts in
 // a spreadsheet under the header.
-export function checkRules(rules, rows) {
+export function checkRules(rules, rows, options = {}) {
   if (!Array.isArray(rules) || rules.length === 0) return []
-
-  return rules.map((rule) => {
-    const problem = ruleIssue(rule)
-    if (problem) {
-      return {
-        rule,
-        status: 'UNCHECKED',
-        applicable: 0,
-        failures: [],
-        violation: {
-          layer: ruleLayer(rule ?? {}),
-          source: 'rule',
-          code: 'rule:invalid',
-          column: rule?.column ?? null,
-          rule,
-          message: `A rule in this contract can't be checked because ${problem}. Nothing was verified for it, so treat this column as unchecked.`,
-          evidence: JSON.stringify(rule ?? null),
-        },
-      }
-    }
-
-    const failures = []
-    let applicable = 0
-
-    rows.forEach((row, index) => {
-      if (!conditionHolds(rule.when, row)) return
-      applicable += 1
-      if (evaluateRow(rule, row) === false) {
-        failures.push({ row: index + 1, value: String(row[rule.column] ?? '').trim() })
-      }
-    })
-
-    return {
-      rule,
-      status: failures.length > 0 ? 'FAIL' : 'PASS',
-      applicable,
-      failures,
-      violation: failures.length > 0 ? violationFor(rule, failures, applicable, rows.length) : null,
-    }
-  })
+  const checker = createRuleChecker(rules, options)
+  rows.forEach((row, index) => checker.row(row, index + 1))
+  return checker.outcomes(rows.length)
 }
 
 // The violations alone, for callers that only report problems.

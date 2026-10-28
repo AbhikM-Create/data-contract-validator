@@ -130,9 +130,21 @@ create policy "read own runs"
   on public.validation_runs for select
   using (auth.uid() = user_id);
 
+-- A run may name only a contract its author owns. A foreign key is checked
+-- WITHOUT row-level security, so on its own it lets one account point a run at
+-- another account's contract id — and when that contract is deleted, the other
+-- account's history row is changed (set null) by someone it does not belong
+-- to. The subquery below runs under the inserting user's own RLS, so it can
+-- only ever find their own contracts. (supabase/tests/rls.sql pins this.)
 create policy "insert own runs"
   on public.validation_runs for insert
-  with check (auth.uid() = user_id);
+  with check (
+    auth.uid() = user_id
+    and (
+      contract_id is null
+      or exists (select 1 from public.contracts c where c.id = contract_id and c.user_id = auth.uid())
+    )
+  );
 
 create policy "delete own runs"
   on public.validation_runs for delete
