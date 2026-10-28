@@ -14,6 +14,7 @@
 // not a rule. Promoting a suggestion copies observed values into a rule, so the
 // UI says so at the point of saving rather than after.
 
+import { cleanFormat, formatIssue } from './formats.js'
 import { ruleIssue } from './rules.js'
 
 export const CONTRACT_FILE_VERSION = 1
@@ -21,12 +22,17 @@ export const CONTRACT_FILE_VERSION = 1
 const CONTRACT_FILE_KIND = 'data-contract-validator/contract'
 
 // serializeContract({ name, rules }) -> a plain object safe to store anywhere.
-export function serializeContract({ name, rules, savedAt } = {}) {
+// `format` is how the files this contract checks are written — decimal comma,
+// date order, encoding (formats.js). It is the author's declaration, like the
+// rules, and saved with them; omitted when nothing is declared.
+export function serializeContract({ name, rules, format, savedAt } = {}) {
+  const declared = cleanFormat(format)
   return {
     kind: CONTRACT_FILE_KIND,
     formatVersion: CONTRACT_FILE_VERSION,
     name: (name ?? '').trim() || 'Untitled contract',
     savedAt: savedAt ?? new Date().toISOString(),
+    ...(declared ? { format: declared } : {}),
     rules: (rules ?? []).map(cleanRule),
   }
 }
@@ -75,11 +81,17 @@ export function parseContractFile(text) {
     return fail('this contract has no rules list')
   }
 
+  // A format this version cannot read refuses the whole contract: checking a
+  // file in the wrong notation is the silent-wrong-answer this field prevents.
+  const formatProblem = formatIssue(parsed.format)
+  if (formatProblem) return fail(`its file format cannot be used: ${formatProblem}`)
+
   const { rules, skipped } = readRules(parsed.rules)
 
   return {
     name: typeof parsed.name === 'string' && parsed.name.trim() ? parsed.name.trim() : 'Untitled contract',
     savedAt: typeof parsed.savedAt === 'string' ? parsed.savedAt : null,
+    format: cleanFormat(parsed.format) ?? null,
     rules,
     skipped,
     error: null,
@@ -87,7 +99,7 @@ export function parseContractFile(text) {
 }
 
 function fail(reason) {
-  return { name: null, savedAt: null, rules: [], skipped: [], error: `Couldn’t load this contract — ${reason}.` }
+  return { name: null, savedAt: null, format: null, rules: [], skipped: [], error: `Couldn’t load this contract — ${reason}.` }
 }
 
 // readRules(raw) -> { rules, skipped }

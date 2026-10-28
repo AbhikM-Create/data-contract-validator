@@ -16,13 +16,24 @@ function reference(raw) {
 // letters either side of e/E, currency symbols, unicode spaces.
 const ALPHABET = ['0', '7', '-', '+', '.', 'e', 'E', ',', '%', ' ', ' ', '\t', '$', '€', 'a', 'Z', '/', ':', '٣', '_']
 
+// The one deliberate change since the original: a comma is accepted only as a
+// thousands separator in well-formed groups of three, so "1,5" is unreadable
+// rather than 15. Everything else must be exactly what the original returned.
+function expected(raw) {
+  const want = reference(raw)
+  if (want === null) return null
+  const unsymboled = String(raw).trim().replace(/\p{Sc}/gu, '').replace(/%/g, '').trim()
+  if (unsymboled.includes(',') && !/^[+-]?\d{1,3}(,\d{3})+(\.\d*)?$/.test(unsymboled)) return null
+  return want
+}
+
 const same = (input) => {
   const got = parseNumber(input)
-  const want = reference(input)
+  const want = expected(input)
   return Object.is(got, want) ? null : { input, got, want }
 }
 
-describe('parseNumber fast paths change nothing', () => {
+describe('parseNumber: fast paths and the grouping rule change nothing else', () => {
   it('agrees with the original on every string up to length 4 over the alphabet', () => {
     const mismatches = []
     const walk = (prefix, depth) => {
@@ -56,5 +67,14 @@ describe('parseNumber fast paths change nothing', () => {
       0, 42, -3.5, Number.NaN, Infinity, '9'.repeat(400), '1,2,3', '1 000', '- 5', '٣',
     ]
     expect(forms.map(same).filter(Boolean)).toEqual([])
+  })
+})
+
+describe('parseNumber: a comma is never a decimal point by default', () => {
+  it.each([
+    ['1,234.56', 1234.56], ['$1,200', 1200], ['1,234,567', 1234567], ['-1,200.5', -1200.5],
+    ['1,5', null], ['1.234,56', null], ['12,34', null], ['1,23,456', null], [',5', null],
+  ])('%s -> %s', (input, want) => {
+    expect(parseNumber(input)).toBe(want)
   })
 })

@@ -13,6 +13,7 @@
 // will be turned away, and which will load with a warning?"
 
 import { isBlank } from './contract.js'
+import { createReader, DEFAULT_READER } from './formats.js'
 import { createRuleChecker, describeRule, ruleColumns, ruleIssue, ruleSeverity } from './rules.js'
 
 export const READINESS = {
@@ -122,7 +123,10 @@ export function createReadinessCheck(contract, options = {}) {
     unevaluable.push(unchecked(entry.rule, `the contract file holds it in a form this version can't read — ${entry.reason}`))
   }
 
-  const checker = createRuleChecker(evaluable, { keepFailures: EXAMPLES })
+  // The load file is read in the format its contract declares — a target
+  // template in 1.234,56 notation must not have its amounts read as 1.234.
+  const reader = contract?.format ? createReader(contract.format) : DEFAULT_READER
+  const checker = createRuleChecker(evaluable, { keepFailures: EXAMPLES, reader })
   const severities = evaluable.map(ruleSeverity)
   const descriptions = evaluable.map(describeRule)
   const keyDescription = `${quote(key)} must identify each record exactly once`

@@ -11,7 +11,7 @@
 // test holds the two to identical reports.
 
 import { statSync } from 'node:fs'
-import { createReconciliation } from '../../src/lib/reconcile.js'
+import { createReconciliation, normalizeSpec } from '../../src/lib/reconcile.js'
 import { readCsvHeader, streamCsv } from './csvStream.mjs'
 import { createPartitions, makeScratchDir, partitionsFor } from './partitions.mjs'
 
@@ -26,9 +26,13 @@ export async function reconcileFiles(spec, sourcePath, targetPath, options = {})
   const started = Date.now()
   const done = (fields) => ({ seconds: (Date.now() - started) / 1000, ...fields })
 
-  const sourceHeader = readCsvHeader(sourcePath)
+  // Each file is decoded in its declared encoding; undeclared means UTF-8, read
+  // strictly.
+  const formats = normalizeSpec(spec).formats
+  const encoding = { source: formats.source.encoding, target: formats.target.encoding }
+  const sourceHeader = readCsvHeader(sourcePath, encoding.source)
   if (sourceHeader.error) return done({ error: `${sourcePath}: ${sourceHeader.error}` })
-  const targetHeader = readCsvHeader(targetPath)
+  const targetHeader = readCsvHeader(targetPath, encoding.target)
   if (targetHeader.error) return done({ error: `${targetPath}: ${targetHeader.error}` })
 
   const run = createReconciliation(spec, {
@@ -51,7 +55,7 @@ export async function reconcileFiles(spec, sourcePath, targetPath, options = {})
         const key = run.observe(sideName, row)
         if (key === null) return
         partitions.add(key, [rowNo, key, ...needed.map((column) => row[column])])
-      })
+      }, encoding[sideName])
       partitions.close()
       return { partitions, error: result.error ? `${path}: ${result.error}` : null }
     }

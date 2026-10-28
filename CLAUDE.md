@@ -402,3 +402,46 @@ uploaded, and it is hostile-input safe: every interpolation goes through
 (`default-src 'none'`) forbids scripts and requests even if escaping failed.
 `evidencePack.test.js` feeds it markup from "files" and asserts none survives as
 a tag; it fails with escaping disabled. Keep both.
+
+## Enterprise phase 1 — correct on real enterprise data (done)
+Probed against German/SAP/legacy conventions, the engine gave WRONG answers
+without a word: "1,5" read as 15, "1.234,56" as 1.23456, 01/03/2024 as 3
+January, 01.03.2024 and 20240301 not read as dates, SAP key 00012345 never
+matching 12345, Windows-1252 decoded as "M�ller". All fixed under one rule:
+
+**A format is DECLARED once per file, never guessed per cell. Where a value
+could be read two ways and nothing is declared, it is not read as a number or a
+date at all** — so a disagreement surfaces as a disagreement.
+
+- `src/lib/formats.js`: `createReader(format)` and `DEFAULT_READER`;
+  `formatIssue`, `cleanFormat`; `decodeBytes` (UTF-8 is decoded STRICTLY and
+  refused with the likely cause, never repaired).
+- Rules take a reader (`createRuleChecker(rules, { reader, columns })`). File
+  cells are read by the file's format; literals the author typed by the
+  canonical one. Undeclared, rules read exactly as before (`DEFAULT_READER`).
+- Reconciliation always reads with `createReader` per side: non-ISO dates only
+  in a declared pattern, because a guessed day/month order makes a swap in
+  flight read as correct. A crosswalked value is read in the TARGET's format.
+- `parseNumber` (everything, incl. Validate): a comma must be a well-formed
+  thousands separator; "1,5" is unreadable, not 15. `parseNumber.test.js`
+  holds it to the original plus exactly this rule.
+- Numeric/date ranges and orderings against a number FAIL an unreadable value
+  instead of comparing text ("250.000,00" >= "100" was true alphabetically).
+- Key `normalize`: `stripLeadingZeros` (all-digit keys only), `ignoreCase`.
+  Unknown options and formats are reported as INVALID, never dropped.
+- ignoreCase folds the Unicode way (upper then lower): Weiß = WEISS.
+- `validate()` passes the candidate's columns: a rule on a missing column is
+  UNCHECKED (`rule:missing-column`), never a PASS that tested nothing.
+- Encodings are decoded at the edge: `engineClient.parseBytesInWorker` in the
+  page, a strict streaming decoder in `scripts/lib/csvStream.mjs`.
+- Formats persist in contracts (`format`), migration objects (`formats` per
+  role) and specs (`formats`), and are inside the evidence fingerprints.
+
+### Account isolation, verified
+`npm run verify:rls` (scripts/verify-rls.sh) builds a throwaway Postgres,
+applies `supabase/tests/supabase-shim.sql` (anon/authenticated, auth.users,
+auth.uid() as Supabase defines it) then `supabase/schema.sql`, and runs
+`supabase/tests/rls.sql`: 20 checks across two accounts and anon. It found one
+hole, now fixed: a foreign key is checked without RLS, so one account could
+attach a run to another account's contract id. The run insert policy now
+requires the contract to be the inserter's own. CI runs this as its own job.

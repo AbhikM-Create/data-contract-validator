@@ -90,7 +90,8 @@ on is the finding**, because each step is meaningless if the one above broke.
 {
   "name": "Employees — Wave 2, Mock 2",
   "contract": "Employees (target)",
-  "key": { "source": ["PERNR"], "target": ["employee_id"] },
+  "formats": { "source": { "encoding": "windows-1252", "decimal": ",", "date": "DD.MM.YYYY" } },
+  "key": { "source": ["PERNR"], "target": ["employee_id"], "normalize": ["stripLeadingZeros"] },
   "scope": { "source": { "column": "STAT2", "op": "=", "target": "3" } },
   "mapping": [
     { "source": "NACHN", "target": "last_name", "ignoreCase": true },
@@ -130,6 +131,18 @@ is reported exactly; the benchmark fails if one is not. Uncapped, the same
 reconciliation took ~115 s with a larger, lazily collected heap. Against the
 "under 2 minutes" measure above: met uncapped, ~3 s over when capped — on this
 machine; a laptop has not been measured.
+
+## Enterprise phase 1 — correct on real data (done)
+
+Declared file formats (`src/lib/formats.js`): encoding (UTF-8 strictly, or
+Windows-1252, ISO-8859-1, UTF-16 LE), decimal point or comma, and a date pattern
+(DD.MM.YYYY, DD/MM/YYYY, MM/DD/YYYY, DD-MM-YYYY, YYYYMMDD; ISO always read).
+Declared per file — in a spec's `formats`, a contract's `format`, a migration
+object's `formats` — never guessed per cell. Undeclared, a value that could be
+read two ways is not read as a number or date at all. Key options
+`stripLeadingZeros` (SAP's zero-padded numeric keys) and `ignoreCase`. Accounting
+and SAP trailing-minus negatives are read. Account isolation is verified on a
+local Postgres (`npm run verify:rls`) and gated in CI.
 
 ## Explicitly out of v2
 

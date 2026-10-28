@@ -13,7 +13,8 @@
 //
 // A step that isn't configured is SKIPPED, never PASS.
 
-import { isBlank, parseDate, parseNumber } from './contract.js'
+import { isBlank } from './contract.js'
+import { createReader, formatIssue } from './formats.js'
 import { conditionHolds } from './rules.js'
 
 export const RECON_STEPS = [
@@ -62,14 +63,24 @@ function asList(value) {
   return (Array.isArray(value) ? value : [value]).map((v) => String(v).trim()).filter(Boolean)
 }
 
+// How keys are compared, declared — never inferred from the data:
+//   stripLeadingZeros  SAP stores numeric keys zero-padded (00012345) and the
+//                      target often does not (12345). Only all-digit keys are
+//                      touched, so a key like 0A12 keeps its zero.
+//   ignoreCase         EMP-7 and emp-7 are the same record.
+export const KEY_NORMALIZERS = ['stripLeadingZeros', 'ignoreCase']
+
 function pairOf(value) {
   if (value && typeof value === 'object' && !Array.isArray(value)) {
     const source = asList(value.source)
     const target = asList(value.target ?? value.source)
-    return { source, target }
+    // Kept as written: an unknown option is reported by specIssues, never
+    // dropped — a key option that quietly does nothing would match nothing.
+    const normalize = asList(value.normalize)
+    return { source, target, normalize }
   }
   const both = asList(value)
-  return { source: both, target: both }
+  return { source: both, target: both, normalize: [] }
 }
 
 export function normalizeSpec(raw) {
@@ -97,12 +108,17 @@ export function normalizeSpec(raw) {
         }
       : null,
   }))
+  // Each side is read in its own declared format: a German source in
+  // 1.234,56 and 01.03.2024 against a target in ISO is the normal case.
+  const formats = { source: spec.formats?.source ?? {}, target: spec.formats?.target ?? {} }
   return {
     name: String(spec.name ?? '').trim() || null,
     key: pairOf(spec.key),
     scope: { source: spec.scope?.source ?? null, target: spec.scope?.target ?? null },
     mapping,
     totals,
+    formats,
+    readers: { source: createReader(formats.source), target: createReader(formats.target) },
   }
 }
 
@@ -133,6 +149,14 @@ export function specIssues(rawSpec, sourceColumns, targetColumns) {
   }
   const needTarget = (column, role) => {
     if (!tgt.has(column)) issues.push(`The target file has no column "${column}" (named as ${role}).`)
+  }
+
+  for (const side of ['source', 'target']) {
+    const problem = formatIssue(spec.formats?.[side])
+    if (problem) issues.push(`The ${side} file format cannot be used: ${problem}.`)
+  }
+  for (const n of spec.key.normalize ?? []) {
+    if (!KEY_NORMALIZERS.includes(n)) issues.push(`"${n}" is not a key option — use ${KEY_NORMALIZERS.join(' or ')}.`)
   }
 
   if (spec.key.source.length === 0 || spec.key.target.length === 0) {
@@ -175,12 +199,15 @@ export function specIssues(rawSpec, sourceColumns, targetColumns) {
 
 // --- keys -------------------------------------------------------------------
 
-function keyOf(row, columns) {
+function keyOf(row, columns, normalize = []) {
   const parts = []
   for (const column of columns) {
     const value = row[column]
     if (isBlank(value)) return null
-    parts.push(String(value).trim())
+    let part = String(value).trim()
+    if (normalize.includes('stripLeadingZeros') && /^\d+$/.test(part)) part = part.replace(/^0+(?=\d)/, '')
+    if (normalize.includes('ignoreCase')) part = part.toUpperCase()
+    parts.push(part)
   }
   return parts.join(KEY_SEP)
 }
@@ -204,14 +231,24 @@ function keepFirst(list, entry, limit) {
 // numbers, dates as dates, else trimmed text. "1,200.00" and "1200" agree;
 // "2024-03-01" and "2024-03-01T00:00:00Z" agree; "10" and "9" never compare as
 // strings.
+//
+// Each value is read by its own side's reader (formats.js). A date whose day
+// and month order is not declared is NOT read as a date: 01/03/2024 against a
+// target's 2024-01-03 must disagree until someone says which order the source
+// uses — guessing would make a day/month swap in flight read as correct.
 
-function valuesAgree(sourceValue, targetValue, field) {
+// Case-insensitive the Unicode way: upper-casing first maps ß to SS, so Weiß
+// and WEISS agree. Lower-casing alone would leave ß and call them different —
+// a false mismatch on every German surname a target system capitalised.
+const fold = (text) => text.toUpperCase().toLowerCase()
+
+function valuesAgree(sourceValue, targetValue, field, sourceReader, targetReader) {
   const sourceBlank = isBlank(sourceValue)
   const targetBlank = isBlank(targetValue)
   if (sourceBlank || targetBlank) return sourceBlank && targetBlank
 
-  const a = parseNumber(sourceValue)
-  const b = parseNumber(targetValue)
+  const a = sourceReader.number(sourceValue)
+  const b = targetReader.number(targetValue)
   if (a !== null && b !== null) {
     // A relative epsilon so that floating-point noise in a large number is not
     // a mismatch even when the author asked for an exact match.
@@ -219,13 +256,13 @@ function valuesAgree(sourceValue, targetValue, field) {
     return Math.abs(a - b) <= field.tolerance + epsilon
   }
 
-  const da = parseDate(sourceValue)
-  const db = parseDate(targetValue)
+  const da = sourceReader.date(sourceValue)
+  const db = targetReader.date(targetValue)
   if (da !== null && db !== null) return da === db
 
   const sa = String(sourceValue).trim()
   const sb = String(targetValue).trim()
-  return field.ignoreCase ? sa.toLowerCase() === sb.toLowerCase() : sa === sb
+  return field.ignoreCase ? fold(sa) === fold(sb) : sa === sb
 }
 
 // Apply a crosswalk to a source value. Returns { value } or { unmapped: true }.
@@ -235,7 +272,9 @@ function translate(value, map) {
   if (!map || isBlank(value)) return { value }
   const key = String(value).trim()
   if (!map.has(key)) return { unmapped: true }
-  return { value: map.get(key) }
+  // A crosswalked value is written in the TARGET's vocabulary, so it is read
+  // in the target's format, not the source's.
+  return { value: map.get(key), crosswalked: true }
 }
 
 // --- accumulation -----------------------------------------------------------
@@ -280,7 +319,7 @@ function addToTotals(side, spec, sideName, row) {
       label = isBlank(raw) ? '(blank)' : translated.unmapped ? String(raw).trim() : String(translated.value).trim()
     }
     const entry = acc.groups.get(label) ?? { sum: 0, count: 0 }
-    const value = parseNumber(row[total[sideName]])
+    const value = spec.readers[sideName].number(row[total[sideName]])
     if (value !== null) entry.sum += value
     else if (!isBlank(row[total[sideName]])) acc.unreadable += 1
     entry.count += 1
@@ -360,12 +399,12 @@ export function createReconciliation(rawSpec, options = {}) {
     const side = sides[sideName]
     side.rows += 1
     const scope = spec.scope[sideName]
-    if (scope && !conditionHolds(scope, row)) {
+    if (scope && !conditionHolds(scope, row, spec.readers[sideName])) {
       side.outOfScope += 1
       return null
     }
     addToTotals(side, spec, sideName, row)
-    const key = keyOf(row, spec.key[sideName])
+    const key = keyOf(row, spec.key[sideName], spec.key.normalize)
     if (key === null) side.blankKeys += 1
     return key
   }
@@ -407,7 +446,8 @@ export function createReconciliation(rawSpec, options = {}) {
           return
         }
         stats.compared += 1
-        if (valuesAgree(translated.value, t.row[field.target], field)) {
+        const sourceReader = translated.crosswalked ? spec.readers.target : spec.readers.source
+        if (valuesAgree(translated.value, t.row[field.target], field, sourceReader, spec.readers.target)) {
           stats.agreed += 1
         } else {
           stats.mismatched += 1

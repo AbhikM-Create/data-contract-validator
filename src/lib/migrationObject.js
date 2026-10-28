@@ -15,6 +15,7 @@
 // are real records out of the files. A test proves no value can reach it.
 
 import { readRules, serializeContract } from './contractFile.js'
+import { cleanFormat, formatIssue } from './formats.js'
 
 export const MIGRATION_OBJECT_VERSION = 1
 const KIND = 'data-contract-validator/migration-object'
@@ -30,6 +31,9 @@ export function newMigrationObject(name = '') {
     cycle: CYCLES[0],
     contract: { name: '', rules: [] },
     spec: emptySpec(),
+    // How each file is written (formats.js): the load file, the source extract,
+    // the target extract. Declared once per object, used by every check.
+    formats: { load: {}, source: {}, target: {} },
     runs: [],
   }
 }
@@ -54,8 +58,13 @@ function cleanMap(map) {
 export function cleanSpec(spec) {
   const s = spec ?? {}
   const list = (value) => (Array.isArray(value) ? value : value ? [value] : []).map((v) => String(v ?? '').trim())
+  const normalize = list(s.key?.normalize).filter(Boolean)
   const out = {
-    key: { source: list(s.key?.source).filter(Boolean), target: list(s.key?.target).filter(Boolean) },
+    key: {
+      source: list(s.key?.source).filter(Boolean),
+      target: list(s.key?.target).filter(Boolean),
+      ...(normalize.length ? { normalize } : {}),
+    },
     mapping: (Array.isArray(s.mapping) ? s.mapping : [])
       .filter((field) => field?.source || field?.target)
       .map((field) => {
@@ -94,6 +103,7 @@ function editableSpec(spec) {
     key: {
       source: clean.key.source.length ? clean.key.source : [''],
       target: clean.key.target.length ? clean.key.target : [''],
+      normalize: clean.key.normalize ?? [],
     },
     scope: { source: clean.scope?.source ?? null },
     mapping: clean.mapping,
@@ -233,8 +243,18 @@ export function serializeMigrationObject(object, { savedAt } = {}) {
     savedAt: savedAt ?? new Date().toISOString(),
     contract: { name: contract.name, rules: contract.rules },
     spec: cleanSpec(object.spec),
+    ...(cleanFormats(object.formats) ? { formats: cleanFormats(object.formats) } : {}),
     runs: (object.runs ?? []).map(cleanRun).filter(Boolean),
   }
+}
+
+function cleanFormats(formats) {
+  const out = {}
+  for (const role of ['load', 'source', 'target']) {
+    const declared = cleanFormat(formats?.[role])
+    if (declared) out[role] = declared
+  }
+  return Object.keys(out).length ? out : undefined
 }
 
 export function migrationObjectToJson(object) {
@@ -265,6 +285,10 @@ export function readMigrationObject(parsed) {
   if (Number(parsed.formatVersion) > MIGRATION_OBJECT_VERSION) {
     return fail(`it was saved in format version ${parsed.formatVersion}, which is newer than this app understands (version ${MIGRATION_OBJECT_VERSION})`)
   }
+  for (const role of ['load', 'source', 'target']) {
+    const problem = formatIssue(parsed.formats?.[role])
+    if (problem) return fail(`the ${role} file format cannot be used: ${problem}`)
+  }
   const { rules, skipped } = readRules(parsed.contract?.rules)
   return {
     object: {
@@ -273,6 +297,11 @@ export function readMigrationObject(parsed) {
       cycle: typeof parsed.cycle === 'string' ? parsed.cycle : CYCLES[0],
       contract: { name: typeof parsed.contract?.name === 'string' ? parsed.contract.name : '', rules },
       spec: editableSpec(parsed.spec),
+      formats: {
+        load: cleanFormat(parsed.formats?.load) ?? {},
+        source: cleanFormat(parsed.formats?.source) ?? {},
+        target: cleanFormat(parsed.formats?.target) ?? {},
+      },
       runs: (Array.isArray(parsed.runs) ? parsed.runs : []).map(cleanRun).filter(Boolean),
     },
     skipped,
@@ -287,7 +316,20 @@ function fail(reason) {
 // The object's spec exactly as it is saved, which is exactly what reconcile()
 // and the CLI run — there is no second form to drift from it.
 export function runnableSpec(object) {
-  return { name: object?.name || null, ...cleanSpec(object?.spec) }
+  const source = cleanFormat(object?.formats?.source)
+  const target = cleanFormat(object?.formats?.target)
+  return {
+    name: object?.name || null,
+    ...cleanSpec(object?.spec),
+    ...(source || target ? { formats: { ...(source ? { source } : {}), ...(target ? { target } : {}) } } : {}),
+  }
+}
+
+// The object's contract as load readiness runs it: its rules, read in the load
+// file's declared format.
+export function runnableContract(object) {
+  const format = cleanFormat(object?.formats?.load)
+  return { name: object?.contract?.name || object?.name || null, rules: object?.contract?.rules ?? [], ...(format ? { format } : {}) }
 }
 
 // --- builder helpers -----------------------------------------------------------

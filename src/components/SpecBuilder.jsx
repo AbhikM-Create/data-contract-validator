@@ -52,6 +52,10 @@ export default function SpecBuilder({ spec, sourceColumns, targetColumns, sugges
         ))}
         <button onClick={addKey} style={{ ...ghostButton, marginTop: 6 }}>+ Add a key column</button>
         <Hint>Add a second column when a record is identified by two together — an employee and an effective date.</Hint>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16, marginTop: 10 }}>
+          <KeyOption spec={spec} set={set} option="stripLeadingZeros" text="Ignore leading zeros in numeric keys — SAP's 00012345 is 12345" />
+          <KeyOption spec={spec} set={set} option="ignoreCase" text="Ignore upper and lower case in keys" />
+        </div>
       </Part>
 
       <Part title="Scope" hint="Which source records are meant to migrate. Records outside scope are counted and shown, never silently dropped.">
@@ -148,6 +152,23 @@ export default function SpecBuilder({ spec, sourceColumns, targetColumns, sugges
         )}
       </div>
     </div>
+  )
+}
+
+// Key options are declared, never inferred: a tool that decided by itself that
+// 00012345 and 12345 are the same employee could also decide two different
+// employees were the same.
+function KeyOption({ spec, set, option, text }) {
+  const on = (spec.key.normalize ?? []).includes(option)
+  const toggle = (checked) => {
+    const rest = (spec.key.normalize ?? []).filter((n) => n !== option)
+    set({ key: { ...spec.key, normalize: checked ? [...rest, option] : rest } })
+  }
+  return (
+    <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
+      <input type="checkbox" checked={on} onChange={(e) => toggle(e.target.checked)} />
+      <span style={{ fontFamily: sans, fontSize: 12.5, color: colors.ink }}>{text}</span>
+    </label>
   )
 }
 

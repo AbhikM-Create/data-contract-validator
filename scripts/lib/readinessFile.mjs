@@ -26,7 +26,8 @@ export async function checkReadinessFile(contract, path, options = {}) {
   const started = Date.now()
   const done = (fields) => ({ seconds: (Date.now() - started) / 1000, rejectsWritten: 0, ...fields })
 
-  const header = readCsvHeader(path)
+  const encoding = contract?.format?.encoding
+  const header = readCsvHeader(path, encoding)
   if (header.error) return done({ error: `${path}: ${header.error}` })
   const columns = header.columns
   const key = options.key ?? []
@@ -44,7 +45,7 @@ export async function checkReadinessFile(contract, path, options = {}) {
       const pass1 = await streamCsv(path, (row) => {
         const value = check.keyOf(row)
         if (value !== null) keys.add(value, [value])
-      })
+      }, encoding)
       keys.close()
       if (pass1.error) return done({ error: `${path}: ${pass1.error}` })
       for (let i = 0; i < count; i += 1) {
@@ -86,7 +87,7 @@ export async function checkReadinessFile(contract, path, options = {}) {
         flag.reasons.join('; '),
       ])
       if (batch.length >= REJECTS_BATCH) flushRejects()
-    })
+    }, encoding)
     if (fd !== null) flushRejects()
     if (pass2.error) return done({ error: `${path}: ${pass2.error}` })
     return done({ report: check.finish(pass2.rows), partitions: count, rejectsWritten: written })

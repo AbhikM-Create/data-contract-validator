@@ -1,5 +1,6 @@
 import { useRef } from 'react'
 import CycleHistory from '../components/CycleHistory.jsx'
+import FormatPicker from '../components/FormatPicker.jsx'
 import ReadinessReport from '../components/ReadinessReport.jsx'
 import ReconReport from '../components/ReconReport.jsx'
 import SpecBuilder from '../components/SpecBuilder.jsx'
@@ -25,8 +26,9 @@ export default function MigrationsScreen(props) {
     onChange, onOpenFile, onDownload, onNew, onSample,
     onLoadFile, onClearFile, onCrosswalk,
     onReconcile, onCheckReadiness, onDownloadFixList, onExportFinding,
-    onUseSessionRules, onEditRules, onLoadContract, onDownloadEvidence,
+    onUseSessionRules, onEditRules, onLoadContract, onDownloadEvidence, onFormat,
   } = props
+  const formats = object.formats ?? { load: {}, source: {}, target: {} }
 
   const openInput = useRef(null)
   const contractInput = useRef(null)
@@ -109,6 +111,7 @@ export default function MigrationsScreen(props) {
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 14, marginTop: 10 }}>
+        <div>
         <UploadCard
           step="1"
           title="Load file"
@@ -119,6 +122,8 @@ export default function MigrationsScreen(props) {
           onFile={(file) => onLoadFile('load', file)}
           onClear={() => onClearFile('load')}
         />
+        <FormatPicker format={formats.load ?? {}} onChange={(format) => onFormat('load', format)} />
+        </div>
       </div>
       <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap', marginTop: 10 }}>
         <button
@@ -165,6 +170,7 @@ export default function MigrationsScreen(props) {
       </Phase>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 14, marginTop: 10 }}>
+        <div>
         <UploadCard
           step="2"
           title="Source extract"
@@ -175,6 +181,9 @@ export default function MigrationsScreen(props) {
           onFile={(file) => onLoadFile('source', file)}
           onClear={() => onClearFile('source')}
         />
+        <FormatPicker format={formats.source ?? {}} onChange={(format) => onFormat('source', format)} />
+        </div>
+        <div>
         <UploadCard
           step="3"
           title="Target extract"
@@ -185,6 +194,8 @@ export default function MigrationsScreen(props) {
           onFile={(file) => onLoadFile('target', file)}
           onClear={() => onClearFile('target')}
         />
+        <FormatPicker format={formats.target ?? {}} onChange={(format) => onFormat('target', format)} />
+        </div>
       </div>
 
       {bothRead ? (

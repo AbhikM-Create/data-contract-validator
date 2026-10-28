@@ -1,3 +1,5 @@
+import { decodeBytes } from './formats.js'
+
 // Talking to the engine worker.
 //
 // One worker for the session, one promise per message. Vite's `new Worker(new
@@ -46,8 +48,17 @@ function send(message) {
 
 // Hands the file's TEXT across, not the File object: the worker reads it once
 // and keeps the parsed rows, so nothing large is ever sent back.
-export async function parseFileInWorker(which, file) {
-  return send({ type: 'parse', which, text: await file.text(), name: file.name })
+//
+// Decoded here in the declared encoding — strictly, for UTF-8. file.text()
+// would quietly turn every accented letter of a Windows-1252 export into "�".
+export async function parseFileInWorker(which, file, encoding = 'utf-8') {
+  return parseBytesInWorker(which, await file.arrayBuffer(), file.name, encoding)
+}
+
+export function parseBytesInWorker(which, bytes, name, encoding = 'utf-8') {
+  const { text, error } = decodeBytes(bytes, encoding)
+  if (error) return Promise.reject(new Error(`Couldn’t read "${name}" — ${error}.`))
+  return send({ type: 'parse', which, text, name })
 }
 
 export function parseTextInWorker(which, text, name) {

@@ -106,3 +106,16 @@ describe('parseContractFile', () => {
     }
   })
 })
+
+describe('a contract’s file format', () => {
+  it('is saved with the rules and read back', () => {
+    const back = parseContractFile(contractToJson({ name: 'Load template', rules: [], format: { decimal: ',', date: 'DD.MM.YYYY' } }))
+    expect(back.format).toEqual({ decimal: ',', date: 'DD.MM.YYYY' })
+  })
+  it('is left out when nothing is declared, so older contracts read exactly as before', () => {
+    expect(JSON.parse(contractToJson({ name: 'x', rules: [] }))).not.toHaveProperty('format')
+  })
+  it('refuses the contract when the format cannot be read', () => {
+    expect(parseContractFile(JSON.stringify({ rules: [], format: { decimal: 'comma' } })).error).toMatch(/file format cannot be used/)
+  })
+})

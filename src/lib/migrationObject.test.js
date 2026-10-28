@@ -60,7 +60,7 @@ describe('migration object file', () => {
     expect(back.object.contract.rules).toEqual(OBJECT.contract.rules)
     expect(back.object.spec.mapping).toEqual(OBJECT.spec.mapping)
     expect(back.object.spec.totals).toEqual(OBJECT.spec.totals)
-    expect(back.object.spec.key).toEqual({ source: ['PERNR'], target: ['employee_id'] })
+    expect(back.object.spec.key).toEqual({ source: ['PERNR'], target: ['employee_id'], normalize: [] })
   })
 
   it('runs the same reconciliation after a save and reload', () => {
@@ -175,5 +175,31 @@ describe('spec builder helpers', () => {
 
   it('needs two columns', () => {
     expect(readCrosswalk({ columns: ['only'], rows: [] }).issues[0]).toMatch(/two columns/)
+  })
+})
+
+describe('migration object — formats and key options survive a save', () => {
+  const declared = {
+    ...OBJECT,
+    spec: { ...OBJECT.spec, key: { ...OBJECT.spec.key, normalize: ['stripLeadingZeros'] } },
+    formats: { load: { decimal: ',' }, source: { encoding: 'windows-1252', decimal: ',', date: 'DD.MM.YYYY' }, target: {} },
+  }
+
+  it('round-trips them', () => {
+    const back = parseMigrationObjectFile(migrationObjectToJson(declared)).object
+    expect(back.formats).toEqual({ load: { decimal: ',' }, source: { encoding: 'windows-1252', decimal: ',', date: 'DD.MM.YYYY' }, target: {} })
+    expect(back.spec.key.normalize).toEqual(['stripLeadingZeros'])
+  })
+
+  it('hands them to the engine: the spec runs with them, the contract reads the load file with them', async () => {
+    const { runnableContract } = await import('./migrationObject.js')
+    expect(runnableSpec(declared)).toMatchObject({ key: { normalize: ['stripLeadingZeros'] }, formats: { source: { date: 'DD.MM.YYYY' } } })
+    expect(runnableContract(declared).format).toEqual({ decimal: ',' })
+  })
+
+  it('refuses a file with a format this version cannot read', () => {
+    const json = JSON.parse(migrationObjectToJson(declared))
+    json.formats.source.date = 'D.M.YY'
+    expect(parseMigrationObjectFile(JSON.stringify(json)).error).toMatch(/the source file format cannot be used: "D\.M\.YY" is not a known date/)
   })
 })

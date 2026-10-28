@@ -20,7 +20,7 @@
 
 import { serializeContract } from './contractFile.js'
 import { canonicalJson, sha256Hex } from './hashing.js'
-import { cleanSpec, cycleHistory } from './migrationObject.js'
+import { cycleHistory, runnableContract, runnableSpec } from './migrationObject.js'
 import { RECON_STEPS } from './reconcile.js'
 import { describeRule } from './rules.js'
 
@@ -72,8 +72,19 @@ function verdictBlock(title, verdict, headline, when) {
 }
 
 function filesTable(files) {
-  const rows = files.map((f) => `<tr><td>${h(f.role)}</td><td class="mono">${h(f.name)}</td><td class="num">${fmt(f.rows)}</td><td class="num">${bytes(f.bytes)}</td><td class="mono hash">${h(f.sha256 ?? 'not computed')}</td></tr>`)
-  return `<table><thead><tr><th>Role</th><th>File</th><th class="num">Records</th><th class="num">Size</th><th>SHA-256 of the file’s bytes</th></tr></thead><tbody>${rows.join('')}</tbody></table>`
+  const rows = files.map((f) => `<tr><td>${h(f.role)}</td><td class="mono">${h(f.name)}</td><td class="num">${fmt(f.rows)}</td><td class="num">${bytes(f.bytes)}</td><td>${h(describeFormat(f.format))}</td><td class="mono hash">${h(f.sha256 ?? 'not computed')}</td></tr>`)
+  return `<table><thead><tr><th>Role</th><th>File</th><th class="num">Records</th><th class="num">Size</th><th>Read as</th><th>SHA-256 of the file’s bytes</th></tr></thead><tbody>${rows.join('')}</tbody></table>`
+}
+
+// How a file was read, in words — a reader of the pack should not need to know
+// what { "decimal": "," } means.
+function describeFormat(format) {
+  if (!format || Object.keys(format).length === 0) return 'UTF-8, 1,234.56, ISO dates'
+  return [
+    format.encoding && format.encoding !== 'utf-8' ? format.encoding : 'UTF-8',
+    format.decimal === ',' ? '1.234,56' : '1,234.56',
+    format.date ? `dates ${format.date}` : 'ISO dates',
+  ].join(', ')
 }
 
 function staircase(steps) {
@@ -201,9 +212,9 @@ export function buildEvidencePack(input) {
   const limit = input.exampleLimit ?? EXAMPLES
   const title = [object.name || 'Untitled object', object.wave, object.cycle].filter(Boolean).join(' · ')
   const files = [
-    readiness && { role: 'Load file', ...readiness.file },
-    reconciliation && { role: 'Source extract', ...reconciliation.source },
-    reconciliation && { role: 'Target extract', ...reconciliation.target },
+    readiness && { role: 'Load file', format: object.formats?.load, ...readiness.file },
+    reconciliation && { role: 'Source extract', format: object.formats?.source, ...reconciliation.source },
+    reconciliation && { role: 'Target extract', format: object.formats?.target, ...reconciliation.target },
   ].filter(Boolean)
   const scope = object.spec?.scope?.source
   const reference = input.reference ?? '—'
@@ -268,8 +279,13 @@ ${signOff()}
 export async function evidenceFingerprints(object) {
   // serializeContract cleans each rule to the fields the engine reads — the
   // same cleaning a saved contract gets — so UI state cannot move a fingerprint.
-  const contractJson = canonicalJson({ rules: serializeContract({ rules: object.contract?.rules ?? [] }).rules })
-  const specJson = canonicalJson(cleanSpec(object.spec))
+  // How the files were read is part of what was checked: the declared formats
+  // are inside both fingerprints, so a pack read in 1.234,56 notation and one
+  // read in 1,234.56 can never claim the same definitions.
+  const contract = runnableContract(object)
+  const contractJson = canonicalJson({ rules: serializeContract({ rules: contract.rules }).rules, ...(contract.format ? { format: contract.format } : {}) })
+  const { name: _name, ...spec } = runnableSpec(object)
+  const specJson = canonicalJson(spec)
   return {
     contract: { json: contractJson, sha256: await sha256Hex(contractJson) },
     spec: { json: specJson, sha256: await sha256Hex(specJson) },

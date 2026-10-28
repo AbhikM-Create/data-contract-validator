@@ -33,3 +33,14 @@ jobs:
       - run: npm test
 
       - run: npm run build
+
+  # Row-level security is the whole access model: the publishable key ships in
+  # the bundle, so these policies are what keep one account's contracts and
+  # runs from another. A throwaway Postgres runs supabase/schema.sql against
+  # two accounts and an anonymous visitor (supabase/tests/rls.sql); a policy
+  # that lets anything cross fails the build.
+  rls:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: sh scripts/verify-rls.sh

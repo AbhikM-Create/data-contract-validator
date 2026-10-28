@@ -3,13 +3,13 @@ import AppShell from './components/AppShell.jsx'
 import { contractToJson, parseContractFile } from './lib/contractFile.js'
 import { deleteContract, listContracts, loadContract, saveContract } from './lib/contractStore.js'
 import {
-  clearFileInWorker, fixListInWorker, parseFileInWorker, parseTextInWorker, readinessInWorker, reconcileInWorker, validateInWorker,
+  clearFileInWorker, fixListInWorker, parseBytesInWorker, parseFileInWorker, parseTextInWorker, readinessInWorker, reconcileInWorker, validateInWorker,
 } from './lib/engineClient.js'
 import { createEvidencePack } from './lib/evidencePack.js'
 import { findingTable } from './lib/findingTable.js'
 import { sha256Hex } from './lib/hashing.js'
 import {
-  migrationObjectToJson, newMigrationObject, parseMigrationObjectFile, readCrosswalk, runnableSpec, summariseReadiness, summariseReconciliation,
+  migrationObjectToJson, newMigrationObject, parseMigrationObjectFile, readCrosswalk, runnableContract, runnableSpec, summariseReadiness, summariseReconciliation,
 } from './lib/migrationObject.js'
 import { parseCsv, toCsv } from './lib/parseCsv.js'
 import { summariseRun } from './lib/runRecord.js'
@@ -314,9 +314,14 @@ export default function App() {
 
   const fileStamp = (file) => (file ? `${file.name}|${file.rowCount}` : '')
   const reconStamp = (object, files) => JSON.stringify([runnableSpec(object), fileStamp(files.source), fileStamp(files.target)])
-  const readinessStamp = (object, files) => JSON.stringify([object.contract.rules, object.spec.key.target, fileStamp(files.load)])
+  const readinessStamp = (object, files) => JSON.stringify([runnableContract(object), object.spec.key.target, fileStamp(files.load)])
 
-  const loadMigrationFile = async (which, file) => {
+  // The File behind each role is kept, so declaring a different encoding can
+  // read the same file again without asking for it twice.
+  const migrationFileRefs = useRef({})
+
+  const loadMigrationFile = async (which, file, encoding = migration.formats?.[which]?.encoding) => {
+    migrationFileRefs.current[which] = file
     const refusal = tooLargeToRead(file)
     if (refusal) {
       setEngineError(`${refusal} The CLIs have no such limit: node scripts/reconcile.mjs and scripts/check.mjs stream files of any size.`)
@@ -325,18 +330,33 @@ export default function App() {
     setEngineError(null)
     setBusy(`Reading ${file.name}…`)
     try {
-      // Fingerprinted from the file's BYTES, before any decoding, so the
-      // evidence pack's SHA-256 is the one `sha256sum` gives for this file.
-      const [{ file: summary }, sha256] = await Promise.all([parseFileInWorker(which, file), file.arrayBuffer().then(sha256Hex)])
+      // Read once. Fingerprinted from the BYTES, before any decoding, so the
+      // evidence pack's SHA-256 is the one `sha256sum` gives for this file;
+      // decoded in the encoding declared for it.
+      const bytes = await file.arrayBuffer()
+      const [{ file: summary }, sha256] = await Promise.all([parseBytesInWorker(which, bytes, file.name, encoding), sha256Hex(bytes)])
       setMigrationFiles((current) => ({ ...current, [which]: { ...summary, sha256, bytes: file.size } }))
     } catch (error) {
-      setEngineError(error.message)
+      setEngineError(/UTF-8/.test(error.message)
+        ? `${error.message} Choose it under the file, in “Read this file as”, and it is read again.`
+        : error.message)
     } finally {
       setBusy(null)
     }
   }
 
+  // A declared format is part of the object. Changing an encoding re-reads the
+  // file in it; changing number or date notation needs no re-read — it is
+  // applied when a check runs, and the report says it is out of date.
+  const changeFormat = (role, format) => {
+    const previous = migration.formats?.[role] ?? {}
+    changeMigration({ formats: { ...(migration.formats ?? {}), [role]: format } })
+    const file = migrationFileRefs.current[role]
+    if (file && (previous.encoding ?? 'utf-8') !== (format.encoding ?? 'utf-8')) loadMigrationFile(role, file, format.encoding)
+  }
+
   const clearMigrationFile = async (which) => {
+    delete migrationFileRefs.current[which]
     setMigrationFiles((current) => ({ ...current, [which]: null }))
     if (which === 'load') setReadiness(null)
     else setRecon(null)
@@ -370,7 +390,7 @@ export default function App() {
   const runReadiness = async () => {
     setBusy('Checking the load file…')
     try {
-      const { report } = await readinessInWorker({ contract: migration.contract, key: migration.spec.key.target.filter(Boolean) })
+      const { report } = await readinessInWorker({ contract: runnableContract(migration), key: migration.spec.key.target.filter(Boolean) })
       if (!report) return
       setReadiness({ report, stamp: readinessStamp(migration, migrationFiles) })
       record(summariseReadiness(report, { wave: migration.wave, cycle: migration.cycle, fileName: migrationFiles.load?.name }))
@@ -530,7 +550,12 @@ export default function App() {
       setMigrationNotice({ tone: 'bad', text: loaded.error })
       return
     }
-    changeMigration({ contract: { name: loaded.name, rules: loaded.rules } })
+    // A contract that declares how its files are written sets the load file's
+    // format: the declaration travels with the rules it was written for.
+    changeMigration({
+      contract: { name: loaded.name, rules: loaded.rules },
+      ...(loaded.format ? { formats: { ...(migration.formats ?? {}), load: loaded.format } } : {}),
+    })
     setMigrationNotice(loaded.skipped.length > 0
       ? { tone: 'warn', text: `Loaded ${loaded.rules.length} rule${loaded.rules.length === 1 ? '' : 's'} from "${loaded.name}", but ${loaded.skipped.length} could not be read and ${loaded.skipped.length === 1 ? 'is' : 'are'} NOT being checked.`, details: loaded.skipped.map((entry) => `${entry.rule?.column ?? '(no column)'}: ${entry.reason}`) }
       : { tone: 'good', text: `Loaded ${loaded.rules.length} rule${loaded.rules.length === 1 ? '' : 's'} from "${loaded.name}".` })
@@ -574,6 +599,7 @@ export default function App() {
           onEditRules={editRulesOnContracts}
           onLoadContract={loadContractIntoMigration}
           onDownloadEvidence={downloadEvidence}
+          onFormat={changeFormat}
         />
       )}
 
