@@ -19,17 +19,19 @@ import { readMigrationObject } from '../src/lib/migrationObject.js'
 import { REPORT_SCHEMAS } from '../src/lib/version.js'
 import { EXIT, parse, UsageError } from './args.mjs'
 import { buildInfo } from './buildInfo.mjs'
+import { deliverBoard, hasIntegrations, INTEGRATION_OPTIONS, readIntegrations, reportDelivery } from './integrations.mjs'
 import { boardJunit } from './junit.mjs'
 
-export const USAGE = 'dcv board <object.migration.json>... [--json] [--junit out.xml]'
+export const USAGE = 'dcv board <object.migration.json>... [--json] [--junit out.xml] [--notify teams,slack]'
 
 export async function run(argv) {
-  const parsed = parse(argv, { usage: USAGE, positionals: { min: 1 }, options: { json: { type: 'boolean' }, junit: { type: 'string' } } })
+  const parsed = parse(argv, { usage: USAGE, positionals: { min: 1 }, options: { json: { type: 'boolean' }, junit: { type: 'string' }, ...INTEGRATION_OPTIONS } })
   if (parsed.help) {
     console.log(`Usage: ${USAGE}\n\nRecord pipeline runs into the objects with "dcv check --record" and "dcv reconcile --record".`)
     return EXIT.OK
   }
   const { json, junit } = parsed.values
+  const integrations = readIntegrations(parsed.values, process.env, { tickets: false })
 
   const objects = parsed.args.map((path) => {
     let opened
@@ -49,11 +51,16 @@ export async function run(argv) {
   const build = buildInfo()
   const files = parsed.args.map((p) => basename(p))
 
-  if (junit) writeFileSync(junit, boardJunit(board, { build }))
+  const notes = []
+  if (junit) {
+    writeFileSync(junit, boardJunit(board, { build }))
+    notes.push(`JUnit results written to ${junit}`)
+  }
+  if (hasIntegrations(integrations)) reportDelivery(await deliverBoard(integrations, board), notes)
   if (json) {
     console.log(JSON.stringify({ $schema: REPORT_SCHEMAS.board, tool: build, generatedAt: new Date().toISOString(), files, ...board }, null, 2))
   } else {
-    printBoard(board, junit)
+    printBoard(board, notes)
   }
   return board.verdict === 'GO' ? EXIT.OK : board.verdict === 'NO_GO' ? EXIT.FOUND : EXIT.UNUSABLE
 }
@@ -61,7 +68,7 @@ export async function run(argv) {
 const WORD = { GO: 'READY        ', NO_GO: 'NO-GO        ', NOT_CONFIRMED: 'NOT CONFIRMED' }
 const pct = (share) => (Number.isFinite(share) ? `${(share * 100).toFixed(1)}%` : '—')
 
-function printBoard(board, junit) {
+function printBoard(board, notes) {
   console.log('')
   for (const row of board.rows) {
     const r = row.readiness
@@ -70,6 +77,7 @@ function printBoard(board, junit) {
     console.log(`                 before the load: ${r.ran ? `${r.status}, ${pct(r.acceptance)} accepted` : 'not run'}   after the load: ${c.ran ? `${c.status}, ${pct(c.completeness)} arrived` : 'not run'}`)
     for (const reason of row.reasons) console.log(`                 • ${reason}`)
   }
-  if (junit) console.log(`\n  JUnit results written to ${junit}`)
+  if (notes.length) console.log('')
+  for (const note of notes) console.log(`  ${note}`)
   console.log(`\n${board.headline}\n`)
 }

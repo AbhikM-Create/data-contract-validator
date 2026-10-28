@@ -6,6 +6,7 @@ import ReconReport from '../components/ReconReport.jsx'
 import SpecBuilder from '../components/SpecBuilder.jsx'
 import UploadCard from '../components/UploadCard.jsx'
 import { CYCLES, cleanSpec, cycleHistory, suggestFieldPairs } from '../lib/migrationObject.js'
+import { ROUTABLE } from '../lib/notify.js'
 import { normalizeSpec, specIssues } from '../lib/reconcile.js'
 import { colors, ghostButton, label, mono, panel, primaryButton, sans, secondaryButton } from '../theme.js'
 
@@ -226,6 +227,8 @@ export default function MigrationsScreen(props) {
       )}
       {recon && <ReconReport report={recon.report} stale={recon.stale} onExport={onExportFinding} />}
 
+      <Routing routing={object.routing ?? {}} onChange={(routing) => onChange({ routing })} />
+
       {/* --- evidence ------------------------------------------------------ */}
       <Phase step="3" title="Evidence for sign-off">
         One self-contained document for the people who sign this cycle off: the verdicts, the records behind them, the
@@ -291,6 +294,36 @@ function EvidenceLine({ title, state }) {
       <span style={{ fontFamily: sans, fontSize: 13, fontWeight: 600, color: colors.ink, width: 130 }}>{title}</span>
       <span style={{ fontFamily: sans, fontSize: 13, color: s.color }}>{s.text}</span>
     </div>
+  )
+}
+
+// Who fixes a failure at each step. Saved with the object; used by
+// `dcv check|reconcile --notify/--ticket` to route a ticket to the team that
+// owns the fix — the staircase's answer to "whose problem is this?".
+function Routing({ routing, onChange }) {
+  const named = Object.values(routing).filter(Boolean).length
+  return (
+    <details style={{ ...panel, padding: '10px 14px', marginTop: 18 }}>
+      <summary style={{ fontFamily: sans, fontSize: 13.5, fontWeight: 600, color: colors.ink, cursor: 'pointer' }}>
+        Who fixes what — routing for notifications and tickets{named ? ` (${named} named)` : ''}
+      </summary>
+      <p style={{ fontFamily: sans, fontSize: 12.5, color: colors.mute, lineHeight: 1.5, margin: '8px 0 4px', maxWidth: 760 }}>
+        A pipeline run with <code style={{ fontFamily: mono }}>--ticket jira</code> or <code style={{ fontFamily: mono }}>--ticket servicenow</code> opens one
+        ticket per failed step for this team (in ServiceNow, its assignment group). Left blank, the ticket names the usual owner in words. Tickets and
+        messages carry counts, never records.
+      </p>
+      {ROUTABLE.map((step) => (
+        <label key={step.id} style={{ display: 'flex', gap: 10, alignItems: 'center', marginTop: 6, flexWrap: 'wrap' }}>
+          <span style={{ fontFamily: sans, fontSize: 13, color: colors.ink, width: 230 }}>{step.label}</span>
+          <input
+            value={routing[step.id] ?? ''}
+            placeholder={step.owner}
+            onChange={(e) => onChange({ ...routing, [step.id]: e.target.value })}
+            style={{ ...field(320) }}
+          />
+        </label>
+      ))}
+    </details>
   )
 }
 

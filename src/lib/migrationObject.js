@@ -4,6 +4,8 @@
 //   contract   what the TARGET requires (rules) — load readiness, and after
 //              go-live the production contract
 //   spec       how source records correspond to target records — reconciliation
+//   routing    which team fixes a failure at each step — for notifications
+//              and tickets (notify.js)
 //   runs       what each check found, wave by wave and cycle by cycle
 //
 // It is saved as a portable JSON file the CLIs also read, so the engineer's
@@ -16,6 +18,7 @@
 
 import { readRules, serializeContract } from './contractFile.js'
 import { cleanFormat, formatIssue } from './formats.js'
+import { cleanRouting } from './notify.js'
 
 export const MIGRATION_OBJECT_VERSION = 1
 const KIND = 'data-contract-validator/migration-object'
@@ -34,6 +37,7 @@ export function newMigrationObject(name = '') {
     // How each file is written (formats.js): the load file, the source extract,
     // the target extract. Declared once per object, used by every check.
     formats: { load: {}, source: {}, target: {} },
+    routing: {},
     runs: [],
   }
 }
@@ -244,6 +248,7 @@ export function serializeMigrationObject(object, { savedAt } = {}) {
     contract: { name: contract.name, rules: contract.rules },
     spec: cleanSpec(object.spec),
     ...(cleanFormats(object.formats) ? { formats: cleanFormats(object.formats) } : {}),
+    ...(Object.keys(cleanRouting(object.routing)).length ? { routing: cleanRouting(object.routing) } : {}),
     runs: (object.runs ?? []).map(cleanRun).filter(Boolean),
   }
 }
@@ -302,6 +307,7 @@ export function readMigrationObject(parsed) {
         source: cleanFormat(parsed.formats?.source) ?? {},
         target: cleanFormat(parsed.formats?.target) ?? {},
       },
+      routing: cleanRouting(parsed.routing),
       runs: (Array.isArray(parsed.runs) ? parsed.runs : []).map(cleanRun).filter(Boolean),
     },
     skipped,

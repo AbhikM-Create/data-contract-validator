@@ -17,15 +17,16 @@ import { reconcileFiles } from '../scripts/lib/reconcileFiles.mjs'
 import { EXIT, parse, UsageError } from './args.mjs'
 import { buildInfo, describeBuild } from './buildInfo.mjs'
 import { reconcileJunit } from './junit.mjs'
+import { deliverRun, hasIntegrations, INTEGRATION_OPTIONS, readIntegrations, reportDelivery } from './integrations.mjs'
 import { assertRecordable, recordRun } from './record.mjs'
 
-export const USAGE = 'dcv reconcile <spec.json> <source.csv> <target.csv> [--json] [--junit out.xml] [--evidence pack.html] [--record] [--tmp dir] [--partitions n]'
+export const USAGE = 'dcv reconcile <spec.json> <source.csv> <target.csv> [--json] [--junit out.xml] [--evidence pack.html] [--record] [--notify teams,slack] [--ticket jira|servicenow] [--tmp dir] [--partitions n]'
 
 export async function run(argv) {
   const parsed = parse(argv, {
     usage: USAGE,
     positionals: 3,
-    options: { json: { type: 'boolean' }, junit: { type: 'string' }, evidence: { type: 'string' }, record: { type: 'boolean' }, tmp: { type: 'string' }, partitions: { type: 'string' } },
+    options: { json: { type: 'boolean' }, junit: { type: 'string' }, evidence: { type: 'string' }, record: { type: 'boolean' }, tmp: { type: 'string' }, partitions: { type: 'string' }, ...INTEGRATION_OPTIONS },
   })
   if (parsed.help) {
     console.log(`Usage: ${USAGE}\n\n<spec.json> may be a reconciliation spec or a migration object saved from the workspace.`)
@@ -52,6 +53,7 @@ export async function run(argv) {
     spec = runnableSpec(opened.object)
   }
   if (record) assertRecordable(specPath, object, skipped)
+  const integrations = readIntegrations(parsed.values)
 
   // An evidence pack quotes more records per finding than a terminal summary.
   const outcome = await reconcileFiles(spec, sourcePath, targetPath, { tmpDir: tmp, partitions, exampleLimit: evidence ? 25 : undefined })
@@ -61,6 +63,7 @@ export async function run(argv) {
   const files = { source: basename(sourcePath), target: basename(targetPath) }
 
   const notes = []
+  let reference = null
   if (evidence && report.status !== 'INVALID') {
     const pack = await createEvidencePack({
       object: object ?? { name: spec.name ?? basename(specPath), contract: { rules: [] }, spec, runs: [] },
@@ -73,11 +76,16 @@ export async function run(argv) {
       reproduce: `dcv ${['reconcile', ...argv].join(' ')}`,
     })
     writeFileSync(evidence, pack.html, { mode: 0o600 })
+    reference = pack.reference
     notes.push(`Evidence pack ${pack.reference} written to ${evidence}`)
   }
+  const summary = summariseReconciliation(report, { wave: object?.wave, cycle: object?.cycle, sourceName: files.source, targetName: files.target })
   if (record) {
-    const note = recordRun(specPath, object, summariseReconciliation(report, { wave: object.wave, cycle: object.cycle, sourceName: files.source, targetName: files.target }))
+    const note = recordRun(specPath, object, summary)
     if (note) notes.push(note)
+  }
+  if (hasIntegrations(integrations)) {
+    reportDelivery(await deliverRun(integrations, summary, { object: object ?? { name: spec.name ?? basename(specPath) }, routing: object?.routing, reference }), notes)
   }
   if (junit) {
     writeFileSync(junit, reconcileJunit(report, { seconds: outcome.seconds, build, files }))

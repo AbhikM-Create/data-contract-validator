@@ -203,3 +203,12 @@ describe('migration object — formats and key options survive a save', () => {
     expect(parseMigrationObjectFile(JSON.stringify(json)).error).toMatch(/the source file format cannot be used: "D\.M\.YY" is not a known date/)
   })
 })
+
+describe('migration object — routing', () => {
+  it('saves the teams named for each step, and only those', () => {
+    const saved = migrationObjectToJson({ ...OBJECT, routing: { mapping: ' HR functional team ', totals: '', planted: 'Qzvorak9' } })
+    expect(JSON.parse(saved).routing).toEqual({ mapping: 'HR functional team' })
+    expect(parseMigrationObjectFile(saved).object.routing).toEqual({ mapping: 'HR functional team' })
+    expect(JSON.parse(migrationObjectToJson(OBJECT))).not.toHaveProperty('routing')
+  })
+})

@@ -20,9 +20,10 @@ import { checkReadinessFile } from '../scripts/lib/readinessFile.mjs'
 import { EXIT, parse, UsageError } from './args.mjs'
 import { buildInfo, describeBuild } from './buildInfo.mjs'
 import { readinessJunit } from './junit.mjs'
+import { deliverRun, hasIntegrations, INTEGRATION_OPTIONS, readIntegrations, reportDelivery } from './integrations.mjs'
 import { assertRecordable, recordRun } from './record.mjs'
 
-export const USAGE = 'dcv check <contract.json> <load.csv> [--key col[,col]] [--json] [--junit out.xml] [--rejects fixes.csv] [--evidence pack.html] [--record] [--tmp dir] [--partitions n]'
+export const USAGE = 'dcv check <contract.json> <load.csv> [--key col[,col]] [--json] [--junit out.xml] [--rejects fixes.csv] [--evidence pack.html] [--record] [--notify teams,slack] [--ticket jira|servicenow] [--tmp dir] [--partitions n]'
 
 export async function run(argv) {
   const parsed = parse(argv, {
@@ -31,6 +32,7 @@ export async function run(argv) {
     options: {
       key: { type: 'string' }, json: { type: 'boolean' }, junit: { type: 'string' }, rejects: { type: 'string' },
       evidence: { type: 'string' }, record: { type: 'boolean' }, tmp: { type: 'string' }, partitions: { type: 'string' },
+      ...INTEGRATION_OPTIONS,
     },
   })
   if (parsed.help) {
@@ -71,6 +73,7 @@ export async function run(argv) {
   }
 
   if (record) assertRecordable(contractPath, object, skipped)
+  const integrations = readIntegrations(parsed.values)
 
   const key = keyArg ? keyArg.split(',').map((c) => c.trim()).filter(Boolean) : defaultKey
   const outcome = await checkReadinessFile(contract, loadPath, { key, rejectsPath: rejects, tmpDir: tmp, partitions })
@@ -80,6 +83,7 @@ export async function run(argv) {
   const file = basename(loadPath)
 
   const notes = []
+  let reference = null
   if (evidence && report.status !== READINESS.INVALID) {
     const pack = await createEvidencePack({
       object: object ?? {
@@ -92,11 +96,16 @@ export async function run(argv) {
       reproduce: `dcv ${['check', ...argv].join(' ')}`,
     })
     writeFileSync(evidence, pack.html, { mode: 0o600 })
+    reference = pack.reference
     notes.push(`Evidence pack ${pack.reference} written to ${evidence}`)
   }
+  const summary = summariseReadiness(report, { wave: object?.wave, cycle: object?.cycle, fileName: file })
   if (record) {
-    const note = recordRun(contractPath, object, summariseReadiness(report, { wave: object.wave, cycle: object.cycle, fileName: file }))
+    const note = recordRun(contractPath, object, summary)
     if (note) notes.push(note)
+  }
+  if (hasIntegrations(integrations)) {
+    reportDelivery(await deliverRun(integrations, summary, { object: object ?? { name: contract.name }, routing: object?.routing, reference }), notes)
   }
   if (junit) {
     writeFileSync(junit, readinessJunit(report, { seconds: outcome.seconds, build, file }))
@@ -105,8 +114,8 @@ export async function run(argv) {
 
   if (json) {
     // flagged is empty when streaming — the records went to --rejects instead.
-    const { flagged: _flagged, ...summary } = report
-    console.log(JSON.stringify({ $schema: REPORT_SCHEMAS.readiness, tool: build, generatedAt: new Date().toISOString(), file, ...summary }, null, 2))
+    const { flagged: _flagged, ...printed } = report
+    console.log(JSON.stringify({ $schema: REPORT_SCHEMAS.readiness, tool: build, generatedAt: new Date().toISOString(), file, ...printed }, null, 2))
   } else {
     printSummary(report, outcome, contract, file, rejects, notes)
   }
