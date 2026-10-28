@@ -45,6 +45,7 @@ function cleanRule(rule) {
     if (rule.when.targetIsColumn) cleaned.when.targetIsColumn = true
   }
   if (rule.layer) cleaned.layer = rule.layer
+  if (rule.severity) cleaned.severity = rule.severity
   return cleaned
 }
 

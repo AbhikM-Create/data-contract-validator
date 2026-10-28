@@ -30,6 +30,30 @@ export const OPS = ['=', '!=', '>', '<', '>=', '<=', 'between', 'in', 'notNull']
 
 export const RULE_TYPES = ['numeric', 'string', 'date', 'boolean']
 
+// What happens to a record that breaks the rule when it is loaded into the
+// target system: rejected outright, or accepted with a warning. Load readiness
+// (readiness.js) predicts rejections from this; validate() reads every rule the
+// same way, so a contract without severities behaves exactly as before.
+export const SEVERITIES = ['reject', 'warn']
+
+export function ruleSeverity(rule) {
+  return rule?.severity === 'warn' ? 'warn' : 'reject'
+}
+
+// Every column a rule reads — its own, a compared column, and its WHEN
+// condition's. A rule over a column the file does not have must be reported as
+// unchecked by whoever calls it: evaluated anyway, every cell reads blank and
+// the rule "passes" without testing anything.
+export function ruleColumns(rule) {
+  const columns = [rule?.column]
+  if (rule?.targetIsColumn) columns.push(rule.target)
+  if (rule?.when) {
+    columns.push(rule.when.column)
+    if (rule.when.targetIsColumn) columns.push(rule.when.target)
+  }
+  return [...new Set(columns.filter((c) => typeof c === 'string' && c.trim() !== ''))]
+}
+
 // Which of the four layers each kind reports through. The layers keep their v1
 // meaning: structure, meaning, recency, magnitude. A rule may override this with
 // an explicit `layer`, which is what lets an authoring UI place an unusual rule
@@ -199,6 +223,7 @@ export function ruleIssue(rule) {
       break
   }
   if (rule.when && (typeof rule.when !== 'object' || !rule.when.column)) return 'the WHEN condition names no column'
+  if (rule.severity !== undefined && !SEVERITIES.includes(rule.severity)) return `"${rule.severity}" is not a severity — use reject or warn`
   return null
 }
 

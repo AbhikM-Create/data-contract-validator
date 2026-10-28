@@ -234,7 +234,7 @@ Live data connectors. Any backend. Export/PDF. Multi-file batches.
 - Visual language: dark ground, mono labels, cyan = baseline, amber = candidate,
   green = pass, red = fail.
 
-## v2 — Migration reconciliation (increment 1 done)
+## v2 — Migration reconciliation (increments 1-2 done)
 Spec: `docs/v2-spec.md`. The audience is the data engineer on a business
 transformation (ERP/HCM cutover, M&A integration) who must prove, every mock
 cycle, that a load arrived whole and correct.
@@ -265,3 +265,30 @@ Load-bearing distinctions:
 CLI: `node scripts/reconcile.mjs <spec.json> <source.csv> <target.csv> [--json]`
 — exit 0 reconciled, 1 a step failed, 2 spec/file unusable. Reads files whole;
 streaming for multi-million-row loads is increment 2.
+
+### Increment 2 — load readiness (done)
+`src/lib/readiness.js` — `checkReadiness(contract, rows, { columns, key })` —
+predicts which records the target will REJECT and which it will load with a
+WARNING, before the load window. It is a view over `checkRules()`, never a
+second evaluator: a rule must mean the same thing here and in `validate()`.
+
+- `severity: 'reject' | 'warn'` lives on the rule (`rules.js`: `SEVERITIES`,
+  `ruleSeverity`), persists through `contractFile.js`, and is set in
+  `RuleBuilder`. Reject is the default and is omitted when saved, so contracts
+  written before severities read exactly as before. `validate()` ignores it.
+- Records are counted, not rule failures: a record broken by three rules is one
+  rejection carrying three reasons.
+- A rule over a column the load file lacks is UNCHECKED, never PASS (see
+  `ruleColumns`). A missing column under a reject rule makes the file
+  NOT_READY — it was built to the wrong template.
+- Statuses: READY, NOT_READY, UNVERIFIED (nothing failed but something could
+  not be checked — never call that ready), INVALID.
+
+CLI: `node scripts/check.mjs <contract.json> <load.csv> [--key col] [--json]
+[--rejects out.csv]` — exit 0 ready, 1 not ready, 2 unverified/unusable.
+`--rejects` writes the flagged records with their reasons: the fix list.
+
+KNOWN GAP, not fixed here: `validate()` in rules-only mode has the same hole
+readiness closes — a rule on a missing column reports PASS, because the schema
+layer only runs with a baseline. Fixing it changes engine output, so it needs
+the real-data re-verification the engine bar requires.
