@@ -157,7 +157,7 @@ function resolveTarget(rule, row) {
 // A WHEN condition gates the rule to the rows it describes. A row whose
 // condition is blank or unreadable is NOT tested — the author said "check this
 // where X holds", and where X is unknown it does not hold.
-function conditionHolds(when, row) {
+export function conditionHolds(when, row) {
   if (!when) return true
   const value = row[when.column]
   if (when.op === 'notNull') return !isBlank(value)

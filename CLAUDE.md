@@ -233,3 +233,27 @@ Live data connectors. Any backend. Export/PDF. Multi-file batches.
   clean pair never rots into a false freshness failure.
 - Visual language: dark ground, mono labels, cyan = baseline, amber = candidate,
   green = pass, red = fail.
+
+## v2 — Migration reconciliation (increment 1 done)
+Spec: `docs/v2-spec.md`. The audience is the data engineer on a business
+transformation (ERP/HCM cutover, M&A integration) who must prove, every mock
+cycle, that a load arrived whole and correct.
+
+`src/lib/reconcile.js` — `reconcile(spec, sourceRows, targetRows) -> report` —
+matches RECORDS by business key, which `validate()` (profile drift) cannot.
+Five steps as a descent: keys → completeness → mapping → accuracy → totals.
+It is a sibling of `validate()`, not an extension of it: do not merge the two.
+
+Load-bearing distinctions:
+- An unmapped legacy value is a MAPPING gap (functional team's spec), never an
+  accuracy mismatch (engineer's load). Counting it as a mismatch sends the
+  wrong person to fix it.
+- Duplicate/blank keys are set aside, never guessed at, and a key duplicated in
+  the target is not ALSO reported missing — one fault, one finding.
+- Out-of-scope rows (`scope`) are counted and reported, never silently dropped.
+- An unconfigured step is SKIPPED, never PASS. A spec naming a missing column
+  returns INVALID with reasons, never a half-run.
+
+CLI: `node scripts/reconcile.mjs <spec.json> <source.csv> <target.csv> [--json]`
+— exit 0 reconciled, 1 a step failed, 2 spec/file unusable. Reads files whole;
+streaming for multi-million-row loads is increment 2.
