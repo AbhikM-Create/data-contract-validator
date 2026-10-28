@@ -174,7 +174,7 @@ export function summariseReadiness(report, { wave, cycle, fileName, at } = {}) {
 // A run read back from a file is rebuilt field by field from what this version
 // writes — so a hand-edited file cannot smuggle a value into the history, and
 // a field added to runs later is NOT kept unless it is added here on purpose.
-function cleanRun(raw) {
+export function cleanRun(raw) {
   if (!raw || typeof raw !== 'object') return null
   const kind = raw.kind === 'reconcile' || raw.kind === 'readiness' ? raw.kind : null
   if (!kind) return null

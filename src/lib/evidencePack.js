@@ -23,6 +23,7 @@ import { canonicalJson, sha256Hex } from './hashing.js'
 import { cycleHistory, runnableContract, runnableSpec } from './migrationObject.js'
 import { RECON_STEPS } from './reconcile.js'
 import { describeRule } from './rules.js'
+import { signoffSubject } from './signoff.js'
 import { VERSION } from './version.js'
 
 export const EVIDENCE_FORMAT_VERSION = 1
@@ -358,5 +359,8 @@ export async function createEvidencePack(input) {
   const html = buildEvidencePack({ ...input, fingerprints, reference, generatedAt })
   const slug = [input.object.name || 'migration', input.object.wave, input.object.cycle]
     .filter(Boolean).join('-').replace(/[^\w.-]+/g, '-').toLowerCase()
-  return { html, reference, fileName: `${slug}-evidence-${reference.toLowerCase()}.html` }
+  // The subject is what a sign-off decision is recorded against: the same
+  // fingerprints, files and verdicts as the pack, with no record in it.
+  const subject = signoffSubject({ ...input, fingerprints, reference, generatedAt })
+  return { html, reference, subject, fileName: `${slug}-evidence-${reference.toLowerCase()}.html` }
 }
