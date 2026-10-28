@@ -249,7 +249,8 @@ content only, stylesheet inlined. To republish: `npm run build`, then publish it
 with `files: { "app.js": "dist/app.js" }` and the same URL.
 CLI: published to public npm as `data-contract-validator` (command `dcv`) by
 `.github/workflows/release.yml` on a `v*` tag matching package.json, with npm
-provenance; it refuses to publish without a LICENSE file and `license` field.
+provenance; it refuses to publish without a LICENSE file and `license` field
+(Apache-2.0).
 `npm pack` (the `files` list decides what ships) and the `Dockerfile` build the
 same package.
 
@@ -261,8 +262,7 @@ a load, never performs one); an expression language; storing record values.
 No format picker on Validate (it refuses non-UTF-8, but cannot be told a file
 uses decimal commas); formats are per file, not per column; Indian grouping
 (1,23,456) is refused; Supabase storage for migration objects; the npm release
-workflow has not run yet (it needs a LICENSE, a `license` field and the
-NPM_TOKEN secret).
+workflow has not run yet (first run is the v2.0.0 tag).
 
 ## Conventions
 - Plain JS + React, function components, hooks. No state library.

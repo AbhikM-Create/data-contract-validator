@@ -15,6 +15,7 @@
     "evidence",
     "cli"
   ],
+  "license": "Apache-2.0",
   "homepage": "https://github.com/AbhikM-Create/data-contract-validator#readme",
   "bugs": {
     "url": "https://github.com/AbhikM-Create/data-contract-validator/issues"

@@ -3,14 +3,14 @@ name: Release
 # Publishes data-contract-validator to the public npm registry when a version
 # tag is pushed:  git tag v2.0.0 && git push origin v2.0.0
 #
-# Before the first release:
-#   1. Add a LICENSE file and a "license" field to package.json — this workflow
-#      refuses to publish without both: a public package with no licence is
-#      "all rights reserved", which nobody can legally use.
-#   2. Create an npm automation token (npmjs.com → Access Tokens → Granular,
-#      publish rights for this package) and store it as the repository secret
-#      NPM_TOKEN. After the first publish you can switch to npm trusted
-#      publishing (no long-lived token) in the package's settings on npmjs.com.
+# Licensed Apache-2.0 (LICENSE, and "license" in package.json). The workflow
+# refuses to publish without both: a public package with no licence is
+# "all rights reserved", which nobody can legally use.
+#
+# Publishing needs the repository secret NPM_TOKEN: an npm automation token
+# (npmjs.com → Access Tokens → Granular, publish rights for this package).
+# After the first publish you can switch to npm trusted publishing (no
+# long-lived token) in the package's settings on npmjs.com.
 #
 # Every release carries npm provenance: a signed statement, visible on the
 # package page, that it was built from this repository by this workflow.

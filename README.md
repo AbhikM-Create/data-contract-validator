@@ -49,7 +49,7 @@ Needs Node 20.19+ or 22.12+.
 ## The command line — for pipelines
 
 ```bash
-npm install --global data-contract-validator    # once published; until then: npm pack, then install the .tgz
+npm install --global data-contract-validator
 
 dcv check employees.migration.json load.csv --rejects fixes.csv --junit readiness.xml
 dcv reconcile employees.migration.json legacy.csv target.csv --evidence pack.html --junit reconcile.xml
@@ -165,3 +165,7 @@ code it replaced.
 | CLI | any size; memory is set by partition size, not file size |
 | Formats | per file, not per column; Indian digit grouping is refused |
 | Validate page | refuses non-UTF-8 files, but has no format picker yet |
+
+## License
+
+Apache License 2.0 — see [LICENSE](LICENSE).
