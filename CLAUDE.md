@@ -16,6 +16,11 @@ The answer is never one verdict: it is which step caught the problem and which
 steps above it passed — that tells you what KIND of problem it is and whose fix
 it is. Product spec and history: `docs/v2-spec.md`.
 
+Around the engines (phase 3): sign-off recorded against evidence
+(`signoff.js`, organisations in Supabase), the readiness board across objects
+(`board.js`), notifications and tickets routed by step (`notify.js`), contracts
+from the target's load template (`templates.js`), and single sign-on (`sso.js`).
+
 ## Architecture (this is the spec — do not collapse it)
 - `src/lib/` is the engine: pure, no DOM, no network, no React, unit-tested.
   It imports nothing from `src/components/`, `src/screens/` or `src/App.jsx`,
@@ -146,6 +151,64 @@ module before adding any store.
 - Temp partitions hold company data: `dcv-<pid>-*`, owner-only, 0600, deleted on
   exit and Ctrl-C, and every run sweeps dirs whose process is dead.
 
+## Sign-off and organisations (phase 3)
+- A decision is recorded against a SUBJECT (`signoff.js`): the pack's
+  reference, every file's SHA-256, the rules' and spec's fingerprints, and each
+  check's run summary — built by `createEvidencePack` from the same inputs as
+  the pack, rebuilt field by field on read (`readSubject`), never a record.
+  `subjectMatches` says whether a decision still applies to the files in hand.
+- `readDecision` is the one definition of a well-formed decision (accept;
+  accept with exceptions, each naming a failed step, a reason and an owner;
+  reject with a reason).
+- The DATABASE enforces the rules, so no client can skip them
+  (`supabase/schema.sql`): roles per organisation (admin, engineer, data_owner,
+  auditor); nobody decides on a check they submitted or on definitions they
+  recorded (a trigger, so the refusal says why); definitions, submissions,
+  decisions and the audit log are append-only for every role including the
+  table owner; the audit log is written only by triggers; a submission may name
+  only its own organisation's definitions with the fingerprints its subject
+  carries (a foreign key is checked without RLS); invitations are accepted only
+  by the account with that CONFIRMED email; an organisation keeps one admin.
+  `supabase/tests/orgs.sql` proves each, with deliberate breaks seen to fail.
+- `orgRecords.js` builds and reads the rows (pure, tested); `orgStore.js` is the
+  thin Supabase layer; `useSignoff.js` holds the state, out of `App.jsx`.
+  `mayDecide` mirrors the database so the screen never offers a refused action.
+- Recorded definitions are re-verified against their fingerprint on every read
+  (Postgres cannot recompute canonical JSON).
+- The data owner opens the pack they were sent; it is read in the page and its
+  `dcv-evidence-reference` meta must equal the submission's. The pack is never
+  uploaded.
+
+## The readiness board, notifications and tickets
+- `buildBoard(objects, { submissions })` reads only stored run summaries. GO
+  only when both checks ran IN THE OBJECT'S CURRENT CYCLE and passed (and, with
+  sign-off, were accepted after the latest check); NO_GO on a failure or a
+  rejection; everything else NOT_CONFIRMED — never ready. Failures first.
+- `dcv check|reconcile --record` appends the run summary to the migration
+  object (refused, before running, without an object or when a rewrite would
+  drop an unreadable rule; written via a temp file and rename). `dcv board`:
+  exit 0 / 1 / 2, `--json` against `board-report.schema.json`.
+- `notify.js` builds every message and ticket from the RUN SUMMARY, never from
+  findings (their examples are records). Routing per step comes from the
+  object's `routing`, else the usual owner in words (guidance, never used as a
+  ServiceNow group). A stable key (Jira label / ServiceNow correlation_id)
+  makes a repeat fault a comment on the open ticket. Jira search uses
+  `/rest/api/3/search/jql` and falls back to `/rest/api/2/search` (Data Center).
+- Credentials only from the environment (args reach CI logs and the pack's
+  re-run line); https only (http only to localhost); all checked before the
+  check runs; a failed delivery goes to stderr and never changes the exit code.
+
+## Templates and single sign-on
+- `templates.js`: Migration Cockpit XML (Field List sheet, else structure sheets
+  found by CONTENT — two technical rows, then descriptions with `*` for
+  mandatory) and CSV field lists. Proposals carry their evidence; lengths and
+  conditional importance go to `notImported`. Built from SAP's published layout
+  and a constructed fixture — refuse what does not match, never misread.
+- `sso.js` + `supabase.js`: PKCE flow (code in the query, removed by the
+  client), so it never meets the hash routes; the return URL carries no
+  fragment; `go('signin')` remembers the route and `useAuth` restores it once.
+  `VITE_SSO=saml,microsoft`, `VITE_SSO_ONLY=true`.
+
 ## The evidence pack
 `createEvidencePack` — one self-contained HTML document per check, used by the
 workspace and both CLIs (`--evidence`). Trustworthy on its own or worthless:
@@ -158,7 +221,8 @@ reference, and a CSP meta forbidding scripts and requests even if escaping
 failed. `evidencePack.test.js` and `e2e/evidence.spec.js` prove it. Keep both.
 
 ## The CLI and its formats (`dcv`)
-`dcv check`, `dcv reconcile`, `dcv odcs export|import`, `dcv --version`. Exit
+`dcv check`, `dcv reconcile`, `dcv board`, `dcv odcs export|import`,
+`dcv template import`, `dcv --version`. Exit
 codes are the contract with a pipeline: 0 passed, 1 a check found something,
 2 could not be completed (incl. "could not confirm"). Options are parsed
 strictly — an unknown option is refused, never ignored.
@@ -180,7 +244,7 @@ uniqueness and other engines' checks are listed in `notImported` with reasons
 (`schemas/vendor/`), and real examples from the standard are test fixtures.
 
 ## UI
-Screens: Migrations, Contracts, Validate, History (`routes.js`, hash routing —
+Screens: Migrations, Contracts, Validate, Board, Sign-off, History (`routes.js`, hash routing —
 a static app needs no server rewrites). `components/AppShell.jsx` carries the
 nav and the trust line, which must stay true.
 - `components/Staircase.jsx` is the signature view and leads every report —
@@ -218,8 +282,9 @@ Optional: without `.env.local` the app runs fully, minus saving. Contracts and
 run summaries save to the signed-in account; row-level security scoped to
 `auth.uid()` is the whole access model (the publishable key ships in the
 bundle by design). `npm run verify:rls` applies `supabase/schema.sql` to a
-throwaway Postgres with a Supabase auth shim and runs 20 isolation checks
-(`supabase/tests/rls.sql`); CI runs it. A foreign key is checked WITHOUT RLS —
+throwaway Postgres with a Supabase auth shim and runs 61 checks — 20 account
+isolation (`supabase/tests/rls.sql`) and 41 organisation, role and
+separation-of-duties (`supabase/tests/orgs.sql`); CI runs it. A foreign key is checked WITHOUT RLS —
 the run insert policy therefore requires the contract to be the inserter's own.
 Migration objects persist as files only (Supabase storage for them is not built).
 
@@ -233,7 +298,10 @@ Migration objects persist as files only (Supabase storage for them is not built)
 ## Verification
 - `npm test` — unit, golden master, samples pinned to their verdict, CLI
   against published schemas, ODCS against the official schema.
-- `npm run test:e2e` — Playwright against the production build (`e2e/`).
+- `npm run test:e2e` — Playwright against the production build (`e2e/`), and a
+  second build configured for Supabase + SSO (port 4175) whose project is a
+  stand-in answered in the browser (`e2e/standin.js`): the real client runs the
+  real PKCE flow, and the sign-off screen's requests are checked exactly.
 - `npm run verify:rls` — account isolation on a real Postgres.
 - `node scripts/benchmark-migration.mjs [rows]` — fails unless every planted
   break is reported exactly. 5M rows under a 512 MB heap: reconcile ~2 min.
@@ -262,7 +330,12 @@ a load, never performs one); an expression language; storing record values.
 No format picker on Validate (it refuses non-UTF-8, but cannot be told a file
 uses decimal commas); formats are per file, not per column; Indian grouping
 (1,23,456) is refused; Supabase storage for migration objects; the npm release
-workflow has not run yet (first run is the v2.0.0 tag).
+workflow has not run yet (first run is the v2.0.0 tag). Phase 3 integrations
+are tested against stand-ins built to each published interface, not yet live:
+an identity provider, Jira, ServiceNow, Teams, Slack, a Migration Cockpit
+template downloaded from SAP, and `orgStore.js` against a real Supabase
+(PostgREST) — the SQL is verified on Postgres, the client calls only against
+the stand-in. Workday's .xlsx templates must be saved as CSV.
 
 ## Conventions
 - Plain JS + React, function components, hooks. No state library.

@@ -51,8 +51,10 @@ Needs Node 20.19+ or 22.12+.
 ```bash
 npm install --global data-contract-validator
 
-dcv check employees.migration.json load.csv --rejects fixes.csv --junit readiness.xml
-dcv reconcile employees.migration.json legacy.csv target.csv --evidence pack.html --junit reconcile.xml
+dcv check employees.migration.json load.csv --rejects fixes.csv --junit readiness.xml --record
+dcv reconcile employees.migration.json legacy.csv target.csv --evidence pack.html --record --ticket jira
+dcv board objects/*.migration.json --notify teams
+dcv template import customer_template.xml --sheet "General Data" > customer.contract.json
 dcv odcs export contract.json > contract.odcs.yaml
 dcv --version
 ```
@@ -76,7 +78,17 @@ docker run --rm --user "$(id -u):$(id -g)" -v "$PWD:/data" data-contract-validat
   bounded memory. 5 million rows reconcile in about two minutes under a 512 MB
   heap (`node scripts/benchmark-migration.mjs 5000000`).
 - The same `*.migration.json` the workspace saves is what the commands read, so
-  the pipeline and the people work from one file, kept in git.
+  the pipeline and the people work from one file, kept in git. `--record` adds
+  the run's counts to it, so pipeline runs reach the readiness board.
+- **`dcv board`** judges every object's latest cycle: exit 0 ready, 1 no-go,
+  2 not confirmed (a check that did not run counts as not confirmed, never ready).
+- **`--notify teams,slack`** posts the result; **`--ticket jira|servicenow`** opens
+  one ticket per failed step, routed to the team the object names for that step,
+  and a later run that finds the same fault adds to the open ticket. Messages and
+  tickets carry counts, never records. Credentials come only from environment
+  variables (`DCV_TEAMS_WEBHOOK`, `DCV_SLACK_WEBHOOK`, `JIRA_URL` + `JIRA_PROJECT` +
+  `JIRA_EMAIL`/`JIRA_API_TOKEN` or `JIRA_TOKEN`, `SERVICENOW_URL` +
+  `SERVICENOW_USER`/`SERVICENOW_PASSWORD` or `SERVICENOW_TOKEN`).
 
 ## Real enterprise data: formats are declared, never guessed
 
@@ -106,6 +118,43 @@ It quotes records — that is what evidence is — so it is made on your machine
 never uploaded. It cannot run anything when opened: every value is escaped, and
 a strict content security policy forbids scripts and network requests.
 
+## Sign-off, recorded — and the go/no-go board
+
+With an account, a programme works as an **organisation** whose members hold
+roles: admin, migration engineer, business data owner, auditor. An engineer
+submits a check from Migrations; what is recorded is the pack's reference, the
+SHA-256 of every file and the fingerprints of the rules and mapping, with the
+counts — never a record. The data owner opens the pack they were sent (it is
+read in the page and matched to the submission) and accepts, accepts with named
+exceptions, or rejects. The database itself enforces that **nobody decides on a
+check they submitted or on rules they recorded**, that submissions, decisions
+and recorded definitions are **append-only**, and it writes the **audit log**.
+
+The **readiness board** shows every object's latest cycle in one view: ready
+only when both checks ran in the cycle and passed — and, with an organisation,
+were accepted after they ran.
+
+## Contracts from the target's own template
+
+Contracts can start from what the target system publishes instead of being
+typed in: an **SAP S/4HANA Migration Cockpit** file template (the `.xml` it
+downloads) or a **field list as CSV** (field, required, type, allowed values,
+min, max — a Workday or Salesforce template saved as CSV). Each proposed rule
+shows the line it came from and is added only when accepted; what cannot be
+checked exactly (a length, a conditional importance) is listed, never dropped.
+
+## Single sign-on
+
+Sign-in through your identity provider via Supabase Auth: SAML by email domain
+(Entra ID, Okta, Ping, ADFS) and/or Microsoft Entra ID over OpenID Connect. Set
+at build time: `VITE_SSO=saml`, `microsoft` or both; `VITE_SSO_ONLY=true` hides
+the password form (also turn the Email provider off in Supabase). Register the
+identity provider in Supabase (SAML needs the Supabase CLI:
+`supabase sso add --type saml --metadata-url … --domains yourcompany.com`), and
+add this app's URL to the allowed redirect URLs. A person disabled in the
+identity provider cannot sign in again; remove them from the organisation too,
+and set a session time-box in Supabase so an open session does not outlive them.
+
 ## Open Data Contract Standard
 
 Contracts export to and import from **ODCS v3.2.0**, so they can live in your
@@ -122,15 +171,19 @@ Signed in (optional, Supabase), two things are saved to your account:
 - **contracts** — the rules you wrote, their name and declared format; never the
   inferred profile of a file (value lists are made of real values);
 - **run summaries** — which layer caught what, as counts; never messages or
-  examples, which quote real values.
+  examples, which quote real values;
+- in an organisation: **members and roles**, the **rules and mapping specs that
+  were signed off**, each **submission's subject** (file names and hashes,
+  fingerprints, verdicts, counts), each **decision**, and the **audit log**.
 
 Migration objects are files you keep. Each boundary is enforced in one module
 and proved by a test that feeds real values in and checks none comes out.
 
 ## Security
 
-- Account isolation is verified on a real Postgres — `npm run verify:rls` runs
-  20 checks across two accounts and an anonymous visitor, in CI.
+- Account and organisation isolation, roles, separation of duties and the
+  append-only history are verified on a real Postgres — `npm run verify:rls` runs
+  61 checks across two organisations, five people and an anonymous visitor, in CI.
 - The production page ships a Content-Security-Policy. Where you host it, also
   send `Content-Security-Policy: frame-ancestors 'none'` as a header.
 - CI audits production dependencies; Dependabot proposes updates;
@@ -165,6 +218,7 @@ code it replaced.
 | CLI | any size; memory is set by partition size, not file size |
 | Formats | per file, not per column; Indian digit grouping is refused |
 | Validate page | refuses non-UTF-8 files, but has no format picker yet |
+| Not yet run against | a live identity provider, Jira, ServiceNow, Teams or Slack, or a template downloaded from SAP — each is tested against a stand-in built to its published interface |
 
 ## License
 
