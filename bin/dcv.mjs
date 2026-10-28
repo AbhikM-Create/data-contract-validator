@@ -5,6 +5,7 @@
 //   dcv reconcile <spec> <source.csv> <target.csv>   did the load arrive whole and correct?
 //   dcv board <object.migration.json>...             is the programme ready to go live?
 //   dcv odcs export|import <file>                    Open Data Contract Standard in and out
+//   dcv template import <template.xml|fields.csv>    a contract from the target's load template
 //   dcv --version
 //
 // Exit codes, the same for every command: 0 passed, 1 a check found something,
@@ -18,6 +19,7 @@ const COMMANDS = {
   reconcile: () => import('../cli/reconcile.mjs'),
   board: () => import('../cli/board.mjs'),
   odcs: () => import('../cli/odcs.mjs'),
+  template: () => import('../cli/template.mjs'),
 }
 
 const HELP = `${describeBuild()}
@@ -28,6 +30,7 @@ Usage:
   dcv board <object.migration.json>... [--json] [--junit out.xml]
   dcv odcs export <contract.json> [--out contract.odcs.yaml]
   dcv odcs import <contract.odcs.yaml> [--out contract.json] [--object name]
+  dcv template import <template.xml|fields.csv> [--out contract.json] [--sheet name] [--naming technical|description]
   dcv --version
 
 A contract or spec may also be a migration object saved from the workspace.

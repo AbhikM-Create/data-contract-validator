@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<?mso-application progid="Excel.Sheet"?>
+<!-- CONSTRUCTED for tests from SAP's published description of a Migration
+     Cockpit file template (Field List sheet; per-structure sheets with the
+     structure's technical name, then field technical names, types, lengths
+     and descriptions, "*" marking mandatory). It is not a template downloaded
+     from an SAP system. Every value in it is invented. -->
+<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet" xmlns:html="http://www.w3.org/TR/REC-html40">
+ <Worksheet ss:Name="Introduction">
+  <Table>
+   <Row><Cell><Data ss:Type="String">Migration Template — Customer</Data></Cell></Row>
+   <Row><Cell><Data ss:Type="String">Do not change the structure of this template.</Data></Cell></Row>
+  </Table>
+ </Worksheet>
+ <Worksheet ss:Name="Field List">
+  <Table>
+   <Row><Cell><Data ss:Type="String">Field List</Data></Cell></Row>
+   <Row ss:Index="3">
+    <Cell><Data ss:Type="String">Sheet Name</Data></Cell><Cell><Data ss:Type="String">Group Name</Data></Cell><Cell><Data ss:Type="String">Field Description</Data></Cell><Cell><Data ss:Type="String">Importance</Data></Cell><Cell><Data ss:Type="String">Type</Data></Cell><Cell><Data ss:Type="String">Length</Data></Cell><Cell><Data ss:Type="String">Decimal</Data></Cell><Cell><Data ss:Type="String">SAP Structure</Data></Cell><Cell><Data ss:Type="String">SAP Field</Data></Cell>
+   </Row>
+   <Row><Cell><Data ss:Type="String">General Data</Data></Cell><Cell><Data ss:Type="String">Key</Data></Cell><Cell><Data ss:Type="String">Customer Number</Data></Cell><Cell><Data ss:Type="String">Mandatory for sheet</Data></Cell><Cell><Data ss:Type="String">Text</Data></Cell><Cell><Data ss:Type="Number">10</Data></Cell><Cell/><Cell><Data ss:Type="String">S_CUST_GEN</Data></Cell><Cell><Data ss:Type="String">KUNNR</Data></Cell></Row>
+   <Row><Cell><Data ss:Type="String">General Data</Data></Cell><Cell><Data ss:Type="String">Name</Data></Cell><Cell><Data ss:Type="String">Name 1</Data></Cell><Cell><Data ss:Type="String">Mandatory for sheet</Data></Cell><Cell><Data ss:Type="String">Text</Data></Cell><Cell><Data ss:Type="Number">35</Data></Cell><Cell/><Cell><Data ss:Type="String">S_CUST_GEN</Data></Cell><Cell><Data ss:Type="String">NAME1</Data></Cell></Row>
+   <Row><Cell><Data ss:Type="String">General Data</Data></Cell><Cell><Data ss:Type="String">Address</Data></Cell><Cell><Data ss:Type="String">Country</Data></Cell><Cell><Data ss:Type="String">Mandatory if address is given</Data></Cell><Cell><Data ss:Type="String">Text</Data></Cell><Cell><Data ss:Type="Number">3</Data></Cell><Cell/><Cell><Data ss:Type="String">S_CUST_GEN</Data></Cell><Cell><Data ss:Type="String">LAND1</Data></Cell></Row>
+   <Row><Cell><Data ss:Type="String">General Data</Data></Cell><Cell><Data ss:Type="String">Control</Data></Cell><Cell><Data ss:Type="String">Created On</Data></Cell><Cell><Data ss:Type="String">Optional</Data></Cell><Cell><Data ss:Type="String">Date</Data></Cell><Cell><Data ss:Type="Number">8</Data></Cell><Cell/><Cell><Data ss:Type="String">S_CUST_GEN</Data></Cell><Cell><Data ss:Type="String">ERDAT</Data></Cell></Row>
+   <Row><Cell><Data ss:Type="String">General Data</Data></Cell><Cell><Data ss:Type="String">Sales</Data></Cell><Cell><Data ss:Type="String">Annual Sales</Data></Cell><Cell><Data ss:Type="String">Optional</Data></Cell><Cell><Data ss:Type="String">Number</Data></Cell><Cell><Data ss:Type="Number">15</Data></Cell><Cell><Data ss:Type="Number">2</Data></Cell><Cell><Data ss:Type="String">S_CUST_GEN</Data></Cell><Cell><Data ss:Type="String">UMSAT</Data></Cell></Row>
+  </Table>
+ </Worksheet>
+ <Worksheet ss:Name="General Data">
+  <Table>
+   <Row><Cell><Data ss:Type="String">General Data</Data></Cell></Row>
+   <Row><Cell><Data ss:Type="String">Fields marked * are mandatory.</Data></Cell></Row>
+   <Row><Cell ss:MergeAcross="1"><Data ss:Type="String">Key &amp; Name</Data></Cell><Cell ss:MergeAcross="2"><Data ss:Type="String">Other</Data></Cell></Row>
+   <Row><Cell><Data ss:Type="String">S_CUST_GEN</Data></Cell><Cell><Data ss:Type="String">S_CUST_GEN</Data></Cell><Cell><Data ss:Type="String">S_CUST_GEN</Data></Cell><Cell><Data ss:Type="String">S_CUST_GEN</Data></Cell><Cell><Data ss:Type="String">S_CUST_GEN</Data></Cell></Row>
+   <Row><Cell><Data ss:Type="String">KUNNR</Data></Cell><Cell><Data ss:Type="String">NAME1</Data></Cell><Cell><Data ss:Type="String">LAND1</Data></Cell><Cell><Data ss:Type="String">ERDAT</Data></Cell><Cell><Data ss:Type="String">UMSAT</Data></Cell></Row>
+   <Row><Cell><Data ss:Type="String">Text</Data></Cell><Cell><Data ss:Type="String">Text</Data></Cell><Cell><Data ss:Type="String">Text</Data></Cell><Cell><Data ss:Type="String">Date</Data></Cell><Cell><Data ss:Type="String">Number</Data></Cell></Row>
+   <Row><Cell><Data ss:Type="String">10</Data></Cell><Cell><Data ss:Type="String">35</Data></Cell><Cell><Data ss:Type="String">3</Data></Cell><Cell><Data ss:Type="String">8</Data></Cell><Cell><Data ss:Type="String">15,2</Data></Cell></Row>
+   <Row><Cell><Data ss:Type="String">Customer Number*</Data></Cell><Cell><Data ss:Type="String">Name 1*</Data><Comment><Data>Legal name as registered — not a nickname</Data></Comment></Cell><Cell><Data ss:Type="String">Country</Data></Cell><Cell><Data ss:Type="String">Created On</Data></Cell><Cell><Data ss:Type="String">Annual Sales</Data></Cell></Row>
+  </Table>
+ </Worksheet>
+</Workbook>

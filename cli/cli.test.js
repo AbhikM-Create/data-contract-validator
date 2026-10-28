@@ -203,3 +203,32 @@ describe('dcv odcs', () => {
     expect(r.err).toMatch(/NOT imported — 2 item\(s\)/)
   })
 })
+
+describe('dcv template import', () => {
+  const cockpit = join(root, 'src/lib/__fixtures__/templates/cockpit-constructed.xml')
+
+  it('writes the template’s rules, and exits 2 naming what it could not import', () => {
+    const r = dcv('template', 'import', cockpit)
+    expect(r.code).toBe(2)
+    expect(JSON.parse(r.out).rules.map((rule) => [rule.kind, rule.column])).toEqual([['nullRule', 'KUNNR'], ['nullRule', 'NAME1'], ['type', 'ERDAT'], ['type', 'UMSAT']])
+    expect(r.err).toMatch(/NOT imported — \d+ item\(s\)/)
+    expect(r.err).toMatch(/LAND1: importance “Mandatory if address is given”/)
+  })
+
+  it('the contract it writes checks a load file', () => {
+    const contract = join(dir, 'from-template.contract.json')
+    dcv('template', 'import', cockpit, '--out', contract)
+    const loadFile = file('customers.csv', 'KUNNR,NAME1,LAND1,ERDAT,UMSAT\n1,Northwind,US,2026-01-15,10\n2,,DE,2026-01-16,20\n')
+    const r = dcv('check', contract, loadFile, '--key', 'KUNNR', '--json')
+    expect(r.code).toBe(1)
+    expect(JSON.parse(r.out).counts).toMatchObject({ records: 2, rejected: 1 })
+  })
+
+  it('a CSV field list with nothing left over exits 0; an unknown sheet is refused', () => {
+    const fields = file('fields.csv', 'Field name,Required,Type\nemployee_id,Yes,Text\nhire_date,Yes,Date\n')
+    expect(dcv('template', 'import', fields).code).toBe(0)
+    const r = dcv('template', 'import', cockpit, '--sheet', 'Bank Details')
+    expect(r.code).toBe(2)
+    expect(r.err).toMatch(/no sheet "Bank Details"\. Sheets with fields: "General Data"/)
+  })
+})

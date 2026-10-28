@@ -2,6 +2,7 @@ import { useState } from 'react'
 import ContractFileBar from '../components/ContractFileBar.jsx'
 import RuleEditor from '../components/RuleEditor.jsx'
 import SavedContracts from '../components/SavedContracts.jsx'
+import TemplateImport from '../components/TemplateImport.jsx'
 import UploadCard from '../components/UploadCard.jsx'
 import { describeRule, ruleKey, ruleLayer } from '../lib/rules.js'
 import { LAYERS } from '../lib/validate.js'
@@ -130,8 +131,8 @@ export default function ContractsScreen({
             <div style={{ ...panel, padding: '22px 20px' }}>
               <div style={{ fontFamily: sans, fontSize: 14.5, fontWeight: 600, color: colors.ink }}>No rules yet</div>
               <p style={{ fontFamily: sans, fontSize: 13, color: colors.mute, lineHeight: 1.55, marginTop: 7, maxWidth: 560 }}>
-                Load a contract you saved earlier, or read a baseline CSV below — its columns and the values it
-                contains become suggestions you can promote into rules.
+                Load a contract you saved earlier, read a baseline CSV below — its columns and the values it
+                contains become suggestions you can promote into rules — or start from the target’s load template.
               </p>
             </div>
           ) : visible.length === 0 ? (
@@ -189,6 +190,13 @@ export default function ContractsScreen({
                 onClear={onClearBaseline}
               />
             </div>
+          </Section>
+
+          <Section
+            title="Start from the target’s template"
+            blurb="The fields the target requires and the values it accepts, read from its own load template instead of typed in. Read in this browser; nothing is added until you accept it."
+          >
+            <TemplateImport rules={rules} onAdd={onAddRule} />
           </Section>
 
           <Section
