@@ -58,3 +58,17 @@ test('a domain with no identity provider gets a sentence, not a dead end', async
   // The password form is still offered: VITE_SSO_ONLY is not set in this build.
   await expect(page.getByText('Or with an email and password:')).toBeVisible()
 })
+
+// With an account service, the same control offers the real thing.
+test('accounts on: the header offers a sign-in, and the screens ask for one', async ({ page }) => {
+  await project(page)
+  await page.goto('/')
+  await expect(page.getByRole('button', { name: 'Accounts off' })).toHaveCount(0)
+  await page.getByRole('button', { name: 'Sign in', exact: true }).first().click()
+  await expect(page.getByRole('heading', { name: 'Sign in', exact: true })).toBeVisible()
+  await expect(page.getByLabel('Work email')).toBeVisible()
+
+  await page.goto('/#/signoff')
+  await expect(page.getByText('Sign in to work with your organisation')).toBeVisible()
+  await expect(page.getByText('Accounts are not set up in this copy')).toHaveCount(0)
+})

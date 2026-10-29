@@ -1,6 +1,8 @@
 import { useState } from 'react'
-import { go } from '../routes.js'
-import { colors, ghostButton, label, panel, sans, secondaryButton } from '../theme.js'
+import { accountState } from '../lib/accounts.js'
+import { isConfigured } from '../lib/supabase.js'
+import { colors, ghostButton, label, panel, sans } from '../theme.js'
+import AccountNotice from './AccountNotice.jsx'
 
 // The contracts in this account. A contract is worth writing only if it
 // outlives the file it was written against, and this is where that becomes
@@ -9,17 +11,10 @@ export default function SavedContracts({ contracts, loading, openId, signedIn, e
   const [query, setQuery] = useState('')
   const [confirming, setConfirming] = useState(null)
 
+  // What to say instead comes from lib/accounts.js, so this agrees with the
+  // header: no "Sign in" button where this deployment cannot sign anyone in.
   if (!signedIn) {
-    return (
-      <div style={{ ...panel, padding: '18px 20px' }}>
-        <span style={label}>Your contracts</span>
-        <p style={{ fontFamily: sans, fontSize: 13, color: colors.mute, lineHeight: 1.55, margin: '8px 0 0', maxWidth: 520 }}>
-          Sign in and your contracts are saved to your account, ready for the next file that arrives. Signed
-          out, you can still write rules and keep them as a file.
-        </p>
-        <button onClick={() => go('signin')} style={{ ...secondaryButton, marginTop: 14 }}>Sign in</button>
-      </div>
-    )
+    return <div style={{ marginTop: -20 }}><AccountNotice state={accountState({ configured: isConfigured, user: null })} surface="contracts" /></div>
   }
 
   const text = query.trim().toLowerCase()

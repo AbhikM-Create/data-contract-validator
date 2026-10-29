@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import AppShell from './components/AppShell.jsx'
+import { accountState } from './lib/accounts.js'
 import { contractToJson, parseContractFile } from './lib/contractFile.js'
 import { deleteContract, listContracts, loadContract, saveContract } from './lib/contractStore.js'
 import {
@@ -17,6 +18,7 @@ import { summariseRun } from './lib/runRecord.js'
 import { listRuns, saveRun } from './lib/runStore.js'
 import { ruleKey } from './lib/rules.js'
 import { DEFAULT_THRESHOLDS } from './lib/validate.js'
+import { isConfigured } from './lib/supabase.js'
 import { useAuth } from './lib/useAuth.js'
 import { useSignoff } from './lib/useSignoff.js'
 import { go, useRoute } from './routes.js'
@@ -622,7 +624,7 @@ export default function App() {
           signoff={{
             organization: signoff.active,
             canSubmit: Boolean(signoff.active?.roles.includes('engineer')),
-            signedIn: Boolean(user),
+            accounts: accountState({ configured: isConfigured, loading: authLoading, user }),
             onSubmit: () => downloadEvidence({ submit: true }),
           }}
           onFormat={changeFormat}

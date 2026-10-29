@@ -1,7 +1,8 @@
 import { useState } from 'react'
+import { ACCOUNTS_OFF } from '../lib/accounts.js'
 import { isConfigured, signIn, signInWithCompanySso, signInWithMicrosoft, signUp, sso } from '../lib/supabase.js'
 import { go } from '../routes.js'
-import { colors, panel, primaryButton, sans, secondaryButton } from '../theme.js'
+import { colors, label, panel, primaryButton, sans, secondaryButton } from '../theme.js'
 import { ScreenHead } from './ValidateScreen.jsx'
 
 // Signing in buys you saved contracts and saved runs. It buys nothing else —
@@ -50,19 +51,18 @@ export default function SignInScreen({ user }) {
     )
   }
 
+  // No account service in this build. An explanation is not a dead end; a
+  // disabled form is — so this says what is off, what still works, and how to
+  // turn it on, rather than pretending to take a password.
+  if (!isConfigured) return <AccountsOff />
+
   return (
     <>
       <ScreenHead
         title={creating ? 'Create an account' : 'Sign in'}
-        blurb="An account saves your contracts and your validation history. Checking a file needs no account at all — that works signed out."
+        blurb="An account saves your contracts, your validation history, and your programme’s sign-off. Checking a file needs no account at all — that works signed out."
       />
 
-      {!isConfigured && (
-        <Notice tone="warn">
-          This copy of the app has no Supabase project configured, so accounts are unavailable here. Everything
-          else works.
-        </Notice>
-      )}
 
       {sso.any && !creating && <CompanySignIn />}
 
@@ -162,6 +162,31 @@ function CompanySignIn() {
   )
 }
 
+function AccountsOff() {
+  return (
+    <>
+      <ScreenHead title={ACCOUNTS_OFF.title} blurb={ACCOUNTS_OFF.lead} />
+      <div style={{ ...panel, padding: '20px 22px', marginTop: 20, maxWidth: 640 }}>
+        <span style={label}>What an account adds</span>
+        <ul style={{ margin: '10px 0 0', paddingLeft: 18 }}>
+          {ACCOUNTS_OFF.adds.map((line) => (
+            <li key={line} style={{ fontFamily: sans, fontSize: 13.5, color: colors.ink, lineHeight: 1.6, marginTop: 4 }}>{line}</li>
+          ))}
+        </ul>
+        <p style={{ fontFamily: sans, fontSize: 13.5, color: colors.mute, lineHeight: 1.6, marginTop: 14 }}>{ACCOUNTS_OFF.works}</p>
+        <div style={{ display: 'flex', gap: 8, marginTop: 16, flexWrap: 'wrap' }}>
+          <button onClick={() => go('signoff')} style={primaryButton}>See an example sign-off</button>
+          <button onClick={() => go('migrations')} style={secondaryButton}>Check a migration</button>
+        </div>
+      </div>
+      <div style={{ ...panel, padding: '16px 22px', marginTop: 14, maxWidth: 640, background: colors.panelSunk }}>
+        <span style={label}>Turning them on</span>
+        <p style={{ fontFamily: sans, fontSize: 13, color: colors.mute, lineHeight: 1.6, marginTop: 8 }}>{ACCOUNTS_OFF.howTo}</p>
+      </div>
+    </>
+  )
+}
+
 function Field({ label, type, value, onChange, autoComplete, hint }) {
   return (
     <label style={{ display: 'block', marginTop: 14 }}>
@@ -180,14 +205,5 @@ function Field({ label, type, value, onChange, autoComplete, hint }) {
       />
       {hint && <span style={{ display: 'block', fontFamily: sans, fontSize: 11.5, color: colors.faint, marginTop: 5 }}>{hint}</span>}
     </label>
-  )
-}
-
-function Notice({ tone, children }) {
-  const colour = tone === 'warn' ? colors.warn : colors.pass
-  return (
-    <div style={{ marginTop: 18, padding: '10px 12px', borderRadius: 6, border: `1px solid ${colour}55`, background: `${colour}10`, maxWidth: 560 }}>
-      <span style={{ fontFamily: sans, fontSize: 12.5, color: colour, lineHeight: 1.5 }}>{children}</span>
-    </div>
   )
 }

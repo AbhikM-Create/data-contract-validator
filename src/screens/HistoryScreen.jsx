@@ -1,7 +1,10 @@
 import { useState } from 'react'
+import AccountNotice from '../components/AccountNotice.jsx'
 import Staircase from '../components/Staircase.jsx'
+import { accountState } from '../lib/accounts.js'
 import { leadFailingLayer } from '../lib/runRecord.js'
 import { contractsInRuns, summariseRuns } from '../lib/runSummary.js'
+import { isConfigured } from '../lib/supabase.js'
 import { LAYERS } from '../lib/validate.js'
 import { go } from '../routes.js'
 import { chip, colors, ghostButton, label, mono, panel, sans, secondaryButton } from '../theme.js'
@@ -23,14 +26,7 @@ export default function HistoryScreen({ runs = [], loading, error, signedIn, onR
           title="History"
           blurb="Every validation you run is recorded here — when it ran, which contract it used, which file it checked, and how each layer came out."
         />
-        <div style={{ ...panel, padding: '24px 22px', marginTop: 20, maxWidth: 560 }}>
-          <div style={{ fontFamily: sans, fontSize: 14.5, fontWeight: 600, color: colors.ink }}>Sign in to keep a history</div>
-          <p style={{ fontFamily: sans, fontSize: 13.5, color: colors.mute, lineHeight: 1.6, marginTop: 8 }}>
-            Runs are saved to your account, so they need somewhere to belong. Signed out, checking a file still
-            works — the result just lives as long as the page is open.
-          </p>
-          <button onClick={() => go('signin')} style={{ ...secondaryButton, marginTop: 14 }}>Sign in</button>
-        </div>
+        <AccountNotice state={accountState({ configured: isConfigured, user: null })} surface="history" />
       </>
     )
   }

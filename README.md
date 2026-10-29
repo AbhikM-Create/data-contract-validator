@@ -120,6 +120,12 @@ a strict content security policy forbids scripts and network requests.
 
 ## Sign-off, recorded — and the go/no-go board
 
+Open **Sign-off → Show an example sign-off** to see the whole thing without an
+account: a submitted check with its verdicts and file fingerprints, a data
+owner's decision with its exceptions, the people and their roles, and the audit
+log. Accounts need a Supabase project (below); without one the app says so and
+everything else still works.
+
 With an account, a programme works as an **organisation** whose members hold
 roles: admin, migration engineer, business data owner, auditor. An engineer
 submits a check from Migrations; what is recorded is the pack's reference, the

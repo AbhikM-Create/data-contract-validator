@@ -1,3 +1,4 @@
+import { accountState, headerAccount } from '../lib/accounts.js'
 import { isConfigured, signOut } from '../lib/supabase.js'
 import { ROUTES, go } from '../routes.js'
 import { colors, ghostButton, mono, sans } from '../theme.js'
@@ -8,6 +9,7 @@ import { colors, ghostButton, mono, sans } from '../theme.js'
 // reader should never have to go looking for it.
 export default function AppShell({ route, user, authLoading, busy, engineError, onDismissError, children }) {
   const onLanding = route === 'home'
+  const control = headerAccount(accountState({ configured: isConfigured, loading: authLoading, user }), user?.email)
 
   return (
     <div style={{ background: colors.ground, minHeight: '100vh' }}>
@@ -63,31 +65,30 @@ export default function AppShell({ route, user, authLoading, busy, engineError, 
             })}
           </nav>
 
-          {isConfigured && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, paddingLeft: 10, borderLeft: `1px solid ${colors.panelEdge}` }}>
-              {/* Nothing is claimed about the account until the session has
-                  actually been restored — showing "Sign in" to someone who is
-                  signed in reads as having been logged out. */}
-              {authLoading ? (
-                <span style={{ fontFamily: sans, fontSize: 12.5, color: colors.faint }}>…</span>
-              ) : user ? (
-                <>
-                  <span
-                    title={user.email}
-                    style={{
-                      fontFamily: sans, fontSize: 12.5, color: colors.mute, maxWidth: 170,
-                      overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                    }}
-                  >
-                    {user.email}
-                  </span>
-                  <button onClick={() => signOut()} style={ghostButton}>Sign out</button>
-                </>
-              ) : (
-                <button onClick={() => go('signin')} style={ghostButton}>Sign in</button>
-              )}
-            </div>
-          )}
+          {/* Always here, whatever the state (lib/accounts.js). A control
+              that vanishes where a deployment has no account service teaches
+              a first-time reader that the product has no accounts, no teams
+              and no sign-off — the opposite of true. */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, paddingLeft: 10, borderLeft: `1px solid ${colors.panelEdge}` }}>
+            {control.kind === 'waiting' && <span style={{ fontFamily: sans, fontSize: 12.5, color: colors.mute }}>{control.label}</span>}
+            {control.kind === 'account' && (
+              <>
+                <span
+                  title={control.label}
+                  style={{
+                    fontFamily: sans, fontSize: 12.5, color: colors.mute, maxWidth: 170,
+                    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                  }}
+                >
+                  {control.label}
+                </span>
+                <button onClick={() => signOut()} style={ghostButton}>{control.action}</button>
+              </>
+            )}
+            {control.kind === 'action' && (
+              <button onClick={() => go(control.to)} title={control.title} style={ghostButton}>{control.label}</button>
+            )}
+          </div>
         </div>
       </header>
 

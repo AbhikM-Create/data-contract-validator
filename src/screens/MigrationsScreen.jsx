@@ -332,13 +332,17 @@ function Routing({ routing, onChange }) {
 // the data owner decides against the pack they are sent.
 function SubmitLine({ signoff, ready }) {
   if (!signoff) return null
-  const why = !signoff.signedIn
-    ? 'Sign in to submit it for sign-off in your organisation.'
-    : !signoff.organization
-      ? 'Join or create an organisation on Sign-off to submit it for a decision.'
-      : !signoff.canSubmit
-        ? `Only a migration engineer can submit in ${signoff.organization.name}.`
-        : null
+  // Agrees with the header and with Sign-off (lib/accounts.js): never ask for
+  // a sign-in this deployment cannot perform.
+  const why = signoff.accounts === 'unavailable'
+    ? 'Accounts are not set up in this copy, so there is nobody to submit it to — the pack is still yours to send.'
+    : signoff.accounts !== 'signed-in'
+      ? 'Sign in to submit it for sign-off in your organisation.'
+      : !signoff.organization
+        ? 'Join or create an organisation on Sign-off to submit it for a decision.'
+        : !signoff.canSubmit
+          ? `Only a migration engineer can submit in ${signoff.organization.name}.`
+          : null
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 10, flexWrap: 'wrap' }}>
       <button

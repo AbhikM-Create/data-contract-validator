@@ -1,8 +1,10 @@
 import { useState } from 'react'
-import { describeAudit, mayDecide, packReference, STATE_WORDS } from '../lib/orgRecords.js'
+import AccountNotice from '../components/AccountNotice.jsx'
+import { accountState } from '../lib/accounts.js'
+import { describeAudit, mayDecide, packReference, STATE_WORDS, verifyDefinition } from '../lib/orgRecords.js'
 import { DECISIONS, exceptionChoices, readDecision, ROLES } from '../lib/signoff.js'
 import { isConfigured } from '../lib/supabase.js'
-import { go } from '../routes.js'
+import { signoffSample } from '../samples/signoffSample.js'
 import { colors, ghostButton, label, mono, panel, primaryButton, sans, secondaryButton } from '../theme.js'
 import { ScreenHead, Section } from './ValidateScreen.jsx'
 
@@ -15,22 +17,7 @@ export default function SignoffScreen({ user, signoff }) {
   const [newOrg, setNewOrg] = useState('')
 
   if (!isConfigured || !user) {
-    return (
-      <>
-        <ScreenHead title="Sign-off" blurb="Record who accepted each migration cycle, against the exact files and definitions they accepted." />
-        <div style={{ ...panel, padding: '24px 22px', marginTop: 20, maxWidth: 620 }}>
-          <div style={{ fontFamily: sans, fontSize: 14.5, fontWeight: 600, color: colors.ink }}>
-            {isConfigured ? 'Sign in to work with your organisation' : 'Sign-off needs an account'}
-          </div>
-          <p style={{ fontFamily: sans, fontSize: 13.5, color: colors.mute, lineHeight: 1.6, marginTop: 8 }}>
-            {isConfigured
-              ? 'Sign-off is shared: an engineer submits a check, a business data owner decides, an auditor reads the record. That needs to know who you are.'
-              : 'This copy of the app has no Supabase project configured. The evidence pack still works: print its sign-off sheet and sign it on paper.'}
-          </p>
-          {isConfigured && <button onClick={() => go('signin')} style={{ ...secondaryButton, marginTop: 14 }}>Sign in</button>}
-        </div>
-      </>
-    )
+    return <WithoutAnAccount state={accountState({ configured: isConfigured, user })} />
   }
 
   const { organizations, active, choose, invitationsForMe, notice } = signoff
@@ -125,12 +112,100 @@ export default function SignoffScreen({ user, signoff }) {
   )
 }
 
+// --- without an account ------------------------------------------------------
+
+// Sign-off is what a programme buys this tool for, so the screen has to show
+// it to someone who cannot sign in — otherwise the most important thing here
+// is a grey card. The example is the real engine's output (samples/
+// signoffSample.js), rendered by the same components as a real submission.
+function WithoutAnAccount({ state }) {
+  const [example, setExample] = useState(null)
+  const [busy, setBusy] = useState(false)
+
+  const show = async () => {
+    if (example) return setExample(null)
+    setBusy(true)
+    setExample(await signoffSample())
+    setBusy(false)
+  }
+
+  const nameOf = (id) => example?.members.find((m) => m.user_id === id)?.email ?? 'someone no longer in the organisation'
+  // The example's definitions are already in hand, but they go through the
+  // same verification orgStore does on a real read — so "show exactly what
+  // was signed off" proves the fingerprint here exactly as it would against
+  // the database, rather than being told to trust it.
+  const reader = {
+    loadDefinition: async (id) => {
+      const row = example.definitions[id]
+      return { definition: { ...row, ...(await verifyDefinition(row)) }, error: null }
+    },
+  }
+
+  return (
+    <>
+      <ScreenHead
+        title="Sign-off"
+        blurb="Each decision is recorded against the SHA-256 of every file checked and the fingerprints of the rules and mapping — not against a name. Nobody decides on their own work, and nothing here can be changed afterwards."
+      />
+      <AccountNotice state={state} surface="signoff">
+        <button onClick={show} disabled={busy} style={{ ...ghostButton, padding: '9px 14px', opacity: busy ? 0.6 : 1 }}>
+          {busy ? 'Building it…' : example ? 'Hide the example' : 'Show an example sign-off'}
+        </button>
+      </AccountNotice>
+
+      {example && (
+        <div style={{ marginTop: 20, borderLeft: `3px solid ${colors.accent}`, paddingLeft: 16 }}>
+          <div style={{ ...label, color: colors.accent }}>An example — nobody here is real</div>
+          <p style={{ fontFamily: sans, fontSize: 13, color: colors.mute, lineHeight: 1.6, margin: '6px 0 0', maxWidth: 720 }}>
+            {example.organization.name}, signing off the example migration’s second mock. The people and their decision are invented;
+            the verdicts, counts, file fingerprints and rules are the real output of the checks on this page’s example files, so
+            “show exactly what was signed off” verifies here as it would anywhere.
+          </p>
+
+          <Section title="Checks submitted for sign-off" blurb="An engineer submits; a business data owner decides. The pack itself is never uploaded.">
+            {example.submissions.map((s) => (
+              <Submission key={s.id} submission={s} me="nobody" roles={[]} nameOf={nameOf} signoff={reader} example />
+            ))}
+          </Section>
+
+          <Section title="People" blurb="One person can hold several roles, but the database refuses a decision on a check they submitted or on definitions they recorded.">
+            <div style={{ ...panel, padding: 14 }}>
+              <table style={{ borderCollapse: 'collapse', width: '100%' }}>
+                <tbody>
+                  {example.members.map((m) => (
+                    <tr key={`${m.user_id}:${m.role}`}>
+                      <td style={cell()}>{m.email}</td>
+                      <td style={cell(200)}>{roleLabel(m.role)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <RoleList />
+            </div>
+          </Section>
+
+          <Section title="Audit log" blurb="Written by the database itself on every change, and append-only: no role can edit or delete an entry.">
+            <div style={{ ...panel, padding: '6px 14px' }}>
+              {example.audit.map((entry) => (
+                <div key={entry.id} style={{ display: 'flex', gap: 14, padding: '6px 0', borderBottom: `1px solid ${colors.panelSunk}` }}>
+                  <span style={{ fontFamily: mono, fontSize: 11.5, color: colors.mute, whiteSpace: 'nowrap' }}>{when(entry.at)}</span>
+                  <span style={{ fontFamily: sans, fontSize: 13, color: colors.ink }}>{describeAudit(entry, nameOf)}</span>
+                </div>
+              ))}
+            </div>
+          </Section>
+        </div>
+      )}
+    </>
+  )
+}
+
 // --- one submission -------------------------------------------------------------
 
 const STATE_TONE = { awaiting: colors.faint, accepted: colors.pass, 'accepted-with-exceptions': colors.warn, rejected: colors.fail }
 const VERDICT = { READY: 'Ready to load', NOT_READY: 'Not ready', UNVERIFIED: 'Not confirmed', PASS: 'Reconciled', FAIL: 'Did not reconcile' }
 
-function Submission({ submission: s, me, roles, nameOf, signoff }) {
+function Submission({ submission: s, me, roles, nameOf, signoff, example = false }) {
   const [open, setOpen] = useState(false)
   const may = mayDecide(s, me, roles, s.definitionsRecordedBy)
   const tone = STATE_TONE[s.state]
@@ -181,7 +256,7 @@ function Submission({ submission: s, me, roles, nameOf, signoff }) {
               {d.comment && <div style={{ fontFamily: sans, fontSize: 12.5, color: colors.mute, marginTop: 4 }}>“{d.comment}”</div>}
             </div>
           ))}
-          {s.subject && (may.allowed
+          {s.subject && !example && (may.allowed
             ? <DecisionForm submission={s} onDecide={(decision) => signoff.decide(s, decision)} />
             : <p style={{ fontFamily: sans, fontSize: 12.5, color: colors.faint, marginTop: 10 }}>{may.reason}</p>)}
         </div>

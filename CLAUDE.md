@@ -278,7 +278,16 @@ nav and the trust line, which must stay true.
   threshold needs no UI change.
 
 ## Accounts and persistence (Supabase)
-Optional: without `.env.local` the app runs fully, minus saving. Contracts and
+Optional: without `.env.local` the app runs fully, minus saving. `lib/accounts.js`
+is the ONE place that decides what is said about an account, and the header,
+Contracts, History, Sign-off and the Migrations submit line all read it: the
+header control is ALWAYS rendered (a control that vanishes teaches a first
+reader that the product has no accounts at all), and no surface offers a
+sign-in a deployment cannot perform — `unavailable` leads to an explainer, not
+a disabled form. `samples/signoffSample.js` is the worked sign-off that screen
+shows without an account: a real pack's subject, fingerprints and verdicts
+from the example migration, with invented people, verified in the page by the
+same `verifyDefinition` a real read uses. Contracts and
 run summaries save to the signed-in account; row-level security scoped to
 `auth.uid()` is the whole access model (the publishable key ships in the
 bundle by design). `npm run verify:rls` applies `supabase/schema.sql` to a
