@@ -1,11 +1,12 @@
 import { useState } from 'react'
+import ConfirmButton from './ConfirmButton.jsx'
 import { go } from '../routes.js'
 import { colors, ghostButton, label, panel, sans, secondaryButton } from '../theme.js'
 
 // The contracts in this account. A contract is worth writing only if it
 // outlives the file it was written against, and this is where that becomes
 // visible: a list you come back to, not a download you have to find again.
-export default function SavedContracts({ contracts, loading, openId, signedIn, error, onOpen, onDelete, onNew }) {
+export default function SavedContracts({ contracts, loading, openId, signedIn, error, onOpen, onDelete, onNew, ruleCount = 0 }) {
   const [query, setQuery] = useState('')
   const [confirming, setConfirming] = useState(null)
 
@@ -29,7 +30,14 @@ export default function SavedContracts({ contracts, loading, openId, signedIn, e
     <div style={{ ...panel, padding: '18px 20px' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
         <span style={label}>Your contracts</span>
-        <button onClick={onNew} style={ghostButton}>+ New contract</button>
+        <ConfirmButton
+          needsConfirm={ruleCount > 0}
+          question={`Start a new contract? The ${ruleCount} rule${ruleCount === 1 ? '' : 's'} open now are cleared from this page.`}
+          confirmLabel="Start a new contract"
+          onConfirm={onNew}
+        >
+          + New contract
+        </ConfirmButton>
       </div>
 
       {error && (

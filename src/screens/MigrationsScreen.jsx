@@ -1,10 +1,17 @@
 import { useRef } from 'react'
+import ColumnMatcher from '../components/ColumnMatcher.jsx'
+import ConfirmButton from '../components/ConfirmButton.jsx'
 import CycleHistory from '../components/CycleHistory.jsx'
 import FormatPicker from '../components/FormatPicker.jsx'
+import SignoffForm from '../components/SignoffForm.jsx'
+import PackPicker, { PackGuide } from '../components/PackPicker.jsx'
 import ReadinessReport from '../components/ReadinessReport.jsx'
 import ReconReport from '../components/ReconReport.jsx'
 import SpecBuilder from '../components/SpecBuilder.jsx'
 import UploadCard from '../components/UploadCard.jsx'
+import { expectedColumns } from '../lib/columnMap.js'
+import { SENSITIVITIES, suggestTag } from '../lib/masking.js'
+import { ownersOf } from '../lib/signoff.js'
 import { CYCLES, cleanSpec, cycleHistory, suggestFieldPairs } from '../lib/migrationObject.js'
 import { normalizeSpec, specIssues } from '../lib/reconcile.js'
 import { colors, ghostButton, label, mono, panel, primaryButton, sans, secondaryButton } from '../theme.js'
@@ -23,11 +30,18 @@ import { colors, ghostButton, label, mono, panel, primaryButton, sans, secondary
 export default function MigrationsScreen(props) {
   const {
     object, dirty, notice, files, recon, readiness, sessionRules,
-    onChange, onOpenFile, onDownload, onNew, onSample,
+    onChange, onOpenFile, onDownload, onNew, onSample, onStartFromPack,
     onLoadFile, onClearFile, onCrosswalk,
     onReconcile, onCheckReadiness, onDownloadFixList, onExportFinding,
-    onUseSessionRules, onEditRules, onLoadContract, onDownloadEvidence, onFormat,
+    onUseSessionRules, onEditRules, onLoadContract, onDownloadEvidence, onFormat, onWorkbook, unmask, onUnmask, onColumnMap, onShare,
   } = props
+  // Column matching: what the definitions read from each file, and which of
+  // the file's columns stands for it (columnMap.js).
+  const expected = expectedColumns(object)
+  const columnMap = object.columnMap ?? {}
+  const matcher = (role, what) => (
+    <ColumnMatcher what={what} expected={expected[role] ?? []} file={files[role]} map={columnMap[role] ?? {}} onChange={(map) => onColumnMap(role, map)} />
+  )
   const formats = object.formats ?? { load: {}, source: {}, target: {} }
 
   const openInput = useRef(null)
@@ -40,6 +54,8 @@ export default function MigrationsScreen(props) {
   const suggestions = bothRead ? suggestFieldPairs(sourceColumns, targetColumns, [...spec.mapping, ...spec.key.source.map((s, i) => ({ source: s, target: spec.key.target[i] }))]) : []
   const targetKey = spec.key.target.filter(Boolean)
   const rules = object.contract.rules
+  // The reference files this object's rules name — one card each, no declaring.
+  const referenceNames = [...new Set(rules.filter((r) => r.kind === 'reference' && r.target?.file).map((r) => r.target.file))]
   const evidenceReady = Boolean((readiness && !readiness.stale) || (recon && !recon.stale))
   const empty = !object.name && rules.length === 0 && object.runs.length === 0 && spec.mapping.length === 0
 
@@ -70,13 +86,25 @@ export default function MigrationsScreen(props) {
           <input ref={openInput} type="file" accept=".json,application/json" style={{ display: 'none' }} onChange={(e) => { if (e.target.files?.[0]) onOpenFile(e.target.files[0]); e.target.value = '' }} />
           <button onClick={() => openInput.current?.click()} style={secondaryButton}>Open a file</button>
           <button onClick={onDownload} style={secondaryButton}>Download{dirty ? ' · unsaved changes' : ''}</button>
-          <button onClick={onNew} style={ghostButton}>New</button>
+          <button onClick={onShare} disabled={empty} title="A copy safe to send: definitions and counts, no file names, no key maps, no sign-off" style={{ ...secondaryButton, opacity: empty ? 0.45 : 1, cursor: empty ? 'default' : 'pointer' }}>Share definitions</button>
+          <ConfirmButton
+            needsConfirm={dirty || !empty}
+            question={dirty
+              ? `Start a new object? “${object.name || 'This object'}” has changes you haven’t downloaded — they will be lost.`
+              : `Start a new object? “${object.name || 'This object'}” is cleared from this page.`}
+            confirmLabel="Start a new object"
+            onConfirm={onNew}
+          >
+            New
+          </ConfirmButton>
         </div>
         <p style={{ fontFamily: sans, fontSize: 12, color: colors.faint, margin: '10px 0 0', lineHeight: 1.5 }}>
           The file holds this object’s rules, mapping spec and the results of every check — counts and verdicts, never a record
-          from your data. The CLIs read the same file: <span style={{ fontFamily: mono }}>reconcile.mjs employees.migration.json …</span>
+          from your data. The command line reads the same file: <span style={{ fontFamily: mono }}>dcv reconcile employees.migration.json …</span>
         </p>
+        <PackPicker needsConfirm={dirty || !empty} onStart={onStartFromPack} />
         {notice && <Notice notice={notice} />}
+        {object.pack && <PackGuide packRef={object.pack} />}
         {empty && (
           <div style={{ marginTop: 12, padding: '12px 14px', background: colors.panelSunk, borderRadius: 7, display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
             <span style={{ fontFamily: sans, fontSize: 13.5, color: colors.ink, flex: 1, minWidth: 240 }}>
@@ -121,9 +149,27 @@ export default function MigrationsScreen(props) {
           accent={colors.accent}
           onFile={(file) => onLoadFile('load', file)}
           onClear={() => onClearFile('load')}
+          onWorkbook={(choice) => onWorkbook('load', choice)}
         />
         <FormatPicker format={formats.load ?? {}} onChange={(format) => onFormat('load', format)} />
+        {matcher('load', 'load file')}
         </div>
+        {referenceNames.map((name) => (
+          <div key={name}>
+          <UploadCard
+            step="1"
+            title={`Reference file “${name}”`}
+            tag={`reference: ${name}`}
+            hint={`The file the rules call “${name}” — every value they check must exist in it. Read here like the load file; never stored.`}
+            file={files[`reference:${name}`]}
+            accent={colors.accent}
+            onFile={(file) => onLoadFile(`reference:${name}`, file)}
+            onClear={() => onClearFile(`reference:${name}`)}
+            onWorkbook={(choice) => onWorkbook(`reference:${name}`, choice)}
+          />
+          {matcher(`reference:${name}`, `reference file “${name}”`)}
+          </div>
+        ))}
       </div>
       <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap', marginTop: 10 }}>
         <button
@@ -133,6 +179,13 @@ export default function MigrationsScreen(props) {
         >
           Check load readiness
         </button>
+        {!(files.load?.rowCount > 0 && rules.length > 0) && (
+          <span style={{ fontFamily: sans, fontSize: 12.5, color: colors.faint }}>
+            {rules.length === 0 && !(files.load?.rowCount > 0)
+              ? 'Needs the target rules and a load file.'
+              : rules.length === 0 ? 'Needs the target rules — write them on Contracts or load a contract file.' : 'Needs a load file.'}
+          </span>
+        )}
         {/* The target key is one setting, shared with the mapping spec below —
             the same column identifies a record in the load file and in the
             target. Offered here too, so checking a load file alone does not
@@ -161,7 +214,7 @@ export default function MigrationsScreen(props) {
           </span>
         )}
       </div>
-      {readiness && <ReadinessReport report={readiness.report} stale={readiness.stale} onDownloadFixList={onDownloadFixList} />}
+      {readiness && <ReadinessReport report={readiness.report} stale={readiness.stale} onDownloadFixList={onDownloadFixList} owner={ownersOf(object).readiness} />}
 
       {/* --- after the load ----------------------------------------------- */}
       <Phase step="2" title="After the load — did it arrive whole?">
@@ -180,8 +233,10 @@ export default function MigrationsScreen(props) {
           accent={colors.accent}
           onFile={(file) => onLoadFile('source', file)}
           onClear={() => onClearFile('source')}
+          onWorkbook={(choice) => onWorkbook('source', choice)}
         />
         <FormatPicker format={formats.source ?? {}} onChange={(format) => onFormat('source', format)} />
+        {matcher('source', 'source extract')}
         </div>
         <div>
         <UploadCard
@@ -193,8 +248,10 @@ export default function MigrationsScreen(props) {
           accent={colors.accent}
           onFile={(file) => onLoadFile('target', file)}
           onClear={() => onClearFile('target')}
+          onWorkbook={(choice) => onWorkbook('target', choice)}
         />
         <FormatPicker format={formats.target ?? {}} onChange={(format) => onFormat('target', format)} />
+        {matcher('target', 'target extract')}
         </div>
       </div>
 
@@ -217,6 +274,11 @@ export default function MigrationsScreen(props) {
             >
               Reconcile
             </button>
+            {issues.length > 0 && (
+              <span style={{ fontFamily: sans, fontSize: 12.5, color: colors.faint, marginLeft: 12 }}>
+                Fix the {issues.length === 1 ? 'issue' : `${issues.length} issues`} in the mapping spec above first.
+              </span>
+            )}
           </div>
         </>
       ) : (
@@ -224,7 +286,7 @@ export default function MigrationsScreen(props) {
           Read both extracts and the mapping spec appears here, its dropdowns filled with their columns.
         </p>
       )}
-      {recon && <ReconReport report={recon.report} stale={recon.stale} onExport={onExportFinding} />}
+      {recon && <ReconReport report={recon.report} stale={recon.stale} onExport={onExportFinding} owners={ownersOf(object)} />}
 
       {/* --- evidence ------------------------------------------------------ */}
       <Phase step="3" title="Evidence for sign-off">
@@ -232,6 +294,12 @@ export default function MigrationsScreen(props) {
         SHA-256 fingerprint of every file and of the rules and mapping, and a sign-off block. It quotes records from your
         files, so it is made in this page and never uploaded. Print it, or save it as PDF from the browser.
       </Phase>
+      <SensitiveFields
+        tags={object.tags ?? {}}
+        columns={[...new Set(Object.values(files).filter(Boolean).flatMap((f) => f.columns ?? []))]}
+        onChange={(tags) => onChange({ tags })}
+      />
+      <SignoffForm object={object} files={files} readiness={readiness} recon={recon} onChange={onChange} />
       <div style={{ ...panel, padding: 14, marginTop: 10 }}>
         <EvidenceLine title="Before the load" state={readiness ? (readiness.stale ? 'stale' : 'current') : 'none'} />
         <EvidenceLine title="After the load" state={recon ? (recon.stale ? 'stale' : 'current') : 'none'} />
@@ -242,6 +310,26 @@ export default function MigrationsScreen(props) {
         >
           Download the evidence pack
         </button>
+        {Object.keys(object.tags ?? {}).length > 0 && (
+          <label style={{ display: 'flex', alignItems: 'flex-start', gap: 8, marginTop: 12, cursor: 'pointer', maxWidth: 760 }}>
+            <input type="checkbox" checked={unmask} onChange={(e) => onUnmask(e.target.checked)} style={{ marginTop: 3 }} />
+            <span style={{ fontFamily: sans, fontSize: 13, color: colors.ink, lineHeight: 1.5 }}>
+              Show tagged values unmasked in the next evidence pack, fix list and export
+              <span style={{ display: 'block', fontSize: 12, color: unmask ? colors.warn : colors.faint }}>
+                {unmask
+                  ? 'Unmasked: the pack will say it contains unmasked personal data, and the fix list is named …-UNMASKED. Aadhaar stays masked.'
+                  : 'Masked by default: identifiers show their last 4 characters, personal and pay values show as [masked]. Keys, counts and totals always show.'}
+              </span>
+            </span>
+          </label>
+        )}
+        {!evidenceReady && (
+          <span style={{ fontFamily: sans, fontSize: 12.5, color: colors.faint, marginLeft: 12 }}>
+            {readiness || recon
+              ? 'Every result has changed since it ran — run a check again to include it.'
+              : 'Run a check first: only results that match the files on screen go in.'}
+          </span>
+        )}
       </div>
 
       {/* --- history ------------------------------------------------------- */}
@@ -264,6 +352,56 @@ const field = (width) => ({
   padding: '8px 10px',
   outline: 'none',
 })
+
+// Which fields are sensitive: a tag per column, saved with the object, applied
+// wherever a value leaves the page. Proposed from the column name; the person
+// decides. On screen, values stay visible — these are the person's own files.
+function SensitiveFields({ tags, columns, onChange }) {
+  const all = [...new Set([...columns, ...Object.keys(tags)])]
+  if (all.length === 0) return null
+  const set = (column, tag) => {
+    const next = { ...tags }
+    if (tag) next[column] = tag
+    else delete next[column]
+    onChange(next)
+  }
+  const proposals = all.filter((c) => !tags[c] && suggestTag(c))
+  return (
+    <div style={{ ...panel, padding: 14, marginTop: 10 }}>
+      <div style={label}>Sensitive fields</div>
+      <p style={{ fontFamily: sans, fontSize: 12.5, color: colors.mute, margin: '6px 0 10px', lineHeight: 1.5, maxWidth: 760 }}>
+        Tagged values are masked in the evidence pack, the fix list and exported findings. Tags are saved with the object — column
+        names only, never a value. This supports the masking safeguard; it does not by itself make anyone DPDP compliant.
+      </p>
+      {proposals.length > 0 && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center', marginBottom: 10 }}>
+          <span style={{ fontFamily: sans, fontSize: 12.5, color: colors.ink }}>
+            Suggested from the column names: {proposals.map((c) => `${c} (${suggestTag(c)})`).join(', ')}
+          </span>
+          <button onClick={() => onChange({ ...tags, ...Object.fromEntries(proposals.map((c) => [c, suggestTag(c)])) })} style={ghostButton}>
+            Tag these
+          </button>
+        </div>
+      )}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))', gap: 8 }}>
+        {all.map((column) => (
+          <label key={column} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ fontFamily: mono, fontSize: 12, color: colors.ink, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>{column}</span>
+            <select
+              aria-label={`sensitivity of ${column}`}
+              value={tags[column] ?? ''}
+              onChange={(e) => set(column, e.target.value)}
+              style={{ ...field(150), fontSize: 12, padding: '5px 6px', cursor: 'pointer' }}
+            >
+              <option value="">not sensitive</option>
+              {SENSITIVITIES.map((s) => <option key={s.id} value={s.id}>{s.id}</option>)}
+            </select>
+          </label>
+        ))}
+      </div>
+    </div>
+  )
+}
 
 function Phase({ step, title, children }) {
   return (
@@ -296,7 +434,7 @@ function EvidenceLine({ title, state }) {
 function Notice({ notice }) {
   const tone = notice.tone === 'bad' ? colors.fail : notice.tone === 'warn' ? colors.warn : colors.accent
   return (
-    <div style={{ marginTop: 12, padding: '9px 12px', borderLeft: `3px solid ${tone}`, background: colors.panelSunk, borderRadius: 4 }}>
+    <div role={notice.tone === 'bad' ? 'alert' : 'status'} style={{ marginTop: 12, padding: '9px 12px', borderLeft: `3px solid ${tone}`, background: colors.panelSunk, borderRadius: 4 }}>
       <div style={{ fontFamily: sans, fontSize: 13, color: colors.ink }}>{notice.text}</div>
       {notice.details?.length > 0 && (
         <ul style={{ margin: '6px 0 0', paddingLeft: 18 }}>

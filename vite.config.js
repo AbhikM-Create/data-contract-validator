@@ -73,6 +73,13 @@ export default defineConfig(({ mode }) => {
         },
       },
     },
+    // The engine worker gets a stable name beside the bundle too: a host that
+    // is given a list of files to publish must be given this one, and a name
+    // that changes on every build is how it got left out.
+    worker: {
+      format: 'es',
+      rollupOptions: { output: { entryFileNames: 'app-worker.js', chunkFileNames: 'app-worker-[name].js', assetFileNames: 'app-worker[extname]' } },
+    },
     test: { exclude: ['e2e/**', 'node_modules/**'] },
   }
 })

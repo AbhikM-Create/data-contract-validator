@@ -12,7 +12,7 @@ import Staircase from './Staircase.jsx'
 const fmt = (n) => (Number.isFinite(n) ? n.toLocaleString('en-US') : '—')
 const PREVIEW = 5
 
-export default function ReconReport({ report, stale, onExport }) {
+export default function ReconReport({ report, stale, onExport, owners }) {
   const steps = report.steps.map((step) => ({ ...step, violations: step.findings }))
   const lead = steps.find((s) => s.status === 'FAIL')
   const c = report.counts
@@ -43,7 +43,7 @@ export default function ReconReport({ report, stale, onExport }) {
       <Staircase layers={steps} title="How far the load got" subject="load" note="Each step is meaningless if the one above it broke" />
 
       {steps.map((step, index) => (
-        <StepCard key={step.id} step={step} index={index} isLead={lead?.id === step.id} report={report} onExport={onExport} />
+        <StepCard key={step.id} step={step} index={index} isLead={lead?.id === step.id} report={report} onExport={onExport} owner={owners?.[step.id]} />
       ))}
     </div>
   )
@@ -59,7 +59,7 @@ function Figure({ label: title, value, note }) {
   )
 }
 
-function StepCard({ step, index, isLead, report, onExport }) {
+function StepCard({ step, index, isLead, report, onExport, owner }) {
   const tone = statusColor[step.status] ?? colors.faint
   return (
     <section style={{ ...panel, borderColor: isLead ? `${tone}88` : colors.panelEdge, padding: '14px 16px', marginTop: 10 }}>
@@ -74,6 +74,10 @@ function StepCard({ step, index, isLead, report, onExport }) {
       )}
       {step.status === 'SKIPPED' && step.reason && (
         <p style={{ fontFamily: sans, fontSize: 13.5, color: colors.mute, margin: '10px 0 0' }}>{step.reason}</p>
+      )}
+      {/* Which step caught it says whose fix it is (v3 §5.4). */}
+      {step.status === 'FAIL' && owner && (
+        <p style={{ fontFamily: sans, fontSize: 13, color: colors.mute, margin: '8px 0 0' }}>Whose fix: <strong style={{ color: colors.ink, fontWeight: 600 }}>{owner}</strong></p>
       )}
       {step.findings.map((finding, i) => (
         <Finding key={`${finding.code}-${finding.column ?? ''}-${i}`} finding={finding} tone={tone} report={report} onExport={onExport} />

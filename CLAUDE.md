@@ -22,6 +22,13 @@ it is. Product spec and history: `docs/v2-spec.md`.
   and never imports `src/samples/` (demo data).
 - `src/lib/parseCsv.js` is the only engine module that knows about papaparse
   (reading, and writing via `toCsv`). Rows in and out are plain objects.
+- `src/lib/parseXlsx.js` is the only module that knows about SheetJS (v3 F7).
+  SheetJS CE 0.20.3 is pinned from cdn.sheetjs.com (the npm registry copy is
+  stale and has known advisories) as a devDependency, bundled into the worker
+  only, and left out of the npm package. A number cell is written in the file's
+  declared decimal mark and a date cell as ISO, so the engine and its readers
+  are unchanged; merged cells, multi-row headers and .xls are refused. The page
+  recognises a workbook by its bytes through `fileKind.js`, never importing it.
 - `scripts/lib/` is the Node layer (streaming, partitions on disk, hashing);
   `cli/` is the `dcv` commands; `bin/dcv.mjs` dispatches. The browser runs the
   engine in `engineWorker.js`, which owns the parsed rows.
@@ -63,7 +70,8 @@ a DISTRIBUTION break (same meaning, wrong value). `samples.test.js` pins that th
 `columns[]` (the baseline profile, what the data WAS — inference fills it) and
 `rules[]` (what it MUST BE — a person fills it). A rule is
 `{ kind, column, op, target, targetIsColumn?, when?, severity? }`; kinds are
-`type`, `nullRule`, `comparison`, `range`, `valueSet`, `crossColumn`. There is
+`type`, `nullRule`, `comparison`, `range`, `valueSet`, `crossColumn`, and from v3
+`identifier`, `unique`, `aggregate`, `reference` (v3-spec §5.1). There is
 deliberately NO expression parser. `rules.js` is the only place that evaluates
 rules; `authoredContract.js` builds contracts. `validate()` only normalises the
 contract and merges rule outcomes into the layers — never put authoring logic
@@ -76,8 +84,27 @@ in the drift checks; the contract object is the interface.
   reason (`rule:invalid`, `rule:missing-column`) — never a silent PASS.
 - Numeric/date ranges and orderings FAIL a value that cannot be read that way;
   they never fall back to comparing text.
-- Rule → layer: type/nullRule → schema, valueSet/crossColumn → semantics,
-  comparison/range → distribution. `severity: 'reject' | 'warn'` matters to
+- Rule → layer: type/nullRule/identifier/unique → schema, valueSet/crossColumn/
+  reference → semantics, comparison/range/aggregate → distribution.
+- The v3 kinds, inside `createRuleChecker` like the rest:
+  - `identifier` is a CLOSED list in `identifiers.js` (pan, gstin with its Luhn
+    mod-36 check character, ifsc, uan, pin) — never a pattern an author types.
+    Adding one is an engine change with reference vectors and a mutation test.
+  - `unique` needs its repeated values found before rows are judged, like the
+    record key: `prepareRules` in memory, a tagged first pass on disk when
+    streaming. Every copy fails. Without its set it is UNCHECKED
+    (`rule:not-prepared`), never judged against nothing.
+  - `aggregate` (sum/count, optional `groupBy`, `tolerance`) is totalled as rows
+    pass and judged once at the end. It rejects no record: in readiness a failed
+    reject-severity total is a FILE-LEVEL finding that makes the file NOT_READY,
+    reported in `groups` (examples stay row-level). An unreadable amount makes
+    the total UNCHECKED (`rule:unreadable`), never summed as zero.
+  - `reference` checks values against a declared reference file's column —
+    role `reference:<name>` in the workspace, `--reference name=file` on the
+    CLI (value sets must fit in memory; refused past 10M). Without the file it
+    is UNCHECKED (`rule:missing-reference`) and the file is not called ready.
+  - `unique` on one column exports as ODCS `unique`; ODCS `unique`/`primaryKey`
+    import as `unique` rules. `severity: 'reject' | 'warn'` matters to
   readiness; `validate()` ignores it. Reject is the default and is omitted when
   saved, so older contracts read exactly as before.
 
@@ -97,6 +124,10 @@ not an extension of it.
 - Duplicate/blank keys are set aside, never guessed at; a key duplicated in the
   target is not ALSO reported missing — one fault, one finding.
 - Out-of-scope rows are counted and reported, never silently dropped.
+- A control total is a SUM of an amount (default) or, from v3, a COUNT of
+  records per group (`fn: 'count'`, no amount column) — headcount by location.
+  Groups are the values as written: a group spelled differently on the two
+  sides shows as a broken total until a group crosswalk joins them.
 - An unconfigured step is SKIPPED, never PASS; a spec naming a missing column,
   an unknown key option or an unknown format is INVALID, with every reason.
 - A matched record with a field that could not be compared (no crosswalk entry)
@@ -109,16 +140,22 @@ not an extension of it.
 ## Load readiness — will the target accept the file?
 A view over `createRuleChecker`, never a second evaluator. Counts RECORDS: a
 record broken by three rules is one rejection with three reasons. With a key,
-blank and duplicate keys are rejections (every copy). Statuses: READY,
+blank and duplicate keys are rejections (every copy). A composite key, and a
+`unique` rule's columns, are compared joined unambiguously (JSON), never with
+a separator a value could hold — ("x / y", "z") and ("x", "y / z") are two
+records; " / " is only the display form (`keyLabel`). Statuses: READY,
 NOT_READY, UNVERIFIED (nothing failed but something could not be checked —
 never call that ready), INVALID.
 
 ## File formats — declared, never guessed
 A format is declared once per file — encoding, decimal point or comma, date
-pattern (`formats.js`) — in a contract's `format`, a spec's `formats`, a
+pattern, digit grouping (`formats.js`) — in a contract's `format`, a spec's `formats`, a
 migration object's `formats` per role. Where a value could be read two ways and
 nothing is declared, it is NOT read as a number or date at all, so a
 disagreement surfaces instead of a guess.
+- Indian digit grouping (`1,23,456.78`) is a declared part, `grouping: 'indian'`,
+  decimal point only. Undeclared it stays unreadable; the undeclared and western
+  readers are unchanged (v3 F6, `formats.test.js`).
 - UTF-8 is decoded strictly and refused with the likely cause, never repaired
   (`decodeBytes`, and a strict streaming decoder in `csvStream.mjs`).
 - `parseNumber`: a comma must be a well-formed thousands separator; "1,5" is
@@ -127,6 +164,30 @@ disagreement surfaces instead of a guess.
   target's. A guessed day/month order would make a swap in flight read correct.
 - Key options `stripLeadingZeros` (all-digit keys only) and `ignoreCase`
   (Unicode folding: Weiß = WEISS) are declared, never inferred.
+
+## Column matching — declared, never guessed (final-spec C1)
+A definition names the column it reads; a client's export rarely uses the same
+header. A migration object's `columnMap` says, per file role (`load`, `source`,
+`target`, `reference:<name>`), which file column stands for the column the
+definitions expect: `{ source: { "Name": "Ledger Name" } }`. `columnMap.js` is
+pure and holds column names only.
+- Applied in ONE place per runtime, where rows enter the engine: `engineWorker.js`
+  (`applyColumnMap` renames the held rows; `requireColumnMap` before each check)
+  and `csvStream.mjs` (`readCsvHeader`/`streamCsv` take the map). The engine sees
+  the expected names and is unchanged; so do tags, masking and the fix list.
+- Chosen from dropdowns (`ColumnMatcher.jsx`). `proposeMatches` proposes only
+  when exactly one unused file column has the same name ignoring case, spaces
+  and punctuation, and nothing is matched until a person accepts it.
+- A map that does not fit the file (a column the file lacks, one file column
+  for two names, a name the file already uses) is refused WHOLE — never applied
+  in part. An unmatched expected column stays missing, so its rules are
+  UNCHECKED as before.
+- The map is part of the stamps (changing a match makes that check stale) and
+  is printed and fingerprinted in the evidence pack — only when there is one,
+  so an object without it carries the fingerprints it always did.
+- Proof: `streaming.test.js` and the Finance pack's tests rename every header
+  and hold the mapped reports to deep equality with the originals; a wrong
+  match is caught by the check it breaks.
 
 ## Data boundaries — what is stored, what never is
 Each boundary is enforced in ONE place and proved by a test that collects real
@@ -138,17 +199,62 @@ module before adding any store.
   column) and counts. Never messages or evidence.
 - `migrationObject.js` — an object file holds rules, spec, formats and runs;
   a run holds counts, rates and verdicts. `cleanRun` rebuilds runs field by
-  field on read, so a hand-edited file cannot smuggle a value in.
+  field on read, so a hand-edited file cannot smuggle a value in. From v3 it
+  also holds `columnMap` (column names) and `tags`, `owners` and `signoff` — what people typed (identity,
+  who exported each file, a decision per difference keyed by a short hash of
+  the rule description or by step/code/column, scope, signer names and dates;
+  `decisionFor` still reads decisions saved under the unhashed description,
+  so a long value-set rule cannot lose its decision on save). `cleanSignoff`
+  (`signoff.js`) keeps only bounded strings in known fields, on save and read.
+  Signer names are the signers' personal data, kept by the user.
+- `shareDefinitions.js` (final-spec C7) — the ONE file that may be sent to
+  someone else (workspace "Share definitions", `dcv share`). Definitions and
+  run counts; never the sign-off record, owners' names, the object's name, its
+  wave or any file name. A crosswalk leaves only if it was DECLARED a code list
+  (`mapKind: 'codeList'`, the person's choice; packs' crosswalks are code lists)
+  and holds at most 500 entries; a key map (`keyMap`) never leaves, and an
+  undeclared one is treated as record values. The file lists what it left out
+  and opens like any object file. `mapKind` changes no check: `runnableSpec`
+  strips it, so the engine, the stamps and the fingerprints never see it, and
+  loading a new crosswalk file clears it. `readCrosswalk` refuses a file with
+  more than two columns — a data file offered by mistake.
+  `shareDefinitions.test.js` plants every cell of real files, file names and
+  typed client names, and asserts none is in the shared file (the full object
+  file is the negative control).
 - The evidence pack QUOTES records — that is what evidence is — so it is built
   locally and handed to the person who asked; never stored or uploaded.
+- Sensitivity tags (v3 §5.2, `masking.js`): a migration object's `tags` map
+  column names to personal | identifier | pay | aadhaar — definitions, never
+  values (`cleanTags` on read). Tagged values are masked wherever a report
+  LEAVES the screen: the evidence pack, the fix list, exported findings, the
+  CLI's `--json`, `--rejects` and terminal summary. Identifiers keep their last
+  4; personal and pay read `[masked]`. Counts, totals and record keys are never
+  masked (keys find the record), except an Aadhaar column — and except a total
+  of a tagged amount grouped by a record key or a tagged column, which is one
+  person's figure (YTD pay per employee): its amounts leave as null with
+  `masked: true`, `ties` kept. Group labels follow their column's tag, and the
+  readiness headline is rewritten from the masked group. Unmasking is a
+  per-output choice (`--unmask`, the workspace checkbox); the pack then says it
+  contains unmasked personal data and the fix list is named `-UNMASKED`.
+  Aadhaar stays masked regardless. On screen, values stay visible. Never call
+  this "DPDP compliant". `masking.test.js` tags every non-key column of real
+  reports and asserts none of their values leaves (with an unmasked control).
 - JUnit output carries sentences and counts, never an example record (CI logs
   are widely read).
 - Temp partitions hold company data: `dcv-<pid>-*`, owner-only, 0600, deleted on
   exit and Ctrl-C, and every run sweeps dirs whose process is dead.
 
-## The evidence pack
+## The evidence pack — the cutover sign-off record (v3 §5.3)
 `createEvidencePack` — one self-contained HTML document per check, used by the
-workspace and both CLIs (`--evidence`). Trustworthy on its own or worthless:
+workspace and both CLIs (`--evidence`). Its front is the cutover sign-off
+record: identity, chain of custody (SHA-256 + who exported, when), results,
+every difference with its decision and owner (`exceptionsFor`), what was not
+checked (`notChecked` plus typed scope), the fixed `STATEMENT_OF_CLAIM`, and
+signatures as typed (said to be unverified), with a "received by the auditor"
+line that is not a certification. It is NEVER called a certificate and never
+claims anything in `NEVER_CLAIM` (a test scans the pack). Each failing step,
+the readiness report and the fix list (`_owner` column) name whose fix it is:
+`DEFAULT_OWNERS`, editable per object (§5.4). Trustworthy on its own or worthless:
 - files named by the SHA-256 of their exact BYTES (never decoded text);
 - rules, spec and formats fingerprinted from canonical JSON printed in full;
 - only checks whose result still matches the files and definitions (`stamp`);
@@ -158,17 +264,22 @@ reference, and a CSP meta forbidding scripts and requests even if escaping
 failed. `evidencePack.test.js` and `e2e/evidence.spec.js` prove it. Keep both.
 
 ## The CLI and its formats (`dcv`)
-`dcv check`, `dcv reconcile`, `dcv odcs export|import`, `dcv --version`. Exit
+`dcv check`, `dcv reconcile`, `dcv odcs export|import`, `dcv pack`, `dcv share`,
+`dcv --version`. Exit
 codes are the contract with a pipeline: 0 passed, 1 a check found something,
 2 could not be completed (incl. "could not confirm"). Options are parsed
-strictly — an unknown option is refused, never ignored.
+strictly — an unknown option is refused, never ignored, and so is a
+`--reference` name no rule in the contract uses (a typo, not a file to skip).
 - `--json` is versioned: `$schema` names `schemas/*-report.schema.json`. Fields
   may be ADDED within a version; removing or renaming one bumps it.
   `cli/cli.test.js` validates real output for every status against the schemas.
 - `--junit` — one test case per step/rule; warn-only rules are skipped, not failed.
 - A contract or spec argument may be a migration object (`*.migration.json`).
 - `VERSION` in `src/lib/version.js` equals package.json (a test holds it); the
-  commit comes from `DCV_COMMIT` (container) or git, else is reported unknown.
+  commit (`commitFor`, `cli/buildInfo.mjs`) comes from `DCV_COMMIT` (container),
+  else `cli/commit.json` (stamped by the release workflow before `npm publish`),
+  else git ONLY when the package is its own checkout — installed inside someone
+  else's project it must never report their repository's commit — else unknown.
 
 ## ODCS (Open Data Contract Standard v3.2.0)
 `src/lib/odcs.js`. EXPORT is lossless: a rule with an exact ODCS equivalent is
@@ -244,15 +355,59 @@ Migration objects persist as files only (Supabase storage for them is not built)
 
 ## Publishing
 Static app (`vite.config.js`: `base: './'`, fixed names `dist/app.js`,
-`dist/app.css`). `publish/artifact.html` is the Artifact-host entry: page
-content only, stylesheet inlined. To republish: `npm run build`, then publish it
-with `files: { "app.js": "dist/app.js" }` and the same URL.
+`dist/app.css`, `dist/app-worker.js` — the engine worker, which a host given a
+file list must be given too). `publish/artifact.html` is the Artifact-host
+entry: page content only, stylesheet inlined. It is GENERATED from the build by
+`npm run publish:files` (`scripts/publish-files.mjs`), which also prints the
+files to publish beside it; CI fails if the committed wrapper differs. To
+republish: `npm run build`, `npm run publish:files`, then publish it with the
+printed files (`app.js` and `app-worker.js`) and the same URL.
+Steps, decisions and what was checked: `docs/release.md`.
 CLI: published to public npm as `data-contract-validator` (command `dcv`) by
 `.github/workflows/release.yml` on a `v*` tag matching package.json, with npm
 provenance; it refuses to publish without a LICENSE file and `license` field
 (Apache-2.0).
 `npm pack` (the `files` list decides what ships) and the `Dockerfile` build the
-same package.
+same package. `npm run verify:package` installs the packed tarball into an
+empty prefix and uses only that copy: a pack object, a check, a sign-off record,
+and the record's own re-run command giving the same answer; CI and the release
+workflow run it.
+
+## Packs (v3 §6)
+A pack is DATA in `src/packs/` (registry `index.js`): for one source → target
+path, each object's expected headers (`columns.load/source/target`), the
+target's rules, a mapping spec, declared formats, tags, the record's scope and
+a guide (which export, which load file, how to compare). Standard codes only —
+never a client's values. `src/lib/packs.js` validates (`packIssues`: every rule,
+format and spec through the engine's own readers, against the declared headers;
+the target key must be in the load file) and builds objects (`objectFromPack`);
+it never imports a pack. An object keeps `pack: { id, version, status, object }`
+(`packRef.js`), shown in the workspace and the evidence pack. A pack is `draft`
+until a pilot has run it on real exports, then `verified` with the date and the
+exports checked; a draft says so wherever it is shown, and lists `toConfirm`.
+A value only the client knows (the cutover date) is a declared PARAMETER of the
+object (`params`, a rule target `'{{cutoverDate}}'`), supplied when the object
+is built — the workspace asks, the CLI takes `--param` — never defaulted;
+`objectFromPack` throws without it, so no placeholder reaches a rule.
+- Finance: `finance-tally-zoho-books` — chart of accounts, opening trial
+  balance, customers and vendors, open AR/AP, GST ledgers. Zoho values (account
+  types, GST treatments, headers) and Tally's 28 predefined groups are sourced
+  in the pack; the Tally group → Zoho type crosswalk is a template to agree
+  with the client's accountant (Suspense A/c, Branch/Divisions left unmapped on
+  purpose). `finance-tally-zoho-books.test.js` runs every object on invented
+  clean and broken files: each planted break is caught at its rule or step.
+- HR: `hr-payroll-zoho-payroll` — employee master (PAN, UAN, IFSC identifiers;
+  joining date on or before the cutover date; work location from Zoho's list;
+  headcount by location), prior-payroll register (employee-month unique;
+  employee in the master; every component a number ≥ 0; professional tax ≤
+  ₹2,500 per employee per year, Art. 276(2); YTD gross, TDS, PF and PT per
+  employee) and TDS deposits (deducted vs deposited by month). Every pay and
+  identifier column is tagged on both sides. Zoho's employee import fields are
+  sourced; its prior-payroll sample file is not public, so the register's
+  headers are `toConfirm`. greytHR (the other §6.2 target) is NOT covered: its
+  import templates are not public — a greytHR pack waits on a pilot's files.
+- CLI: `dcv pack list`, `dcv pack <pack> <object> [--param name=value]...
+  [--out x.migration.json]`.
 
 ## Out of scope — do not build without a decision
 Data connectors in the browser; transforming or loading data (this tool proves
@@ -260,9 +415,11 @@ a load, never performs one); an expression language; storing record values.
 
 ## Known gaps
 No format picker on Validate (it refuses non-UTF-8, but cannot be told a file
-uses decimal commas); formats are per file, not per column; Indian grouping
-(1,23,456) is refused; Supabase storage for migration objects; the npm release
-workflow has not run yet (first run is the v2.0.0 tag).
+uses decimal commas); formats are per file, not per column; Supabase storage for migration objects; the npm release
+workflow has not run yet (its first run is the first version tag; `docs/release.md`). Excel is read in the
+browser only; the CLI refuses .xlsx with the fix (save as CSV). The 25 MB
+workbook limit in `App.jsx` is conservative and not yet measured. Dependabot
+does not track the SheetJS tarball: check cdn.sheetjs.com for releases.
 
 ## Conventions
 - Plain JS + React, function components, hooks. No state library.

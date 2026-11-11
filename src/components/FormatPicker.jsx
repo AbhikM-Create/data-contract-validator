@@ -1,4 +1,4 @@
-import { DATE_FORMATS, DECIMALS, ENCODINGS } from '../lib/formats.js'
+import { DATE_FORMATS, DECIMALS, ENCODINGS, GROUPINGS } from '../lib/formats.js'
 import { colors, mono, sans } from '../theme.js'
 
 // How one file is written: its encoding, its number notation, its date order.
@@ -11,6 +11,8 @@ export default function FormatPicker({ format, onChange, label = 'Read this file
     const next = { ...format }
     if (value) next[part] = value
     else delete next[part]
+    // A decimal comma and Indian grouping never go together (formatIssue).
+    if (part === 'decimal' && value === ',') delete next.grouping
     onChange(next)
   }
   return (
@@ -19,6 +21,10 @@ export default function FormatPicker({ format, onChange, label = 'Read this file
       <Choice value={format.encoding ?? ''} onChange={(v) => set('encoding', v)} options={ENCODINGS} empty="UTF-8" label="encoding" width={150} />
       <Choice value={format.decimal ?? ''} onChange={(v) => set('decimal', v)} options={DECIMALS} empty="1,234.56" label="number notation" width={128} />
       <Choice value={format.date ?? ''} onChange={(v) => set('date', v)} options={DATE_FORMATS} empty="ISO dates only" label="date format" width={150} />
+      {/* Indian grouping is written with a decimal point, so it is offered only then. */}
+      {format.decimal !== ',' && (
+        <Choice value={format.grouping ?? ''} onChange={(v) => set('grouping', v)} options={GROUPINGS} empty="1,234,567" label="digit grouping" width={150} />
+      )}
     </div>
   )
 }
@@ -36,7 +42,7 @@ function Choice({ value, onChange, options, empty, label, width }) {
       }}
     >
       <option value="">{empty}</option>
-      {options.filter((o) => o.id !== 'utf-8' && o.id !== '.').map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}
+      {options.filter((o) => o.id !== 'utf-8' && o.id !== '.' && o.id !== 'western').map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}
     </select>
   )
 }

@@ -52,6 +52,10 @@ function cleanRule(rule) {
   }
   if (rule.layer) cleaned.layer = rule.layer
   if (rule.severity) cleaned.severity = rule.severity
+  // v3 aggregate rules; absent on every other kind, so older contracts save as before.
+  if (rule.fn) cleaned.fn = rule.fn
+  if (rule.groupBy) cleaned.groupBy = rule.groupBy
+  if (typeof rule.tolerance === 'number' && rule.tolerance > 0) cleaned.tolerance = rule.tolerance
   return cleaned
 }
 

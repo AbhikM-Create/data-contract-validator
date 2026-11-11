@@ -10,8 +10,10 @@
 import { closeSync, createReadStream, openSync, readSync, statSync } from 'node:fs'
 import { Transform } from 'node:stream'
 import Papa from 'papaparse'
+import { columnMapIssues, createRenamer, mappedColumns } from '../../src/lib/columnMap.js'
 import { decodeBytes } from '../../src/lib/formats.js'
 import { cleanRow, isMisaligned, misalignedRowError, readErrorFor, readHeader } from '../../src/lib/parseCsv.js'
+import { looksLikeWorkbook } from '../../src/lib/fileKind.js'
 
 // The same refusal decodeBytes gives a page upload, so a file is refused in
 // the same words however it is read.
@@ -54,7 +56,21 @@ const HEADER_PROBE_BYTES = 1 << 20
 // The header alone, before any row is streamed: both engines need every column
 // name up front, to refuse a spec or contract that names a column the file does
 // not have before spending a pass over twenty million rows.
-export function readCsvHeader(path, encoding = 'utf-8') {
+//
+// columnMap: this file's column matching (src/lib/columnMap.js) — the column a
+// definition expects -> the column the file has. Applied HERE and in streamCsv,
+// the one place rows enter the engine on disk: `columns` are then the names the
+// definitions use, and a map that does not fit the file is an error, never
+// applied in part.
+export function readCsvHeader(path, encoding = 'utf-8', columnMap = null) {
+  const header = readFileHeader(path, encoding)
+  if (header.error || !columnMap || Object.keys(columnMap).length === 0) return header
+  const issues = columnMapIssues(columnMap, header.columns)
+  if (issues.length > 0) return { columns: [], error: `the column matching cannot be used. ${issues.join(' ')}` }
+  return { columns: mappedColumns(columnMap, header.columns), fileColumns: header.columns, error: null }
+}
+
+function readFileHeader(path, encoding) {
   let size
   try {
     size = statSync(path).size
@@ -69,6 +85,11 @@ export function readCsvHeader(path, encoding = 'utf-8') {
     readSync(fd, buffer, 0, buffer.length, 0)
   } finally {
     closeSync(fd)
+  }
+  // A workbook read as CSV would be zip bytes decoded as text: refused with
+  // the fix instead. Excel is read in the browser in v3; the CLI reads CSV.
+  if (looksLikeWorkbook(buffer)) {
+    return { columns: [], error: readErrorFor('it is an Excel workbook, and the command line reads CSV in this version — save the sheet as CSV (UTF-8), or check the workbook in the browser') }
   }
   // stream: true, because the probe may end part-way through a character.
   let text
@@ -96,9 +117,10 @@ export function readCsvHeader(path, encoding = 'utf-8') {
 // row at a time. Resolves with the row count, or with the same reader-facing
 // sentence parseCsv would give, never by throwing on a bad file. If onRow
 // throws, the read stops and the promise rejects with that error.
-export function streamCsv(path, onRow, encoding = 'utf-8') {
+export function streamCsv(path, onRow, encoding = 'utf-8', columnMap = null) {
   return new Promise((resolve, reject) => {
     let fields = null
+    let rename = (row) => row
     let rows = 0
     let seen = 0 // rows Papa emitted, blank ones included, for error line numbers
     let settled = false
@@ -124,6 +146,15 @@ export function streamCsv(path, onRow, encoding = 'utf-8') {
             return
           }
           fields = header.fields
+          if (columnMap && Object.keys(columnMap).length > 0) {
+            const issues = columnMapIssues(columnMap, header.columns)
+            if (issues.length > 0) {
+              settle(resolve, { rows: 0, error: `the column matching cannot be used. ${issues.join(' ')}` })
+              parser.abort()
+              return
+            }
+            rename = createRenamer(columnMap, header.columns)
+          }
         }
         if (results.errors.some(isMisaligned)) {
           settle(resolve, { rows, error: misalignedRowError(seen + 1) })
@@ -134,7 +165,7 @@ export function streamCsv(path, onRow, encoding = 'utf-8') {
         if (!row) return
         rows += 1
         try {
-          onRow(row, rows)
+          onRow(rename(row), rows)
         } catch (error) {
           settle(reject, error)
           parser.abort()

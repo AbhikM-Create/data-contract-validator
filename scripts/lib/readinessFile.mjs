@@ -1,8 +1,9 @@
 // Load readiness over a CSV of any size, in bounded memory. The engine is
 // createReadinessCheck (src/lib/readiness.js); this only feeds it.
 //
-//   pass 1  (only with a key) stream the keys to partitions on disk and count
-//           each partition: the set of keys that appear more than once. A row
+//   pass 1  (only with a key or a unique rule) stream the keys — and each
+//           unique rule's values, tagged by rule — to partitions on disk and
+//           count each partition: the values that appear more than once. A row
 //           cannot know its key recurs ninety thousand rows later, so this has
 //           to be known before any row is judged.
 //   pass 2  stream the file through the check, writing each flagged record to
@@ -14,6 +15,7 @@
 import { closeSync, openSync, statSync, writeSync } from 'node:fs'
 import Papa from 'papaparse'
 import { createReadinessCheck } from '../../src/lib/readiness.js'
+import { RULE_KINDS, ruleKey } from '../../src/lib/rules.js'
 import { readCsvHeader, streamCsv } from './csvStream.mjs'
 import { createPartitions, makeScratchDir, partitionsFor } from './partitions.mjs'
 
@@ -27,32 +29,50 @@ export async function checkReadinessFile(contract, path, options = {}) {
   const done = (fields) => ({ seconds: (Date.now() - started) / 1000, rejectsWritten: 0, ...fields })
 
   const encoding = contract?.format?.encoding
-  const header = readCsvHeader(path, encoding)
+  // options.columnMap: the load file's column matching (expected -> the file's).
+  const columnMap = options.columnMap ?? null
+  const header = readCsvHeader(path, encoding, columnMap)
   if (header.error) return done({ error: `${path}: ${header.error}` })
   const columns = header.columns
   const key = options.key ?? []
 
   const duplicateKeys = new Set()
-  const check = createReadinessCheck(contract, { columns, key, duplicateKeys })
+  // One set per unique rule, filled by pass 1; the check holds the same objects.
+  const duplicates = new Map(
+    (contract?.rules ?? []).filter((rule) => rule?.kind === RULE_KINDS.UNIQUE).map((rule) => [ruleKey(rule), new Set()]),
+  )
+  const check = createReadinessCheck(contract, { columns, key, duplicateKeys, duplicates, references: options.references })
   if (check.issues.length > 0) return done({ report: check.finish(0), partitions: 0 })
 
   let count = 0
-  if (key.length > 0) {
+  const uniques = check.uniqueRules
+  if (key.length > 0 || uniques.length > 0) {
     count = options.partitions ?? partitionsFor(statSync(path).size, BYTES_PER_KEY_PARTITION)
     const scratch = count > 1 ? makeScratchDir(options.tmpDir) : null
     try {
       const keys = createPartitions(count, { dir: scratch?.dir, name: 'keys' })
+      // Each value is tagged with what it belongs to: the record key (k) or the
+      // n-th unique rule (u<n>), so one partitioning serves them all.
       const pass1 = await streamCsv(path, (row) => {
-        const value = check.keyOf(row)
-        if (value !== null) keys.add(value, [value])
-      }, encoding)
+        const value = key.length > 0 ? check.keyOf(row) : null
+        if (value !== null) keys.add(value, ['k', value])
+        uniques.forEach((u, n) => {
+          const v = u.valueOf(row)
+          if (v !== null) keys.add(v, [`u${n}`, v])
+        })
+      }, encoding, columnMap)
       keys.close()
       if (pass1.error) return done({ error: `${path}: ${pass1.error}` })
       for (let i = 0; i < count; i += 1) {
         const seen = new Set()
-        for (const [value] of keys.read(i)) {
-          if (seen.has(value)) duplicateKeys.add(value)
-          else seen.add(value)
+        for (const [tag, value] of keys.read(i)) {
+          const id = `${tag}\u0000${value}`
+          if (!seen.has(id)) {
+            seen.add(id)
+            continue
+          }
+          if (tag === 'k') duplicateKeys.add(value)
+          else duplicates.get(uniques[Number(tag.slice(1))].key).add(value)
         }
       }
     } finally {
@@ -78,16 +98,19 @@ export async function checkReadinessFile(contract, path, options = {}) {
       if (!flag || !options.rejectsPath) return
       if (fd === null) {
         fd = openSync(options.rejectsPath, 'w', 0o600)
-        writeSync(fd, `${Papa.unparse([[...columns, '_row', '_readiness', '_reasons']], { header: false })}\n`)
+        writeSync(fd, `${Papa.unparse([[...columns, '_row', '_readiness', '_reasons', '_owner']], { header: false })}\n`)
       }
       batch.push([
-        ...columns.map((column) => row[column]),
+        // The fix list leaves the machine's screen: tagged values masked
+        // (masking.js) when the caller passes a masker.
+        ...columns.map((column) => (options.mask ? options.mask(column, row[column]) : row[column])),
         rowNo,
         flag.severity === 'reject' ? 'REJECT' : 'WARN',
         flag.reasons.join('; '),
+        options.owner ?? '',
       ])
       if (batch.length >= REJECTS_BATCH) flushRejects()
-    }, encoding)
+    }, encoding, columnMap)
     if (fd !== null) flushRejects()
     if (pass2.error) return done({ error: `${path}: ${pass2.error}` })
     return done({ report: check.finish(pass2.rows), partitions: count, rejectsWritten: written })

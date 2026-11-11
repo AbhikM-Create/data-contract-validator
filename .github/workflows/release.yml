@@ -56,6 +56,15 @@ jobs:
           npm install --global --prefix "$RUNNER_TEMP/dcv" "$RUNNER_TEMP"/data-contract-validator-*.tgz
           "$RUNNER_TEMP/dcv/bin/dcv" --version
 
+      # The packed copy alone must run a pack, a check and a sign-off record's
+      # own re-run command before anyone else installs it.
+      - run: npm run verify:package
+
+      # Stamp the commit into the package (cli/buildInfo.mjs reads it), so a
+      # copy installed from npm names the code it was built from in
+      # `dcv --version` and in every sign-off record.
+      - run: echo "{\"commit\":\"$GITHUB_SHA\"}" > cli/commit.json
+
       - run: npm publish --provenance --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

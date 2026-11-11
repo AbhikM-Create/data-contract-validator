@@ -1,9 +1,9 @@
 import { createHash } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { expect, test } from '@playwright/test'
-import { parseCsv } from '../src/lib/parseCsv.js'
-import { migrationLoadFile, migrationSource, migrationTarget } from '../src/samples/migrationSample.js'
-import { download, watchErrors, write } from './helpers.js'
+import { parseCsv, toCsv } from '../src/lib/parseCsv.js'
+import { MIGRATION_SAMPLE, migrationLoadFile, migrationSource, migrationTarget } from '../src/samples/migrationSample.js'
+import { download, uploadAs, watchErrors, write } from './helpers.js'
 
 const sha = (text) => createHash('sha256').update(text).digest('hex')
 const headline = (page) => page.locator('h3').filter({ hasText: /^(Stopped at|Reconciled)/ }).first()
@@ -49,7 +49,40 @@ test('the example migration: readiness, reconciliation, a crosswalk that closes 
   expect(JSON.parse(json).runs).toHaveLength(3)
   expect(json).not.toMatch(/OKAFOR|Okafor|40117/)
   await page.getByRole('button', { name: 'New', exact: true }).click()
+  await page.getByRole('button', { name: 'Start a new object' }).click()
   await page.locator('input[type=file]').first().setInputFiles(saved)
   await expect(page.getByText(/^Opened "Employees" — 5 rules, 5 mapped fields, 3 earlier checks\.$/)).toBeVisible()
+  expect(errors).toEqual([])
+})
+
+// v3 F1. A corrected re-extract usually keeps its file name and its row count.
+// A result is current only while the file's bytes are the ones it ran on, so the
+// pack must leave out a check whose file was swapped — whatever it is called.
+test('a file swapped for one with the same name and row count is not attested with the old result', async ({ page }) => {
+  const dir = test.info().outputPath()
+  const errors = watchErrors(page)
+  await page.goto('/#/migrations')
+  await page.getByRole('button', { name: 'Try the example migration' }).click()
+  await expect(page.getByText(/Example opened/)).toBeVisible()
+
+  await page.getByRole('button', { name: 'Check load readiness' }).click()
+  await expect(page.getByText('NOT READY', { exact: true }).first()).toBeVisible()
+  await page.getByRole('button', { name: 'Reconcile', exact: true }).click()
+  await expect(page.getByText(/^Stopped at Mapping\./).first()).toBeVisible()
+
+  // The same name and the same 46 records; the blank surnames filled in.
+  const original = parseCsv(migrationLoadFile())
+  const fixed = original.rows.map((row) => ({ ...row, last_name: row.last_name || 'FILLEDIN' }))
+  const swapped = toCsv(original.columns, fixed)
+  expect(fixed).toHaveLength(original.rows.length)
+  await uploadAs(page, 'load', write(dir, MIGRATION_SAMPLE.loadName, swapped))
+
+  await expect(page.getByText(/left out — something changed since it ran/)).toBeVisible()
+  const pack = readFileSync(await download(page, () => page.getByRole('button', { name: 'Download the evidence pack' }).click(), dir), 'utf8')
+  await expect(page.getByText(/It leaves out load readiness/)).toBeVisible()
+  expect(pack).not.toContain(sha(migrationLoadFile()))
+  expect(pack).not.toContain(sha(swapped))
+  expect(pack).not.toContain('Load readiness — will the target accept the load file?')
+  expect(pack).toContain(sha(migrationSource()))
   expect(errors).toEqual([])
 })

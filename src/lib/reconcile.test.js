@@ -151,6 +151,31 @@ describe('reconcile — each step catches its own break (negative controls)', ()
     expect(total.examples.map((e) => e.key)).toEqual(['DE01'])
     expect(report.totals[0].groups.find((g) => g.group === 'US01').ties).toBe(true)
   })
+
+  // v3 §6.2: headcount by location. A count total ties the number of records
+  // per group, not a sum — an employee loaded under the wrong company keeps
+  // every amount and every key, and only the count per company moves.
+  it('totals: a count per group catches a record loaded under the wrong group', () => {
+    const count = { fn: 'count', groupBy: { source: 'BUKRS', target: 'company_code', map: { 1000: 'US01', 2000: 'DE01' } } }
+    const spec = { ...SPEC, mapping: SPEC.mapping.filter((m) => m.target !== 'annual_salary'), totals: [count] }
+    expect(specIssues(normalizeSpec(spec), Object.keys(LEGACY[0]), Object.keys(TARGET[0]))).toEqual([])
+    expect(statuses(reconcile(spec, LEGACY, TARGET)).totals).toBe('PASS')
+
+    const target = copy(TARGET).map((row) => (row.employee_id === '1002' ? { ...row, company_code: 'DE01' } : row))
+    const report = reconcile(spec, LEGACY, target)
+    expect(statuses(report)).toMatchObject({ keys: 'PASS', completeness: 'PASS', accuracy: 'PASS', totals: 'FAIL' })
+    const finding = stepOf(report, 'totals').findings[0]
+    expect(finding.column).toBe('company_code')
+    expect(finding.message).toBe('The number of records does not tie in 2 groups of 2 by "company_code".')
+    expect(finding.examples.map((e) => [e.key, e.detail])).toEqual([['DE01', 'source 3, target 4, difference +1'], ['US01', 'source 2, target 1, difference -1']])
+    expect(report.totals[0]).toMatchObject({ fn: 'count', groupBy: 'company_code' })
+  })
+
+  it('totals: a count needs no amount column, and still names a missing grouping column', () => {
+    const issues = specIssues(normalizeSpec({ key: 'id', totals: [{ fn: 'count', groupBy: { source: 'site', target: 'location' } }] }), ['id'], ['id', 'location'])
+    expect(issues).toEqual(['The source file has no column "site" (named as the grouping of control total 1).'])
+    expect(normalizeSpec({ key: 'id', totals: [{ fn: 'average', source: 'a' }] }).totals[0].fn).toBe('sum')
+  })
 })
 
 describe('reconcile — composite keys', () => {

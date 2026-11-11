@@ -14,7 +14,7 @@ const VERDICT = {
   UNVERIFIED: { text: 'NOT CONFIRMED', status: 'UNCHECKED' },
 }
 
-export default function ReadinessReport({ report, stale, onDownloadFixList }) {
+export default function ReadinessReport({ report, stale, onDownloadFixList, owner }) {
   const verdict = VERDICT[report.status] ?? VERDICT.UNVERIFIED
   const c = report.counts
 
@@ -22,13 +22,22 @@ export default function ReadinessReport({ report, stale, onDownloadFixList }) {
     <div style={{ marginTop: 18 }}>
       <span style={chip(verdict.status)}>{verdict.text}</span>
       <h3 style={{ fontFamily: sans, fontSize: 20, fontWeight: 650, color: colors.ink, margin: '8px 0 0' }}>{report.headline}</h3>
+      {owner && report.counts?.rejected > 0 && (
+        <p style={{ fontFamily: sans, fontSize: 13, color: colors.mute, margin: '6px 0 0' }}>Whose fix: {owner}.</p>
+      )}
       {stale && (
         <p style={{ fontFamily: sans, fontSize: 13, color: colors.warn, margin: '6px 0 0' }}>
           The rules, the key or the file have changed since this ran — check again to see the current answer.
         </p>
       )}
 
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 14, alignItems: 'stretch' }}>
+      {/* A check that could not run has no counts — it has its reasons. */}
+      {!c && (
+        <ul style={{ margin: '10px 0 0', paddingLeft: 18 }}>
+          {(report.issues ?? []).map((issue) => <li key={issue} style={{ fontFamily: sans, fontSize: 13.5, color: colors.warn, lineHeight: 1.5 }}>{issue}</li>)}
+        </ul>
+      )}
+      {c && <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 14, alignItems: 'stretch' }}>
         <Figure title="Records" value={fmt(c.records)} />
         <Figure title="Would be rejected" value={fmt(c.rejected)} tone={c.rejected > 0 ? colors.fail : null} />
         <Figure title="Load with a warning" value={fmt(c.warned)} />
@@ -38,7 +47,7 @@ export default function ReadinessReport({ report, stale, onDownloadFixList }) {
             Download the fix list · {fmt(report.flaggedCount)} records
           </button>
         )}
-      </div>
+      </div>}
 
       <div style={{ marginTop: 12 }}>
         {report.checks.map((check, i) => <Check key={`${check.description}-${i}`} check={check} />)}
@@ -64,13 +73,20 @@ function Check({ check }) {
         <span style={{ fontFamily: sans, fontSize: 14, color: colors.ink, flex: 1, minWidth: 220 }}>{check.description}</span>
         {/* Neutral on purpose: green and red belong to the verdict alone. */}
         <span style={{ fontFamily: mono, fontSize: 10.5, letterSpacing: '0.06em', color: colors.mute }}>
-          {check.severity === 'warn' ? 'WARNING ONLY' : 'REJECTS'}
+          {check.fileLevel ? (check.severity === 'warn' ? 'FILE TOTAL · WARNING ONLY' : 'FILE TOTAL') : check.severity === 'warn' ? 'WARNING ONLY' : 'REJECTS'}
         </span>
         <span style={chip(check.status)}>{check.status}</span>
       </div>
       {check.status === 'FAIL' && (
         <div style={{ fontFamily: sans, fontSize: 12.5, color: colors.mute, marginTop: 4 }}>
-          {fmt(check.failing)} of {fmt(check.applicable)} records
+          {check.fileLevel
+            ? `${check.applicable > 1 ? `${fmt(check.failing)} of ${fmt(check.applicable)} groups don’t tie` : 'The total doesn’t tie'} — no single record is rejected for it, but the file is not ready`
+            : `${fmt(check.failing)} of ${fmt(check.applicable)} records`}
+        </div>
+      )}
+      {check.groups?.length > 0 && (
+        <div style={{ fontFamily: mono, fontSize: 11.5, color: colors.faint, marginTop: 6 }}>
+          {check.groups.map((g) => g.value).join(' · ')}
         </div>
       )}
       {check.reason && <div style={{ fontFamily: sans, fontSize: 12.5, color: colors.mute, marginTop: 4 }}>{check.reason}</div>}

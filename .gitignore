@@ -22,3 +22,9 @@ playwright-report/
 test-results/
 # SBOM output
 sbom.cdx.json
+
+# The release workflow's commit stamp: written just before npm publish, never committed.
+cli/commit.json
+
+# Objects and shared copies downloaded from the running app while testing
+*.migration.json

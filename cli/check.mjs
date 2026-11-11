@@ -12,16 +12,20 @@ import { readFileSync, writeFileSync } from 'node:fs'
 import { basename } from 'node:path'
 import { parseContractFile } from '../src/lib/contractFile.js'
 import { createEvidencePack } from '../src/lib/evidencePack.js'
+import { dcvCommand } from '../src/lib/reproduce.js'
+import { createMasker, maskReadiness } from '../src/lib/masking.js'
+import { ownersOf } from '../src/lib/signoff.js'
 import { isMigrationObjectFile, readMigrationObject, runnableContract } from '../src/lib/migrationObject.js'
 import { READINESS } from '../src/lib/readiness.js'
 import { REPORT_SCHEMAS } from '../src/lib/version.js'
 import { fileInfo } from '../scripts/lib/fileInfo.mjs'
 import { checkReadinessFile } from '../scripts/lib/readinessFile.mjs'
+import { parseReferenceArgs, readReferenceFiles } from '../scripts/lib/referenceFiles.mjs'
 import { EXIT, parse, UsageError } from './args.mjs'
 import { buildInfo, describeBuild } from './buildInfo.mjs'
 import { readinessJunit } from './junit.mjs'
 
-export const USAGE = 'dcv check <contract.json> <load.csv> [--key col[,col]] [--json] [--junit out.xml] [--rejects fixes.csv] [--evidence pack.html] [--tmp dir] [--partitions n]'
+export const USAGE = 'dcv check <contract.json> <load.csv> [--key col[,col]] [--json] [--junit out.xml] [--rejects fixes.csv] [--evidence pack.html] [--reference name=file.csv]... [--unmask] [--tmp dir] [--partitions n]'
 
 export async function run(argv) {
   const parsed = parse(argv, {
@@ -30,6 +34,7 @@ export async function run(argv) {
     options: {
       key: { type: 'string' }, json: { type: 'boolean' }, junit: { type: 'string' }, rejects: { type: 'string' },
       evidence: { type: 'string' }, tmp: { type: 'string' }, partitions: { type: 'string' },
+      reference: { type: 'string', multiple: true }, unmask: { type: 'boolean' },
     },
   })
   if (parsed.help) {
@@ -37,7 +42,7 @@ export async function run(argv) {
     return EXIT.OK
   }
   const [contractPath, loadPath] = parsed.args
-  const { key: keyArg, json, junit, rejects, evidence, tmp, partitions } = parsed.values
+  const { key: keyArg, json, junit, rejects, evidence, tmp, partitions, reference, unmask } = parsed.values
 
   let text
   try {
@@ -68,9 +73,27 @@ export async function run(argv) {
   }
 
   const key = keyArg ? keyArg.split(',').map((c) => c.trim()).filter(Boolean) : defaultKey
-  const outcome = await checkReadinessFile(contract, loadPath, { key, rejectsPath: rejects, tmpDir: tmp, partitions })
+  // Reference files for reference rules: read once, only the columns named.
+  const referenceArgs = parseReferenceArgs(reference)
+  if (referenceArgs.error) throw new UsageError(referenceArgs.error)
+  // A name no rule uses is a typo — refused, like any unknown option, rather
+  // than ignored into a "reference file not provided" two lines later.
+  const used = [...new Set((contract.rules ?? []).filter((r) => r?.kind === 'reference' && r.target?.file).map((r) => r.target.file))]
+  for (const name of Object.keys(referenceArgs.files)) {
+    if (!used.includes(name)) {
+      throw new UsageError(`--reference names "${name}", which no rule in the contract uses; ${used.length ? `the rules use ${used.map((n) => `"${n}"`).join(', ')}` : 'it has no reference rules'}.`)
+    }
+  }
+  const referenceRead = await readReferenceFiles(contract.rules, referenceArgs.files, { columnMap: object?.columnMap })
+  if (referenceRead.error) throw new UsageError(referenceRead.error)
+  // A migration object's sensitivity tags mask what leaves: the fix list, the
+  // --json examples, the terminal summary and the pack (masking.js). --unmask
+  // shows them in full; Aadhaar stays masked.
+  const masker = createMasker(object?.tags, { unmask: unmask === true, keys: key })
+  const outcome = await checkReadinessFile(contract, loadPath, { key, rejectsPath: rejects, tmpDir: tmp, partitions, references: referenceRead.references, columnMap: object?.columnMap?.load, mask: masker.active ? masker : undefined, owner: ownersOf(object).readiness })
   if (outcome.error) throw new UsageError(outcome.error)
   const report = outcome.report
+  const shown = maskReadiness(report, masker, key)
   const build = buildInfo()
   const file = basename(loadPath)
 
@@ -84,7 +107,8 @@ export async function run(argv) {
       },
       readiness: { report, flaggedCount: report.counts.rejected + report.counts.warned, file: await fileInfo(loadPath, report.counts.records) },
       generatedBy: describeBuild(),
-      reproduce: `dcv ${['check', ...argv].join(' ')}`,
+      reproduce: dcvCommand('check', argv),
+      unmask: unmask === true,
     })
     writeFileSync(evidence, pack.html, { mode: 0o600 })
     notes.push(`Evidence pack ${pack.reference} written to ${evidence}`)
@@ -96,10 +120,10 @@ export async function run(argv) {
 
   if (json) {
     // flagged is empty when streaming — the records went to --rejects instead.
-    const { flagged: _flagged, ...summary } = report
+    const { flagged: _flagged, ...summary } = shown
     console.log(JSON.stringify({ $schema: REPORT_SCHEMAS.readiness, tool: build, generatedAt: new Date().toISOString(), file, ...summary }, null, 2))
   } else {
-    printSummary(report, outcome, contract, file, rejects, notes)
+    printSummary(shown, outcome, contract, file, rejects, notes)
   }
   return report.status === READINESS.READY ? EXIT.OK : report.status === READINESS.NOT_READY ? EXIT.FOUND : EXIT.UNUSABLE
 }

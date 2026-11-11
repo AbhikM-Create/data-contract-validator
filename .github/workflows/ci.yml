@@ -34,6 +34,12 @@ jobs:
 
       - run: npm run build
 
+      # The hosted wrapper is generated from the build. If it differs from what
+      # is committed, someone changed the stylesheet or the build's files and
+      # did not regenerate it.
+      - run: npm run publish:files
+      - run: git diff --exit-code -- publish/artifact.html
+
   # Row-level security is the whole access model: the publishable key ships in
   # the bundle, so these policies are what keep one account's contracts and
   # runs from another. A throwaway Postgres runs supabase/schema.sql against
@@ -80,6 +86,9 @@ jobs:
       - run: |
           "$RUNNER_TEMP/dcv/bin/dcv" --version
           "$RUNNER_TEMP/dcv/bin/dcv" odcs import src/lib/__fixtures__/odcs/enum.odcs.yaml > /dev/null || [ $? -eq 2 ]
+      # The installed copy alone: a pack object, a check, a sign-off record, and
+      # the record's own re-run command giving the same answer.
+      - run: npm run verify:package
 
   # Production dependencies: fail on a high-severity advisory, and publish the
   # CycloneDX SBOM procurement and security teams ask for.

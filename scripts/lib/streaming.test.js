@@ -9,6 +9,7 @@ import { join } from 'node:path'
 import { afterAll, describe, expect, it } from 'vitest'
 import { parseCsv } from '../../src/lib/parseCsv.js'
 import { checkReadiness } from '../../src/lib/readiness.js'
+import { referenceValues } from '../../src/lib/rules.js'
 import { reconcile } from '../../src/lib/reconcile.js'
 import { readCsvHeader, streamCsv } from './csvStream.mjs'
 import { decodeFields, encodeFields } from './partitions.mjs'
@@ -56,7 +57,10 @@ const SPEC = {
     { source: 'TRFGR', target: 'grade', map: GRADES },
     { source: 'ANSAL', target: 'annual_salary', tolerance: 0.01 },
   ],
-  totals: [{ source: 'ANSAL', target: 'annual_salary', groupBy: { source: 'BUKRS', target: 'company_code', map: { 1000: 'US01', 2000: 'DE01' } } }],
+  totals: [
+    { source: 'ANSAL', target: 'annual_salary', groupBy: { source: 'BUKRS', target: 'company_code', map: { 1000: 'US01', 2000: 'DE01' } } },
+    { fn: 'count', groupBy: { source: 'BUKRS', target: 'company_code', map: { 1000: 'US01', 2000: 'DE01' } } },
+  ],
 }
 
 const sourcePath = write('legacy.csv', legacy)
@@ -169,6 +173,76 @@ describe('streamed load readiness matches the in-memory engine', () => {
   })
 })
 
+// --- v3 rule kinds: unique, identifier, aggregate, reference -----------------
+// A payroll register with every v3 break planted: repeated (employee, month)
+// pairs, malformed PANs, months whose gross does not tie, and vendors missing
+// from the reference file. Streamed and in memory must agree exactly.
+const payroll = ['employee_id,month,pan,gross,vendor_id']
+const MONTHS = ['Apr', 'May', 'Jun']
+for (let i = 0; i < N; i += 1) {
+  const month = MONTHS[i % 3]
+  const row = [
+    String(20000 + Math.floor(i / 3)),
+    month,
+    i % 97 === 5 ? 'ABCXE1234F' : 'ABCPE1234F',
+    i % 211 === 3 ? '' : '1000.50',
+    i % 89 === 7 ? 'V999' : `V${i % 40}`,
+  ]
+  payroll.push(row.join(','))
+  if (i % 401 === 9) payroll.push(row.join(',')) // a repeated (employee, month)
+}
+const vendors = ['id', ...Array.from({ length: 40 }, (_, i) => `V${i}`)]
+const PAYROLL_CONTRACT = {
+  name: 'Prior payroll (target)',
+  rules: [
+    { kind: 'unique', column: 'employee_id', op: 'unique', target: ['month'] },
+    { kind: 'identifier', column: 'pan', op: 'is', target: 'pan' },
+    { kind: 'aggregate', column: 'gross', fn: 'sum', op: '=', target: '1000000', groupBy: 'month' },
+    { kind: 'reference', column: 'vendor_id', op: 'in', target: { file: 'vendors', column: 'id' } },
+  ],
+  skipped: [],
+}
+const payrollPath = write('payroll.csv', payroll)
+const vendorRows = parseCsv(readFileSync(write('vendors.csv', vendors), 'utf8')).rows
+const REFERENCES = { vendors: { columns: ['id'], values: { id: referenceValues(vendorRows, 'id') } } }
+
+describe('streamed load readiness matches the in-memory engine — v3 rule kinds', () => {
+  const parsed = parseCsv(readFileSync(payrollPath, 'utf8'))
+  const options = { columns: parsed.columns, key: ['employee_id', 'month'], references: REFERENCES }
+  const inMemory = checkReadiness(PAYROLL_CONTRACT, parsed.rows, options)
+
+  it('the planted register really does break every v3 check', () => {
+    expect(inMemory.status).toBe('NOT_READY')
+    const byKind = Object.fromEntries(inMemory.checks.map((c) => [c.kind, c]))
+    for (const kind of ['unique', 'identifier', 'aggregate', 'reference']) expect(byKind[kind].status).toBe('FAIL')
+    expect(byKind.aggregate.fileLevel).toBe(true)
+    expect(byKind.unique.failing).toBeGreaterThan(5)
+  })
+
+  for (const partitions of [1, 7]) {
+    it(`gives the identical report across ${partitions} partition(s)`, async () => {
+      const outcome = await checkReadinessFile(PAYROLL_CONTRACT, payrollPath, { key: ['employee_id', 'month'], partitions, references: REFERENCES, tmpDir: scratchParent })
+      expect(outcome.error).toBeUndefined()
+      const { flagged: _f, ...expected } = inMemory
+      expect(outcome.report).toEqual({ ...expected, flagged: [] })
+      expect(readdirSync(scratchParent)).toEqual([])
+    })
+  }
+
+  it('without a record key, the unique rule still makes its own first pass and matches', async () => {
+    const outcome = await checkReadinessFile(PAYROLL_CONTRACT, payrollPath, { partitions: 7, references: REFERENCES, tmpDir: scratchParent })
+    const { flagged: _f, ...expected } = checkReadiness(PAYROLL_CONTRACT, parsed.rows, { columns: parsed.columns, references: REFERENCES })
+    expect(outcome.report).toEqual({ ...expected, flagged: [] })
+    expect(outcome.partitions).toBe(7)
+  })
+
+  it('without the reference file, the reference rule is UNCHECKED and the file is not called ready', async () => {
+    const outcome = await checkReadinessFile({ ...PAYROLL_CONTRACT, rules: PAYROLL_CONTRACT.rules.slice(3) }, payrollPath, {})
+    expect(outcome.report.status).toBe('UNVERIFIED')
+    expect(outcome.report.checks[0].reason).toMatch(/reference file "vendors" was not provided/)
+  })
+})
+
 // --- the streamed reader reads files exactly as parseCsv does ----------------
 describe('streamCsv reads by parseCsv rules', () => {
   const read = async (name, text) => {
@@ -206,5 +280,59 @@ describe('partition records survive the trip to disk', () => {
     expect(/[\n\r]/.test(line)).toBe(false)
     expect(line.split('\t')).toHaveLength(fields.length)
     expect(decodeFields(line)).toEqual(fields)
+  })
+})
+
+// --- column matching (final-spec C1) ------------------------------------------
+// The same files with every header renamed, read under a column map, must give
+// the reports above, field for field — in memory terms, the engine never knows.
+describe('a file read under a column map gives the report of the file it stands for', () => {
+  const renamed = (path, name) => {
+    const [header, ...rest] = readFileSync(path, 'utf8').split('\n')
+    const columns = parseCsv(`${header}\nx`).columns
+    const map = Object.fromEntries(columns.map((column) => [column, `Client ${column.toUpperCase()}`]))
+    return { path: write(name, [columns.map((column) => map[column]).join(','), ...rest].slice(0, -1).concat(rest.at(-1) === '' ? [] : [rest.at(-1)])), map }
+  }
+  const src = renamed(sourcePath, 'legacy-renamed.csv')
+  const tgt = renamed(targetPath, 'target-renamed.csv')
+  const load = renamed(loadPath, 'load-renamed.csv')
+  const payroll = renamed(payrollPath, 'payroll-renamed.csv')
+
+  it('reconciliation, across 1 and 7 partitions', async () => {
+    const source = parseCsv(readFileSync(sourcePath, 'utf8'))
+    const target = parseCsv(readFileSync(targetPath, 'utf8'))
+    const inMemory = reconcile(SPEC, source.rows, target.rows, { sourceColumns: source.columns, targetColumns: target.columns })
+    for (const partitions of [1, 7]) {
+      const outcome = await reconcileFiles(SPEC, src.path, tgt.path, { partitions, tmpDir: scratchParent, columnMap: { source: src.map, target: tgt.map } })
+      expect(outcome.error).toBeUndefined()
+      expect(outcome.report).toEqual(inMemory)
+    }
+  })
+
+  it('load readiness and its fix list, key and unique passes included', async () => {
+    const parsed = parseCsv(readFileSync(loadPath, 'utf8'))
+    const { flagged, ...expected } = checkReadiness(CONTRACT, parsed.rows, { columns: parsed.columns, key: ['employee_id'] })
+    const rejectsPath = join(dir, 'rejects-renamed.csv')
+    const outcome = await checkReadinessFile(CONTRACT, load.path, { key: ['employee_id'], partitions: 7, rejectsPath, tmpDir: scratchParent, columnMap: load.map })
+    expect(outcome.error).toBeUndefined()
+    expect(outcome.report).toEqual({ ...expected, flagged: [] })
+    // The fix list is written under the names the definitions use.
+    const fixes = parseCsv(readFileSync(rejectsPath, 'utf8'))
+    expect(fixes.columns.slice(0, parsed.columns.length)).toEqual(parsed.columns)
+    expect(fixes.rows).toHaveLength(flagged.length)
+
+    const register = parseCsv(readFileSync(payrollPath, 'utf8'))
+    const { flagged: _f, ...v3 } = checkReadiness(PAYROLL_CONTRACT, register.rows, { columns: register.columns, key: ['employee_id', 'month'], references: REFERENCES })
+    const streamed = await checkReadinessFile(PAYROLL_CONTRACT, payroll.path, { key: ['employee_id', 'month'], partitions: 7, references: REFERENCES, tmpDir: scratchParent, columnMap: payroll.map })
+    expect(streamed.report).toEqual({ ...v3, flagged: [] })
+  })
+
+  it('without the map the renamed file is not judged at all — and a map that does not fit is refused, not half applied', async () => {
+    const unmapped = await reconcileFiles(SPEC, src.path, tgt.path, { tmpDir: scratchParent })
+    expect(unmapped.report.status).toBe('INVALID')
+    const bad = await reconcileFiles(SPEC, src.path, tgt.path, { tmpDir: scratchParent, columnMap: { source: { ...src.map, PERNR: 'Employee No' }, target: tgt.map } })
+    expect(bad.error).toMatch(/the column matching cannot be used\. "PERNR" is matched to "Employee No", which this file does not have\./)
+    const wrong = await checkReadinessFile(CONTRACT, load.path, { key: ['employee_id'], columnMap: { ...load.map, employee_id: 'Client NOPE' } })
+    expect(wrong.error).toMatch(/the column matching cannot be used/)
   })
 })

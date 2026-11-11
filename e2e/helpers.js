@@ -23,10 +23,9 @@ export function write(dir, name, content) {
   return path
 }
 
-// The migration workspace's three upload cards are its last three file inputs,
-// in the order load, source, target.
+// The migration workspace's upload cards, by role. Each card's input names its
+// role, so crosswalk inputs in the spec builder can't be picked by mistake.
+const UPLOAD_TAG = { load: 'load file', source: 'source', target: 'target', baseline: 'baseline', candidate: 'new file' }
 export async function uploadAs(page, role, path) {
-  const inputs = page.locator('input[type=file]')
-  const count = await inputs.count()
-  await inputs.nth(count - 3 + ['load', 'source', 'target'].indexOf(role)).setInputFiles(path)
+  await page.locator(`input[data-upload="${UPLOAD_TAG[role] ?? role}"]`).setInputFiles(path)
 }

@@ -30,9 +30,11 @@ export async function reconcileFiles(spec, sourcePath, targetPath, options = {})
   // strictly.
   const formats = normalizeSpec(spec).formats
   const encoding = { source: formats.source.encoding, target: formats.target.encoding }
-  const sourceHeader = readCsvHeader(sourcePath, encoding.source)
+  // options.columnMap: { source, target } — each file's column matching.
+  const maps = { source: options.columnMap?.source ?? null, target: options.columnMap?.target ?? null }
+  const sourceHeader = readCsvHeader(sourcePath, encoding.source, maps.source)
   if (sourceHeader.error) return done({ error: `${sourcePath}: ${sourceHeader.error}` })
-  const targetHeader = readCsvHeader(targetPath, encoding.target)
+  const targetHeader = readCsvHeader(targetPath, encoding.target, maps.target)
   if (targetHeader.error) return done({ error: `${targetPath}: ${targetHeader.error}` })
 
   const run = createReconciliation(spec, {
@@ -55,7 +57,7 @@ export async function reconcileFiles(spec, sourcePath, targetPath, options = {})
         const key = run.observe(sideName, row)
         if (key === null) return
         partitions.add(key, [rowNo, key, ...needed.map((column) => row[column])])
-      }, encoding[sideName])
+      }, encoding[sideName], maps[sideName])
       partitions.close()
       return { partitions, error: result.error ? `${path}: ${result.error}` : null }
     }

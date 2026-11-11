@@ -1,17 +1,26 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import AppShell from './components/AppShell.jsx'
+import ErrorBoundary from './components/ErrorBoundary.jsx'
+import { hasWork, loadDraft, saveDraft } from './lib/autosave.js'
 import { contractToJson, parseContractFile } from './lib/contractFile.js'
 import { deleteContract, listContracts, loadContract, saveContract } from './lib/contractStore.js'
 import {
-  clearFileInWorker, fixListInWorker, parseBytesInWorker, parseFileInWorker, parseTextInWorker, readinessInWorker, reconcileInWorker, validateInWorker,
+  clearFileInWorker, columnMapInWorker, fixListInWorker, parseBytesInWorker, parseFileInWorker, parseTextInWorker, readinessInWorker, reconcileInWorker, validateInWorker,
 } from './lib/engineClient.js'
 import { createEvidencePack } from './lib/evidencePack.js'
+import { createMasker, maskReconciliation } from './lib/masking.js'
+import { ownersOf } from './lib/signoff.js'
+import { objectFromPack } from './lib/packs.js'
+import { findPack } from './packs/index.js'
 import { findingTable } from './lib/findingTable.js'
 import { sha256Hex } from './lib/hashing.js'
 import {
   migrationObjectToJson, newMigrationObject, parseMigrationObjectFile, readCrosswalk, runnableContract, runnableSpec, summariseReadiness, summariseReconciliation,
 } from './lib/migrationObject.js'
 import { parseCsv, toCsv } from './lib/parseCsv.js'
+import { workspaceReproduce } from './lib/reproduce.js'
+import { shareDefinitions } from './lib/shareDefinitions.js'
+import { isCurrent, readinessStamp, reconciliationStamp } from './lib/stamp.js'
 import { BUILD_COMMIT, VERSION } from './lib/version.js'
 import { summariseRun } from './lib/runRecord.js'
 import { listRuns, saveRun } from './lib/runStore.js'
@@ -34,11 +43,20 @@ export default function App() {
   const route = useRoute()
   const { user, loading: authLoading } = useAuth()
 
+  // What was autosaved in this browser, read once: the definitions a person
+  // authored, never a file (src/lib/autosave.js). Files are read again.
+  const [initialDraft] = useState(() => {
+    const draft = loadDraft(browserStorage())
+    return draft && hasWork(draft) ? draft : null
+  })
+  const [restored, setRestored] = useState(() => (initialDraft ? { savedAt: initialDraft.savedAt, skipped: initialDraft.skipped.length } : null))
+  const [autosaveProblem, setAutosaveProblem] = useState(null)
+
   const [baseline, setBaseline] = useState(null)
   const [candidate, setCandidate] = useState(null)
-  const [thresholds, setThresholds] = useState(DEFAULT_THRESHOLDS)
-  const [rules, setRules] = useState([])
-  const [contractName, setContractName] = useState('')
+  const [thresholds, setThresholds] = useState(() => initialDraft?.thresholds ?? DEFAULT_THRESHOLDS)
+  const [rules, setRules] = useState(() => initialDraft?.rules ?? [])
+  const [contractName, setContractName] = useState(() => initialDraft?.contractName ?? '')
   const [contractNotice, setContractNotice] = useState(null)
   const [contractId, setContractId] = useState(null)
   const [savedContracts, setSavedContracts] = useState([])
@@ -62,14 +80,42 @@ export default function App() {
   // The migration workspace. The object is session state like the contract, so
   // moving between Contracts and Migrations loses nothing. A report remembers
   // what it was run against, so the page can say when it no longer matches.
-  const [migration, setMigration] = useState(() => newMigrationObject(''))
-  const [migrationDirty, setMigrationDirty] = useState(false)
+  const [migration, setMigration] = useState(() => initialDraft?.migration ?? newMigrationObject(''))
+  const [migrationDirty, setMigrationDirty] = useState(() => initialDraft?.migrationDirty ?? false)
   const [migrationNotice, setMigrationNotice] = useState(null)
   const [migrationFiles, setMigrationFiles] = useState({ load: null, source: null, target: null })
   const [recon, setRecon] = useState(null)
   const [readiness, setReadiness] = useState(null)
+  // Whether the next pack, fix list and export show tagged values in full. A
+  // choice per output, never saved; Aadhaar stays masked regardless.
+  const [unmaskOutputs, setUnmaskOutputs] = useState(false)
 
-  const loadFile = useCallback(async (which, file) => {
+  // Autosave: a moment after the last change, the definitions go to this
+  // browser's storage. A failure is said once, never thrown.
+  useEffect(() => {
+    const storage = browserStorage()
+    if (!storage) return undefined
+    const timer = setTimeout(() => {
+      setAutosaveProblem(saveDraft(storage, { migration, migrationDirty, contractName, rules, thresholds }))
+    }, 400)
+    return () => clearTimeout(timer)
+  }, [migration, migrationDirty, contractName, rules, thresholds])
+
+  // Autosave keeps the work in this browser; the object file is what moves it
+  // anywhere else. Closing with changes that were never downloaded asks first.
+  useEffect(() => {
+    if (!migrationDirty) return undefined
+    const warn = (event) => { event.preventDefault(); event.returnValue = '' }
+    window.addEventListener('beforeunload', warn)
+    return () => window.removeEventListener('beforeunload', warn)
+  }, [migrationDirty])
+
+  // The File behind Validate's two cards, so a workbook can be read again with
+  // another sheet or header row without asking for it twice.
+  const validateFileRefs = useRef({})
+
+  const loadFile = useCallback(async (which, file, workbook = {}) => {
+    validateFileRefs.current[which] = file
     const refusal = tooLargeToRead(file)
     if (refusal) {
       setEngineError(refusal)
@@ -79,7 +125,7 @@ export default function App() {
     setEngineError(null)
     setBusy(`Reading ${file.name}…`)
     try {
-      const { file: summary, draft: inferred } = await parseFileInWorker(which, file)
+      const { file: summary, draft: inferred } = await parseFileInWorker(which, file, 'utf-8', workbook)
       if (which === 'baseline') {
         setBaseline(summary)
         setDraft(inferred)
@@ -100,6 +146,9 @@ export default function App() {
     } else {
       setCandidate(null)
     }
+    // The report described these files; it goes with them in the same render.
+    setResult(null)
+    setContract(null)
     await clearFileInWorker(which)
   }, [])
 
@@ -313,19 +362,57 @@ export default function App() {
     setMigrationDirty(true)
   }
 
-  const fileStamp = (file) => (file ? `${file.name}|${file.rowCount}` : '')
-  const reconStamp = (object, files) => JSON.stringify([runnableSpec(object), fileStamp(files.source), fileStamp(files.target)])
-  const readinessStamp = (object, files) => JSON.stringify([runnableContract(object), object.spec.key.target, fileStamp(files.load)])
+  // Column matching (columnMap.js). The object holds the map; the worker holds
+  // the rows. Whenever either changes, each open file is put under the object's
+  // current map, and the page learns the columns the engine now reads. A map
+  // that does not fit a file is left unapplied: the matcher says why, and a
+  // check refuses to run.
+  const columnMapKey = JSON.stringify(migration.columnMap ?? {})
+  const openFilesKey = Object.keys(migrationFiles).filter((role) => migrationFiles[role]).map((role) => `${role}:${migrationFiles[role].sha256 ?? migrationFiles[role].name}:${migrationFiles[role].sheet ?? ''}:${migrationFiles[role].headerRow ?? ''}`).join('|')
+  useEffect(() => {
+    let cancelled = false
+    const map = JSON.parse(columnMapKey)
+    const roles = openFilesKey ? openFilesKey.split('|').map((entry) => entry.slice(0, entry.startsWith('reference:') ? entry.indexOf(':', 'reference:'.length) : entry.indexOf(':'))) : []
+    ;(async () => {
+      for (const role of roles) {
+        try {
+          const { file, issues } = await columnMapInWorker(role, map[role] ?? {})
+          if (cancelled || !file || issues.length > 0) continue
+          setMigrationFiles((current) => (current[role] && current[role].columns.join('\u0000') !== file.columns.join('\u0000')
+            ? { ...current, [role]: { ...current[role], columns: file.columns, fileColumns: file.fileColumns } }
+            : current))
+        } catch (error) {
+          if (!cancelled) setEngineError(error.message)
+        }
+      }
+    })()
+    return () => { cancelled = true }
+  }, [columnMapKey, openFilesKey])
+
+  const changeColumnMap = (role, map) => {
+    const next = { ...(migration.columnMap ?? {}) }
+    if (Object.keys(map).length > 0) next[role] = map
+    else delete next[role]
+    changeMigration({ columnMap: next })
+  }
+
+  // Whether a report still describes what is on screen: the files by the
+  // SHA-256 of their bytes, the definitions as run (src/lib/stamp.js).
+  const reconCurrent = Boolean(recon) && isCurrent(recon.stamp, reconciliationStamp(migration, migrationFiles))
+  const readinessCurrent = Boolean(readiness) && isCurrent(readiness.stamp, readinessStamp(migration, migrationFiles))
 
   // The File behind each role is kept, so declaring a different encoding can
   // read the same file again without asking for it twice.
   const migrationFileRefs = useRef({})
 
-  const loadMigrationFile = async (which, file, encoding = migration.formats?.[which]?.encoding) => {
+  // Which sheet and header row each role's workbook is read from.
+  const workbookChoice = useRef({})
+
+  const loadMigrationFile = async (which, file, encoding = migration.formats?.[which]?.encoding, decimal = migration.formats?.[which]?.decimal) => {
     migrationFileRefs.current[which] = file
     const refusal = tooLargeToRead(file)
     if (refusal) {
-      setEngineError(`${refusal} The CLIs have no such limit: node scripts/reconcile.mjs and scripts/check.mjs stream files of any size.`)
+      setEngineError(`${refusal} The command line has no such limit: dcv check and dcv reconcile stream files of any size (npm install --global data-contract-validator).`)
       return
     }
     setEngineError(null)
@@ -335,7 +422,7 @@ export default function App() {
       // evidence pack's SHA-256 is the one `sha256sum` gives for this file;
       // decoded in the encoding declared for it.
       const bytes = await file.arrayBuffer()
-      const [{ file: summary }, sha256] = await Promise.all([parseBytesInWorker(which, bytes, file.name, encoding), sha256Hex(bytes)])
+      const [{ file: summary }, sha256] = await Promise.all([parseBytesInWorker(which, bytes, file.name, encoding, { ...workbookChoice.current[which], decimal: decimal ?? '.' }), sha256Hex(bytes)])
       setMigrationFiles((current) => ({ ...current, [which]: { ...summary, sha256, bytes: file.size } }))
     } catch (error) {
       setEngineError(/UTF-8/.test(error.message)
@@ -353,13 +440,29 @@ export default function App() {
     const previous = migration.formats?.[role] ?? {}
     changeMigration({ formats: { ...(migration.formats ?? {}), [role]: format } })
     const file = migrationFileRefs.current[role]
-    if (file && (previous.encoding ?? 'utf-8') !== (format.encoding ?? 'utf-8')) loadMigrationFile(role, file, format.encoding)
+    // A workbook's stored numbers are written out in the declared decimal mark
+    // (parseXlsx.js), so for a workbook a new decimal mark is a re-read too.
+    const reread = (previous.encoding ?? 'utf-8') !== (format.encoding ?? 'utf-8')
+      || (migrationFiles[role]?.kind === 'xlsx' && (previous.decimal ?? '.') !== (format.decimal ?? '.'))
+    if (file && reread) loadMigrationFile(role, file, format.encoding, format.decimal)
+  }
+
+  const chooseWorkbookPart = (which, choice) => {
+    workbookChoice.current[which] = choice
+    const file = migrationFileRefs.current[which]
+    if (file) loadMigrationFile(which, file)
+  }
+
+  const chooseValidateWorkbookPart = (which, choice) => {
+    const file = validateFileRefs.current[which]
+    if (file) loadFile(which, file, choice)
   }
 
   const clearMigrationFile = async (which) => {
     delete migrationFileRefs.current[which]
+    delete workbookChoice.current[which]
     setMigrationFiles((current) => ({ ...current, [which]: null }))
-    if (which === 'load') setReadiness(null)
+    if (which === 'load' || which.startsWith('reference:')) setReadiness(null)
     else setRecon(null)
     await clearFileInWorker(which)
   }
@@ -375,9 +478,9 @@ export default function App() {
   const runReconciliation = async () => {
     setBusy('Reconciling…')
     try {
-      const { report } = await reconcileInWorker(runnableSpec(migration))
+      const { report } = await reconcileInWorker(runnableSpec(migration), migration.columnMap ?? {})
       if (!report) return
-      setRecon({ report, stamp: reconStamp(migration, migrationFiles) })
+      setRecon({ report, stamp: reconciliationStamp(migration, migrationFiles) })
       record(summariseReconciliation(report, {
         wave: migration.wave, cycle: migration.cycle, sourceName: migrationFiles.source?.name, targetName: migrationFiles.target?.name,
       }))
@@ -391,7 +494,7 @@ export default function App() {
   const runReadiness = async () => {
     setBusy('Checking the load file…')
     try {
-      const { report } = await readinessInWorker({ contract: runnableContract(migration), key: migration.spec.key.target.filter(Boolean) })
+      const { report } = await readinessInWorker({ contract: runnableContract(migration), key: migration.spec.key.target.filter(Boolean), columnMap: migration.columnMap ?? {} })
       if (!report) return
       setReadiness({ report, stamp: readinessStamp(migration, migrationFiles) })
       record(summariseReadiness(report, { wave: migration.wave, cycle: migration.cycle, fileName: migrationFiles.load?.name }))
@@ -406,12 +509,17 @@ export default function App() {
   const slug = (name, fallback) => (name.trim() || fallback).replace(/[^\w.-]+/g, '-').toLowerCase()
 
   const downloadFixList = async () => {
-    const { csv } = await fixListInWorker()
-    if (csv) saveFile(`${slug(migration.name, 'load')}-fix-list.csv`, csv, 'text/csv')
+    const { csv } = await fixListInWorker({ tags: migration.tags, unmask: unmaskOutputs, key: migration.spec.key.target.filter(Boolean), owner: ownersOf(migration).readiness })
+    const unmasked = unmaskOutputs && Object.keys(migration.tags ?? {}).length > 0
+    if (csv) saveFile(`${slug(migration.name, 'load')}-fix-list${unmasked ? '-UNMASKED' : ''}.csv`, csv, 'text/csv')
   }
 
   const exportFinding = (finding) => {
-    const table = findingTable(finding, recon?.report)
+    // The same finding from the report as it may leave the page (masking.js).
+    const keys = [...migration.spec.key.source, ...migration.spec.key.target].filter(Boolean)
+    const report = maskReconciliation(recon?.report, migration.spec, createMasker(migration.tags, { unmask: unmaskOutputs, keys }))
+    const masked = report?.steps?.flatMap((s) => s.findings).find((f) => f.code === finding.code && f.column === finding.column && f.step === finding.step) ?? finding
+    const table = findingTable(masked, report)
     if (!table) return
     saveFile(`${slug(migration.name, 'reconciliation')}-${finding.code}${finding.column ? `-${finding.column}` : ''}.csv`, toCsv(table.columns, table.rows), 'text/csv')
   }
@@ -420,6 +528,14 @@ export default function App() {
     saveFile(`${slug(migration.name, 'migration')}.migration.json`, migrationObjectToJson(migration), 'application/json')
     setMigrationDirty(false)
     setMigrationNotice({ tone: 'good', text: `Saved to ${slug(migration.name, 'migration')}.migration.json — rules, mapping spec and ${migration.runs.length} check${migration.runs.length === 1 ? '' : 's'}. Open it here next cycle, or hand it to the CLIs.` })
+  }
+
+  // The one file that may be sent to someone else: definitions and counts,
+  // with what was left out said on screen (shareDefinitions.js).
+  const shareMigration = () => {
+    const shared = shareDefinitions(migration)
+    saveFile(`${slug(migration.pack?.object ?? 'definitions', 'definitions')}.shared.migration.json`, shared.json, 'application/json')
+    setMigrationNotice({ tone: 'good', text: 'Saved the definitions for sharing: rules, mapping, formats, column matching and run counts. Left out:', details: shared.dropped })
   }
 
   const openMigration = async (file) => {
@@ -439,6 +555,25 @@ export default function App() {
           details: opened.skipped.map((entry) => `${entry.rule?.column ?? '(no column)'}: ${entry.reason}`),
         }
       : { tone: 'good', text: `Opened "${opened.object.name}" — ${count(opened.object.contract.rules.length, 'rule')}, ${count(opened.object.spec.mapping.length, 'mapped field')}, ${count(opened.object.runs.length, 'earlier check')}.` })
+  }
+
+  // A pack object: its rules, spec, formats, tags and scope, ready for files.
+  // The files already read stay; the results go, since the definitions changed.
+  const startFromPack = (packId, objectId, params = {}) => {
+    const pack = findPack(packId)
+    let object = null
+    try {
+      object = pack && objectFromPack(pack, objectId, params)
+    } catch (error) {
+      setMigrationNotice({ tone: 'bad', text: error.message })
+      return
+    }
+    if (!object) return
+    setMigration(object)
+    setMigrationDirty(true)
+    setRecon(null)
+    setReadiness(null)
+    setMigrationNotice({ tone: pack.status === 'verified' ? 'good' : 'warn', text: `Started “${object.name}” from ${pack.name} v${pack.version}${pack.status === 'verified' ? '.' : ' — a DRAFT pack: check its columns against your exports before relying on it.'}` })
   }
 
   const newMigration = () => {
@@ -486,8 +621,9 @@ export default function App() {
     }
     const spec = migration.spec
     const next = 'field' in where
-      ? { ...spec, mapping: spec.mapping.map((f, i) => (i === where.field ? { ...f, map: read.map } : f)) }
-      : { ...spec, totals: spec.totals.map((t, i) => (i === where.total ? { ...t, groupBy: { ...t.groupBy, map: read.map } } : t)) }
+      // A new file is a new crosswalk: what it holds must be said again.
+      ? { ...spec, mapping: spec.mapping.map((f, i) => (i === where.field ? { ...f, map: read.map, mapKind: undefined } : f)) }
+      : { ...spec, totals: spec.totals.map((t, i) => (i === where.total ? { ...t, groupBy: { ...t.groupBy, map: read.map, mapKind: undefined } } : t)) }
     changeMigration({ spec: next })
     setMigrationNotice({
       tone: read.issues.length ? 'warn' : 'good',
@@ -500,24 +636,35 @@ export default function App() {
   // files and definitions on screen: a pack must never attest to files that
   // were not the ones checked.
   const downloadEvidence = async () => {
-    const reconCurrent = recon && recon.stamp === reconStamp(migration, migrationFiles)
-    const readyCurrent = readiness && readiness.stamp === readinessStamp(migration, migrationFiles)
+    const readyCurrent = readinessCurrent
     if (!reconCurrent && !readyCurrent) return
-    const asFile = (f) => ({ name: f.name, rows: f.rowCount, bytes: f.bytes, sha256: f.sha256 })
+    const asFile = (f) => ({ name: f.name, rows: f.rowCount, bytes: f.bytes, sha256: f.sha256, ...(f.kind === 'xlsx' ? { sheet: f.sheet, headerRow: f.headerRow } : {}) })
     const objectFile = `${slug(migration.name, 'migration')}.migration.json`
-    const key = migration.spec.key.target.filter(Boolean)
-    const commands = [
-      readyCurrent && `node scripts/check.mjs ${objectFile} ${migrationFiles.load.name}${key.length ? ` --key ${key.join(',')}` : ''}`,
-      reconCurrent && `node scripts/reconcile.mjs ${objectFile} ${migrationFiles.source.name} ${migrationFiles.target.name}`,
-    ].filter(Boolean)
+    const referenceRoles = Object.keys(migrationFiles).filter((role) => role.startsWith('reference:') && migrationFiles[role])
+    const reproduce = workspaceReproduce({
+      objectFile,
+      load: readyCurrent ? migrationFiles.load.name : null,
+      references: readyCurrent ? Object.fromEntries(referenceRoles.map((role) => [role.slice('reference:'.length), migrationFiles[role].name])) : {},
+      source: reconCurrent ? migrationFiles.source.name : null,
+      target: reconCurrent ? migrationFiles.target.name : null,
+      key: migration.spec.key.target.filter(Boolean),
+    })
     setBusy('Building the evidence pack…')
     try {
       const pack = await createEvidencePack({
         object: migration,
-        readiness: readyCurrent ? { report: readiness.report, flaggedCount: readiness.report.flaggedCount, file: asFile(migrationFiles.load) } : null,
+        readiness: readyCurrent
+          ? {
+              report: readiness.report,
+              flaggedCount: readiness.report.flaggedCount,
+              file: asFile(migrationFiles.load),
+              references: referenceRoles.map((role) => ({ name: role.slice('reference:'.length), file: asFile(migrationFiles[role]) })),
+            }
+          : null,
         reconciliation: reconCurrent ? { report: recon.report, source: asFile(migrationFiles.source), target: asFile(migrationFiles.target) } : null,
         generatedBy: `the workspace — data-contract-validator ${VERSION}${BUILD_COMMIT ? ` (${BUILD_COMMIT})` : ''}`,
-        reproduce: `# with ${objectFile} saved from the workspace\n${commands.join('\n')}`,
+        reproduce,
+        unmask: unmaskOutputs,
       })
       saveFile(pack.fileName, pack.html, 'text/html')
       const left = [!readyCurrent && readiness && 'load readiness', !reconCurrent && recon && 'reconciliation'].filter(Boolean)
@@ -563,16 +710,27 @@ export default function App() {
   }
 
   const reset = () => {
+    setResult(null)
+    setContract(null)
     setBaseline(null)
     setCandidate(null)
     setRules([])
     setContractName('')
     setContractNotice(null)
     setContractId(null)
+    clearFileInWorker('baseline')
+    clearFileInWorker('candidate')
   }
 
   return (
-    <AppShell route={route} user={user} authLoading={authLoading} busy={busy} engineError={engineError} onDismissError={() => setEngineError(null)}>
+    <AppShell
+      route={route} user={user} authLoading={authLoading} busy={busy} engineError={engineError} onDismissError={() => setEngineError(null)}
+      restored={restored} onDismissRestored={() => setRestored(null)} autosaveProblem={autosaveProblem}
+    >
+      {/* One screen's failure must not take the session with it: the boundary
+          sits below the state, so the migration object and the contract survive,
+          and moving to another screen (a new key) starts this one afresh. */}
+      <ErrorBoundary key={route} scope="screen">
       {route === 'home' && <LandingScreen onLoadSample={loadSample} />}
 
       {route === 'migrations' && (
@@ -581,17 +739,19 @@ export default function App() {
           dirty={migrationDirty}
           notice={migrationNotice}
           files={migrationFiles}
-          recon={recon && { report: recon.report, stale: recon.stamp !== reconStamp(migration, migrationFiles) }}
-          readiness={readiness && { report: readiness.report, stale: readiness.stamp !== readinessStamp(migration, migrationFiles) }}
+          recon={recon && { report: recon.report, stale: !reconCurrent }}
+          readiness={readiness && { report: readiness.report, stale: !readinessCurrent }}
           sessionRules={rules}
           onChange={changeMigration}
           onOpenFile={openMigration}
           onDownload={downloadMigration}
           onNew={newMigration}
+          onStartFromPack={startFromPack}
           onSample={loadMigrationSample}
           onLoadFile={loadMigrationFile}
           onClearFile={clearMigrationFile}
           onCrosswalk={applyCrosswalk}
+          onShare={shareMigration}
           onReconcile={runReconciliation}
           onCheckReadiness={runReadiness}
           onDownloadFixList={downloadFixList}
@@ -601,6 +761,10 @@ export default function App() {
           onLoadContract={loadContractIntoMigration}
           onDownloadEvidence={downloadEvidence}
           onFormat={changeFormat}
+          onColumnMap={changeColumnMap}
+          onWorkbook={chooseWorkbookPart}
+          unmask={unmaskOutputs}
+          onUnmask={setUnmaskOutputs}
         />
       )}
 
@@ -643,6 +807,7 @@ export default function App() {
           thresholds={thresholds}
           onLoadBaseline={(file) => loadFile('baseline', file)}
           onLoadCandidate={(file) => loadFile('candidate', file)}
+          onWorkbook={chooseValidateWorkbookPart}
           onClearBaseline={() => clearFile('baseline')}
           onClearCandidate={() => clearFile('candidate')}
           onThresholdChange={(key, value) => setThresholds((current) => ({ ...current, [key]: value }))}
@@ -665,6 +830,7 @@ export default function App() {
       )}
 
       {route === 'signin' && <SignInScreen user={user} />}
+      </ErrorBoundary>
     </AppShell>
   )
 }
@@ -678,9 +844,27 @@ const REFUSE_BYTES = 90 * 1024 * 1024
 
 const mb = (bytes) => `${Math.round(bytes / 1024 / 1024)} MB`
 
+// A workbook is a zip that is read whole and expanded in memory, so it gets a
+// lower ceiling. Conservative and NOT yet measured like the CSV figure above —
+// measure it (v3 §12) before raising it.
+const REFUSE_WORKBOOK_BYTES = 25 * 1024 * 1024
+
 function tooLargeToRead(file) {
+  if (/\.xlsx$/i.test(file.name) && file.size > REFUSE_WORKBOOK_BYTES) {
+    return `"${file.name}" is ${mb(file.size)}, and an Excel workbook that size is too large to open in a browser tab — it is expanded whole in memory. Save the sheet as CSV (UTF-8) and check that instead; the CSV limit is 90 MB, and the command line has none.`
+  }
   if (file.size <= REFUSE_BYTES) return null
   return `"${file.name}" is ${mb(file.size)}, and a browser tab cannot hold a file that size — everything here runs in this page, so the limit is real memory, not a policy. Check a slice of it, or split it by month or region and check each part.`
+}
+
+// The browser's own storage, or null where it is unavailable (some private
+// modes throw on access). Autosave then simply doesn't happen.
+function browserStorage() {
+  try {
+    return typeof window !== 'undefined' ? window.localStorage : null
+  } catch {
+    return null
+  }
 }
 
 // Everything this app hands back is built in the page and handed straight to

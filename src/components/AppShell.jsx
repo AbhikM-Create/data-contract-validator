@@ -6,11 +6,15 @@ import { colors, ghostButton, mono, sans } from '../theme.js'
 // and the trust line. The trust line is part of the chrome rather than one
 // screen's copy, because the claim it makes is true on every screen and a
 // reader should never have to go looking for it.
-export default function AppShell({ route, user, authLoading, busy, engineError, onDismissError, children }) {
+export default function AppShell({ route, user, authLoading, busy, engineError, onDismissError, restored, onDismissRestored, autosaveProblem, children }) {
   const onLanding = route === 'home'
 
   return (
     <div style={{ background: colors.ground, minHeight: '100vh' }}>
+      {/* First thing a keyboard reaches: past the header and nav to the screen. */}
+      <a href="#main" className="skip-link" onClick={(e) => { e.preventDefault(); document.getElementById('main')?.focus() }}>
+        Skip to the main content
+      </a>
       <header
         style={{
           background: colors.panel,
@@ -100,7 +104,7 @@ export default function AppShell({ route, user, authLoading, busy, engineError, 
         >
           <span style={{ width: 5, height: 5, borderRadius: '50%', background: colors.pass, flexShrink: 0, transform: 'translateY(-1px)' }} />
           <span style={{ fontFamily: sans, fontSize: 12, color: colors.mute, flex: 1, minWidth: 0 }}>
-            Your CSVs are read in this browser and never uploaded. Only what you author leaves this page — when you
+            Your files are read in this browser and never uploaded. Only what you author leaves this page — when you
             download it or save it to your account — and saved checks hold counts, never your records.
           </span>
         </div>
@@ -108,6 +112,10 @@ export default function AppShell({ route, user, authLoading, busy, engineError, 
 
       {/* Work happens in a worker, so the page can say what is going on instead
           of freezing and looking crashed. */}
+      {/* Announced, not just drawn: a screen reader hears that a check started
+          and, through the screens' own status regions, how it ended. The region
+          is always present so its first message is read. */}
+      <div role="status" aria-live="polite">
       {busy && (
         <div style={{ background: `${colors.accent}0F`, borderBottom: `1px solid ${colors.accent}33` }}>
           <div style={{ maxWidth: 1080, margin: '0 auto', padding: '8px 24px', display: 'flex', alignItems: 'center', gap: 9 }}>
@@ -118,9 +126,28 @@ export default function AppShell({ route, user, authLoading, busy, engineError, 
           </div>
         </div>
       )}
+      </div>
+
+      {(restored || autosaveProblem) && (
+        <div style={{ background: colors.panel, borderBottom: `1px solid ${colors.panelEdge}` }}>
+          <div role="status" style={{ maxWidth: 1080, margin: '0 auto', padding: '9px 24px', display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+            <span style={{ fontFamily: sans, fontSize: 12.5, color: colors.ink, lineHeight: 1.55, flex: 1 }}>
+              {restored && (
+                <>
+                  Restored your work from {when(restored.savedAt)} — the migration object and the rules you had open.
+                  Files are never stored, so open them again to check.
+                  {restored.skipped > 0 && ` ${restored.skipped} rule${restored.skipped === 1 ? '' : 's'} could not be read back and ${restored.skipped === 1 ? 'is' : 'are'} NOT being checked.`}
+                </>
+              )}
+              {autosaveProblem && <>{restored ? ' ' : ''}{autosaveProblem}</>}
+            </span>
+            {restored && <button onClick={onDismissRestored} style={ghostButton}>Dismiss</button>}
+          </div>
+        </div>
+      )}
 
       {engineError && (
-        <div style={{ background: `${colors.fail}0D`, borderBottom: `1px solid ${colors.fail}33` }}>
+        <div role="alert" style={{ background: `${colors.fail}0D`, borderBottom: `1px solid ${colors.fail}33` }}>
           <div style={{ maxWidth: 1080, margin: '0 auto', padding: '11px 24px', display: 'flex', alignItems: 'flex-start', gap: 12 }}>
             <span style={{ fontFamily: sans, fontSize: 12.5, color: colors.fail, lineHeight: 1.55, flex: 1 }}>
               {engineError}
@@ -132,17 +159,26 @@ export default function AppShell({ route, user, authLoading, busy, engineError, 
         </div>
       )}
 
-      <main style={{ maxWidth: onLanding ? 1080 : 1080, margin: '0 auto', padding: '28px 24px 80px' }}>
+      <main id="main" tabIndex={-1} style={{ maxWidth: onLanding ? 1080 : 1080, margin: '0 auto', padding: '28px 24px 80px', outline: 'none' }}>
         {children}
       </main>
 
       <footer style={{ borderTop: `1px solid ${colors.panelEdge}`, background: colors.panel }}>
         <div style={{ maxWidth: 1080, margin: '0 auto', padding: '16px 24px' }}>
           <span style={{ fontFamily: mono, fontSize: 11, color: colors.faint }}>
-            Parsing and checking happen in this page. No backend, no data storage.
+            {isConfigured
+              ? 'Parsing and checking happen in this page. Signed in, contracts and run counts are saved to your account; files and records never are.'
+              : 'Parsing and checking happen in this page. No backend; your work is kept only in this browser.'}
           </span>
         </div>
       </footer>
     </div>
   )
+}
+
+// "3 Nov, 14:05" in the reader's own time zone.
+function when(iso) {
+  const date = iso ? new Date(iso) : null
+  if (!date || Number.isNaN(date.getTime())) return 'earlier'
+  return date.toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
 }

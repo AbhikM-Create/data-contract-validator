@@ -75,7 +75,6 @@ export default function RuleEditor({ contract, rules, columns: given, onAdd }) {
                     <button
                       key={ruleKey(suggestion.rule)}
                       onClick={() => onAdd(suggestion.rule)}
-                      title={suggestion.evidence}
                       style={{
                         background: colors.panel, border: `1px solid ${colors.panelEdge}`,
                         borderRadius: 5, padding: '4px 9px', cursor: 'pointer',
@@ -83,6 +82,8 @@ export default function RuleEditor({ contract, rules, columns: given, onAdd }) {
                       }}
                     >
                       + {suggestion.label}
+                      {/* The evidence travels with the proposal, visibly. */}
+                      <span style={{ display: 'block', fontSize: 11, color: colors.faint, marginTop: 2, textAlign: 'left' }}>{suggestion.evidence}</span>
                     </button>
                   ))}
                 </div>

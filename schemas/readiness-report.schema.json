@@ -49,7 +49,13 @@
             "type": "array",
             "items": { "type": "object", "required": ["row", "record", "value"], "properties": { "row": { "type": "integer", "minimum": 1 }, "record": { "type": "string" }, "value": { "type": "string" } } }
           },
-          "reason": { "type": ["string", "null"] }
+          "reason": { "type": ["string", "null"] },
+          "fileLevel": { "type": "boolean", "description": "Added in v3: a check over the whole file (an aggregate), which rejects no single record." },
+          "groups": {
+            "type": "array",
+            "description": "Added in v3, file-level checks only: each total that failed, per group (group null for the whole file).",
+            "items": { "type": "object", "required": ["group", "value"], "properties": { "group": { "type": ["string", "null"] }, "value": { "type": "string" } } }
+          }
         }
       }
     },
