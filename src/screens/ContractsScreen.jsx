@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import ConfirmButton from '../components/ConfirmButton.jsx'
 import ContractFileBar from '../components/ContractFileBar.jsx'
 import RuleEditor from '../components/RuleEditor.jsx'
 import SavedContracts from '../components/SavedContracts.jsx'
@@ -77,6 +78,7 @@ export default function ContractsScreen({
           onOpen={onOpenContract}
           onDelete={onDeleteContract}
           onNew={onNewContract}
+          ruleCount={rules.length}
         />
       </div>
 
@@ -122,7 +124,13 @@ export default function ContractsScreen({
               <span style={{ fontFamily: sans, fontSize: 12, color: colors.faint }}>
                 {visible.length} of {rules.length} shown
               </span>
-              <button onClick={onClearRules} style={ghostButton}>remove all</button>
+              <ConfirmButton
+                question={`Remove all ${rules.length} rule${rules.length === 1 ? '' : 's'}?`}
+                confirmLabel="Remove all"
+                onConfirm={onClearRules}
+              >
+                remove all
+              </ConfirmButton>
             </div>
           )}
 

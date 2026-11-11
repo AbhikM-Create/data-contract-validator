@@ -1,3 +1,4 @@
+import ConfirmButton from '../components/ConfirmButton.jsx'
 import ContractSummary from '../components/ContractSummary.jsx'
 import LayerCard from '../components/LayerCard.jsx'
 import RuleResults, { ResultTile } from '../components/RuleResults.jsx'
@@ -12,9 +13,11 @@ import { chip, colors, ghostButton, mono, panel, sans, secondaryButton } from '.
 export default function ValidateScreen({
   baseline, candidate, contract, result, rules, thresholds, draft,
   onLoadBaseline, onLoadCandidate, onClearBaseline, onClearCandidate,
-  onThresholdChange, onThresholdReset, onReset, onCheckAnother, onRemoveRule, runNotice,
+  onThresholdChange, onThresholdReset, onReset, onCheckAnother, onRemoveRule, runNotice, onWorkbook,
 }) {
-  if (result) {
+  // The report is about a checked file, so it needs one: leaving the report
+  // clears the file first, and the result goes with it a render later.
+  if (result && candidate) {
     return (
       <Report
         baseline={baseline}
@@ -37,7 +40,7 @@ export default function ValidateScreen({
     <>
       <ScreenHead
         title="Validate a file"
-        blurb="Check a CSV against a baseline you trust, against the rules you have written, or both."
+        blurb="Check a CSV or Excel file against a baseline you trust, against the rules you have written, or both."
       />
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 14, marginTop: 20 }}>
@@ -47,21 +50,23 @@ export default function ValidateScreen({
           tag="baseline"
           hint={rules.length > 0
             ? 'Optional — you already have rules loaded. Add a baseline to also compare the two files.'
-            : 'A known-good CSV. Its shape becomes the expectation the new file is measured against.'}
+            : 'A known-good file. Its shape becomes the expectation the new file is measured against.'}
           accent={colors.accent}
           file={baseline}
           onFile={onLoadBaseline}
           onClear={onClearBaseline}
+          onWorkbook={(choice) => onWorkbook?.('baseline', choice)}
         />
         <UploadCard
           step={2}
           title="The file to check"
           tag="new file"
-          hint="The CSV that just arrived, and that you want to check before using it."
+          hint="The file that just arrived, and that you want to check before using it."
           accent={colors.warn}
           file={candidate}
           onFile={onLoadCandidate}
           onClear={onClearCandidate}
+          onWorkbook={(choice) => onWorkbook?.('candidate', choice)}
         />
       </div>
 
@@ -115,7 +120,15 @@ function Report({
         <FileChip tone={colors.warn} caption="checked" name={candidate.name} rows={candidate.rowCount} />
         <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
           <button onClick={onCheckAnother} style={ghostButton}>check another file</button>
-          <button onClick={onReset} style={ghostButton}>start over</button>
+          <ConfirmButton
+            question={rules.length > 0
+              ? `Start over? Both files and the ${rules.length} rule${rules.length === 1 ? '' : 's'} open on Contracts are cleared.`
+              : 'Start over? Both files are cleared from this page.'}
+            confirmLabel="Start over"
+            onConfirm={onReset}
+          >
+            start over
+          </ConfirmButton>
         </div>
       </div>
 

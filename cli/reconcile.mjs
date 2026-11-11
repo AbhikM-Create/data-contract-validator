@@ -10,6 +10,8 @@
 import { readFileSync, writeFileSync } from 'node:fs'
 import { basename } from 'node:path'
 import { createEvidencePack } from '../src/lib/evidencePack.js'
+import { dcvCommand } from '../src/lib/reproduce.js'
+import { createMasker, maskReconciliation } from '../src/lib/masking.js'
 import { isMigrationObjectFile, readMigrationObject, runnableSpec } from '../src/lib/migrationObject.js'
 import { REPORT_SCHEMAS } from '../src/lib/version.js'
 import { fileInfo } from '../scripts/lib/fileInfo.mjs'
@@ -18,20 +20,20 @@ import { EXIT, parse, UsageError } from './args.mjs'
 import { buildInfo, describeBuild } from './buildInfo.mjs'
 import { reconcileJunit } from './junit.mjs'
 
-export const USAGE = 'dcv reconcile <spec.json> <source.csv> <target.csv> [--json] [--junit out.xml] [--evidence pack.html] [--tmp dir] [--partitions n]'
+export const USAGE = 'dcv reconcile <spec.json> <source.csv> <target.csv> [--json] [--junit out.xml] [--evidence pack.html] [--unmask] [--tmp dir] [--partitions n]'
 
 export async function run(argv) {
   const parsed = parse(argv, {
     usage: USAGE,
     positionals: 3,
-    options: { json: { type: 'boolean' }, junit: { type: 'string' }, evidence: { type: 'string' }, tmp: { type: 'string' }, partitions: { type: 'string' } },
+    options: { json: { type: 'boolean' }, junit: { type: 'string' }, evidence: { type: 'string' }, tmp: { type: 'string' }, partitions: { type: 'string' }, unmask: { type: 'boolean' } },
   })
   if (parsed.help) {
     console.log(`Usage: ${USAGE}\n\n<spec.json> may be a reconciliation spec or a migration object saved from the workspace.`)
     return EXIT.OK
   }
   const [specPath, sourcePath, targetPath] = parsed.args
-  const { json, junit, evidence, tmp, partitions } = parsed.values
+  const { json, junit, evidence, tmp, partitions, unmask } = parsed.values
 
   let spec
   let object = null
@@ -50,9 +52,12 @@ export async function run(argv) {
   }
 
   // An evidence pack quotes more records per finding than a terminal summary.
-  const outcome = await reconcileFiles(spec, sourcePath, targetPath, { tmpDir: tmp, partitions, exampleLimit: evidence ? 25 : undefined })
+  const outcome = await reconcileFiles(spec, sourcePath, targetPath, { tmpDir: tmp, partitions, exampleLimit: evidence ? 25 : undefined, columnMap: object?.columnMap })
   if (outcome.error) throw new UsageError(outcome.error)
   const report = outcome.report
+  // Tagged values masked in what leaves (masking.js); --unmask shows them.
+  const keys = [...(spec.key?.source ?? []), ...(spec.key?.target ?? [])].filter(Boolean)
+  const shown = maskReconciliation(report, object?.spec ?? spec, createMasker(object?.tags, { unmask: unmask === true, keys }))
   const build = buildInfo()
   const files = { source: basename(sourcePath), target: basename(targetPath) }
 
@@ -66,7 +71,8 @@ export async function run(argv) {
         target: await fileInfo(targetPath, report.counts.targetRows),
       },
       generatedBy: describeBuild(),
-      reproduce: `dcv ${['reconcile', ...argv].join(' ')}`,
+      reproduce: dcvCommand('reconcile', argv),
+      unmask: unmask === true,
     })
     writeFileSync(evidence, pack.html, { mode: 0o600 })
     notes.push(`Evidence pack ${pack.reference} written to ${evidence}`)
@@ -77,9 +83,9 @@ export async function run(argv) {
   }
 
   if (json) {
-    console.log(JSON.stringify({ $schema: REPORT_SCHEMAS.reconcile, tool: build, generatedAt: new Date().toISOString(), files, partitions: outcome.partitions, ...report }, null, 2))
+    console.log(JSON.stringify({ $schema: REPORT_SCHEMAS.reconcile, tool: build, generatedAt: new Date().toISOString(), files, partitions: outcome.partitions, ...shown }, null, 2))
   } else {
-    printSummary(report, outcome, files, notes)
+    printSummary(shown, outcome, files, notes)
   }
   return report.status === 'PASS' ? EXIT.OK : report.status === 'FAIL' ? EXIT.FOUND : EXIT.UNUSABLE
 }

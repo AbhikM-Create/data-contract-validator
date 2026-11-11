@@ -1,4 +1,5 @@
 import { useRef } from 'react'
+import { CROSSWALK_KINDS } from '../lib/shareDefinitions.js'
 import { colors, ghostButton, label, mono, panel, sans } from '../theme.js'
 
 // Building a reconciliation spec from dropdowns — never typed logic, the same
@@ -66,8 +67,8 @@ export default function SpecBuilder({ spec, sourceColumns, targetColumns, sugges
         {scope && (
           <Row>
             <span style={{ fontFamily: mono, fontSize: 11, color: colors.faint }}>ONLY WHERE</span>
-            <Pick value={scope.column} options={sourceColumns} onChange={(v) => setScope({ column: v })} />
-            <select value={scope.op} onChange={(e) => setScope({ op: e.target.value })} style={control(130)}>
+            <Pick value={scope.column} options={sourceColumns} onChange={(v) => setScope({ column: v })} label="scope column" />
+            <select aria-label="scope condition" value={scope.op} onChange={(e) => setScope({ op: e.target.value })} style={control(130)}>
               {OPS.map((op) => <option key={op.id} value={op.id}>{op.label}</option>)}
             </select>
             {scope.op !== 'notNull' && (
@@ -96,7 +97,7 @@ export default function SpecBuilder({ spec, sourceColumns, targetColumns, sugges
               <input type="checkbox" checked={Boolean(field.ignoreCase)} onChange={(e) => setField(i, { ignoreCase: e.target.checked || undefined })} />
               <span style={{ fontFamily: sans, fontSize: 12, color: colors.mute }}>ignore case</span>
             </label>
-            <Crosswalk map={field.map} onFile={(file) => onCrosswalk({ field: i }, file)} onClear={() => setField(i, { map: undefined })} />
+            <Crosswalk what={`${field.source || 'field'} to ${field.target || 'field'}`} map={field.map} kind={field.mapKind} onKind={(mapKind) => setField(i, { mapKind })} onFile={(file) => onCrosswalk({ field: i }, file)} onClear={() => setField(i, { map: undefined, mapKind: undefined })} />
             <Remove onClick={() => removeField(i)} />
           </Row>
         ))}
@@ -110,13 +111,27 @@ export default function SpecBuilder({ spec, sourceColumns, targetColumns, sugges
         </div>
       </Part>
 
-      <Part title="Control totals" hint="Sums that must still tie out, optionally per group — a company code, a cost centre. They catch what record matching misses: a whole group loaded in the wrong unit." last>
+      <Part title="Control totals" hint="Sums, or counts of records, that must still tie out, optionally per group — a company code, a cost centre, a location. They catch what record matching misses: a whole group loaded in the wrong unit, or people loaded under the wrong location." last>
         {spec.totals.map((total, i) => (
           <Row key={`total-${i}`}>
-            <span style={{ fontFamily: mono, fontSize: 11, color: colors.faint }}>SUM</span>
-            <Pick value={total.source} options={sourceColumns} onChange={(v) => setTotal(i, { source: v })} placeholder="source amount" />
-            <Arrow />
-            <Pick value={total.target} options={targetColumns} onChange={(v) => setTotal(i, { target: v })} placeholder="target amount" />
+            <select
+              aria-label={`control total ${i + 1}: sum or count`}
+              value={total.fn === 'count' ? 'count' : 'sum'}
+              onChange={(e) => setTotal(i, e.target.value === 'count' ? { fn: 'count', source: '', target: '' } : { fn: undefined })}
+              style={{ background: colors.ground, border: `1px solid ${colors.panelEdge}`, borderRadius: 6, color: colors.ink, fontFamily: mono, fontSize: 11, padding: '4px 6px', cursor: 'pointer' }}
+            >
+              <option value="sum">SUM</option>
+              <option value="count">COUNT</option>
+            </select>
+            {total.fn === 'count' ? (
+              <span style={{ fontFamily: sans, fontSize: 12.5, color: colors.mute }}>records</span>
+            ) : (
+              <>
+                <Pick value={total.source} options={sourceColumns} onChange={(v) => setTotal(i, { source: v })} placeholder="source amount" />
+                <Arrow />
+                <Pick value={total.target} options={targetColumns} onChange={(v) => setTotal(i, { target: v })} placeholder="target amount" />
+              </>
+            )}
             <span style={{ fontFamily: mono, fontSize: 11, color: colors.faint }}>BY</span>
             <Pick
               value={total.groupBy?.source ?? ''}
@@ -128,7 +143,7 @@ export default function SpecBuilder({ spec, sourceColumns, targetColumns, sugges
               <>
                 <Arrow />
                 <Pick value={total.groupBy.target} options={targetColumns} onChange={(v) => setTotal(i, { groupBy: { ...total.groupBy, target: v } })} placeholder="target group" />
-                <Crosswalk map={total.groupBy.map} onFile={(file) => onCrosswalk({ total: i }, file)} onClear={() => setTotal(i, { groupBy: { ...total.groupBy, map: undefined } })} />
+                <Crosswalk what={`grouping ${total.groupBy.source || ''} to ${total.groupBy.target || ''}`} map={total.groupBy.map} kind={total.groupBy.mapKind} onKind={(mapKind) => setTotal(i, { groupBy: { ...total.groupBy, mapKind } })} onFile={(file) => onCrosswalk({ total: i }, file)} onClear={() => setTotal(i, { groupBy: { ...total.groupBy, map: undefined, mapKind: undefined } })} />
               </>
             )}
             <Remove onClick={() => removeTotal(i)} />
@@ -210,9 +225,11 @@ const control = (width) => ({
   outline: 'none',
 })
 
-function Pick({ value, options, onChange, placeholder = 'choose a column' }) {
+// Every dropdown is named for a screen reader by what it chooses (its label,
+// or its placeholder), never left as an unnamed "combo box".
+function Pick({ value, options, onChange, placeholder = 'choose a column', label }) {
   return (
-    <select value={value ?? ''} onChange={(e) => onChange(e.target.value)} style={{ ...control(176), fontFamily: mono, cursor: 'pointer' }}>
+    <select aria-label={label ?? placeholder} value={value ?? ''} onChange={(e) => onChange(e.target.value)} style={{ ...control(176), fontFamily: mono, cursor: 'pointer' }}>
       <option value="">{placeholder}</option>
       {options.map((option) => <option key={option} value={option}>{option}</option>)}
       {/* A column the spec names but the file lacks stays visible, so the
@@ -222,7 +239,10 @@ function Pick({ value, options, onChange, placeholder = 'choose a column' }) {
   )
 }
 
-function Crosswalk({ map, onFile, onClear }) {
+// kind: what the crosswalk IS, declared by the person — a code list may be
+// shared, a key map never leaves this device (shareDefinitions.js). Undeclared,
+// it is treated as record values when definitions are shared.
+function Crosswalk({ what, map, kind, onKind, onFile, onClear }) {
   const input = useRef(null)
   const entries = map ? Object.keys(map).length : 0
   return (
@@ -233,13 +253,25 @@ function Crosswalk({ map, onFile, onClear }) {
           <span style={{ fontFamily: sans, fontSize: 12, color: colors.accent }} title={Object.entries(map).slice(0, 8).map(([a, b]) => `${a} → ${b}`).join('\n')}>
             crosswalk · {entries} value{entries === 1 ? '' : 's'}
           </span>
+          <select
+            aria-label={`what the crosswalk for ${what} holds`}
+            value={kind ?? ''}
+            onChange={(e) => onKind(e.target.value || undefined)}
+            style={{ background: colors.ground, border: `1px solid ${colors.panelEdge}`, borderRadius: 6, color: colors.ink, fontFamily: sans, fontSize: 11.5, padding: '4px 6px', cursor: 'pointer', maxWidth: 170 }}
+          >
+            <option value="">what is it? (not said)</option>
+            {CROSSWALK_KINDS.map((k) => <option key={k.id} value={k.id} title={k.label}>{k.label.split(' — ')[0]}</option>)}
+          </select>
           <button onClick={() => input.current?.click()} style={{ ...ghostButton, fontSize: 11, padding: '4px 8px' }}>replace</button>
           <button onClick={onClear} style={{ ...ghostButton, fontSize: 11, padding: '4px 8px' }}>clear</button>
         </>
       ) : (
-        <button onClick={() => input.current?.click()} style={{ ...ghostButton, fontSize: 11.5, padding: '5px 9px' }} title="A two-column CSV: legacy value, then the value it becomes">
-          + crosswalk CSV
-        </button>
+        <>
+          <button onClick={() => input.current?.click()} style={{ ...ghostButton, fontSize: 11.5, padding: '5px 9px' }}>
+            + crosswalk CSV
+          </button>
+          <span style={{ fontFamily: sans, fontSize: 11, color: colors.faint }}>two columns: legacy value, new value</span>
+        </>
       )}
     </span>
   )

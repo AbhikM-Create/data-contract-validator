@@ -23,14 +23,31 @@ async function packFor(o, { withReadiness = true, withRecon = true, source = par
     reconciliation: recon && { report: recon, source: await info('legacy.csv', texts.source, source.rows.length), target: await info('target.csv', texts.target, target.rows.length) },
     generatedAt: '2026-10-28T12:00:00.000Z',
     generatedBy: 'the workspace',
-    reproduce: 'node scripts/reconcile.mjs employees.migration.json legacy.csv target.csv',
+    reproduce: 'dcv reconcile employees.migration.json legacy.csv target.csv',
   })
 }
 
 describe('evidence pack — what it attests to', () => {
+  // v3 F7 / F6: a workbook is named with the sheet and header row it was read
+  // from, and a declared Indian grouping is said in words.
+  it('names the workbook sheet that was read and the declared digit grouping', async () => {
+    const { html } = await createEvidencePack({
+      object: { ...object, formats: { ...object.formats, load: { grouping: 'indian' } } },
+      readiness: {
+        report: checkReadiness(object.contract, parsed.load.rows, { columns: parsed.load.columns }),
+        flaggedCount: 0,
+        file: { ...(await info('load.xlsx', texts.load, parsed.load.rows.length)), sheet: 'Employees', headerRow: 2 },
+      },
+      generatedAt: '2026-10-28T12:00:00.000Z',
+      generatedBy: 'the workspace',
+    })
+    expect(html).toContain('sheet “Employees”, header row 2')
+    expect(html).toContain('12,34,567.89 (Indian grouping)')
+  })
+
   it('names the object, cycle, verdicts, files and fingerprints', async () => {
     const { html, reference, fileName } = await packFor(object)
-    expect(html).toContain('<title>Evidence pack — Employees · Wave 1 · Mock 2</title>')
+    expect(html).toContain('<title>Cutover sign-off record — Employees · Wave 1 · Mock 2</title>')
     expect(html).toContain('Not ready')
     expect(html).toContain('Did not reconcile')
     expect(html).toContain('Stopped at Mapping.')
@@ -38,8 +55,8 @@ describe('evidence pack — what it attests to', () => {
     expect(html).toContain(await sha256Hex(texts.target))
     expect(html).toContain(await sha256Hex(texts.load))
     expect(html).toContain('CAUGHT HERE')
-    expect(html).toContain('Usually fixed in the mapping specification (functional team).')
-    for (const role of ['Data migration lead', 'Business data owner', 'Internal audit / quality']) expect(html).toContain(role)
+    expect(html).toContain('Whose fix: Functional team (mapping spec and crosswalks).')
+    for (const role of ['Prepared by', 'Reviewed by', 'Approved by', 'Received by the auditor (not a certification)']) expect(html).toContain(role)
     expect(reference).toMatch(/^EV-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}$/)
     expect(fileName).toBe(`employees-wave-1-mock-2-evidence-${reference.toLowerCase()}.html`)
   })
@@ -137,5 +154,79 @@ describe('evidence pack — safe to open', () => {
 
   it('escapeHtml covers all five characters', () => {
     expect(escapeHtml(`<a href="x" title='y'>&</a>`)).toBe('&lt;a href=&quot;x&quot; title=&#39;y&#39;&gt;&amp;&lt;/a&gt;')
+  })
+})
+
+// v3 §5.3 / §5.4: the pack is the cutover sign-off record.
+describe('the cutover sign-off record', () => {
+  const recorded = {
+    ...object,
+    owners: { mapping: 'HR functional lead (Priya)' },
+    signoff: {
+      identity: { entity: 'Invented Pvt Ltd', financialYear: '2026-27', legacySystem: 'Legacy HR v4', newSystem: 'Target HCM', cutoverDate: '2027-04-01' },
+      custody: { source: { exportedBy: 'A. Rao', exportedAt: '2027-03-31 18:00' } },
+      exceptions: {},
+      scope: 'History migrated as balances only.',
+      signatures: { preparedBy: { name: 'A. Rao', date: '2027-04-02' }, auditorReceived: { name: 'Audit firm (invented)' } },
+    },
+  }
+
+  it('carries identity, custody, exceptions with owners, scope, the claim and the typed signatures', async () => {
+    const { html } = await packFor(recorded)
+    for (const text of ['Invented Pvt Ltd', '2026-27', 'Legacy HR v4', 'Target HCM', '2027-04-01', 'A. Rao, 2027-03-31 18:00', 'History migrated as balances only.', 'Audit firm (invented)']) expect(html).toContain(text)
+    expect(html).toContain('Cutover sign-off record')
+    expect(html).toContain('These checks ran on these fingerprinted files with these results.')
+    expect(html).toContain('they are not verified identities')
+    expect(html).toContain('HR functional lead (Priya)') // the object's own owner for Mapping
+    expect(html).toMatch(/\d+ differences?, \d+ not yet decided/)
+  })
+
+  it('records a decision on a difference by its id, and the decision appears', async () => {
+    const { exceptionsFor } = await import('./signoff.js')
+    const { reconcile } = await import('./reconcile.js')
+    const report = reconcile(runnableSpec(object), parsed.source.rows, parsed.target.rows, { sourceColumns: parsed.source.columns, targetColumns: parsed.target.columns })
+    const [first] = exceptionsFor(null, report)
+    const decided = { ...recorded, signoff: { ...recorded.signoff, exceptions: { [first.id]: { disposition: 'accepted', reason: 'Grade G4 retired; agreed with HR', owner: 'HR head' } } } }
+    const { html } = await packFor(decided, { withReadiness: false })
+    expect(html).toContain('Accepted, with a reason')
+    expect(html).toContain('Grade G4 retired; agreed with HR')
+  })
+
+  it('says what was not checked, by itself', async () => {
+    const { html } = await packFor(recorded, { withRecon: false })
+    expect(html).toContain('Reconciliation was not run for this record')
+  })
+
+  it('never makes a claim it must not make', async () => {
+    const { NEVER_CLAIM } = await import('./signoff.js')
+    const { html } = await packFor(recorded)
+    // Strip the one place the word appears to say it is NOT one.
+    const text = html.replace('(not a certification)', '').replace(/<[^>]+>/g, ' ')
+    expect(NEVER_CLAIM.filter((pattern) => pattern.test(text)).map(String)).toEqual([])
+  })
+})
+
+// final-spec C1: the record says which file column each definition read.
+describe('the evidence pack and column matching', () => {
+  it('prints and fingerprints the matching; without one, the fingerprints are what they always were', async () => {
+    const { evidenceFingerprints, createEvidencePack } = await import('./evidencePack.js')
+    const { newMigrationObject } = await import('./migrationObject.js')
+    const object = { ...newMigrationObject('Chart'), contract: { name: 'c', rules: [{ kind: 'nullRule', column: 'Name', op: 'notNull', target: null }] } }
+    const plain = await evidenceFingerprints(object)
+    expect(plain.columns).toBeNull()
+
+    const matched = { ...object, columnMap: { load: { Name: '<b>Ledger</b> Name' }, 'reference:accounts': { 'Account Name': 'Acct' } } }
+    const prints = await evidenceFingerprints(matched)
+    expect(prints.contract.sha256).toBe(plain.contract.sha256)
+    expect(prints.columns.sha256).toMatch(/^[0-9a-f]{64}$/)
+    expect((await evidenceFingerprints({ ...object, columnMap: { load: { Name: 'Ledger' } } })).columns.sha256).not.toBe(prints.columns.sha256)
+
+    const report = { status: 'READY', headline: 'Ready to load.', counts: { records: 1, rejected: 0, warned: 0, clean: 1 }, checks: [], missingColumns: [], flagged: [], issues: [] }
+    const { html } = await createEvidencePack({ object: matched, readiness: { report, flaggedCount: 0, file: { name: 'l.csv', rows: 1, bytes: 1, sha256: 'a' } }, generatedAt: '2026-11-11T10:00:00Z', generatedBy: 'test' })
+    expect(html).toContain('Column matching')
+    expect(html).toContain('&lt;b&gt;Ledger&lt;/b&gt; Name') // a hostile header is text, never markup
+    expect(html).not.toContain('<b>Ledger</b>')
+    expect(html).toContain('Reference file “accounts”')
+    expect(html).toContain(prints.columns.sha256)
   })
 })

@@ -81,13 +81,26 @@ describe('ODCS import — contracts written elsewhere', () => {
     }
   })
 
-  it('refuses a tolerance it cannot honour, and says why', () => {
+  it('refuses a tolerance it cannot honour, and says why; imports uniqueness as a rule (v3)', () => {
     const result = load('column-validity.odcs.yaml')
-    expect(result.rules).toEqual([])
+    expect(result.rules).toEqual([{ kind: 'unique', column: 'air_quality_status', op: 'unique' }])
     expect(result.notImported.map((n) => n.reason)).toEqual(expect.arrayContaining([
       expect.stringMatching(/tolerates some failing records/),
-      expect.stringMatching(/uniqueness is checked as the record key — run the check with --key air_quality_status/),
     ]))
+  })
+
+  it('v3: a one-column unique rule exports as ODCS unique, a set of columns as an exact custom check, and both read back', () => {
+    const rules = [
+      { kind: 'unique', column: 'employee_id', op: 'unique' },
+      { kind: 'unique', column: 'employee_id', op: 'unique', target: ['month'] },
+      { kind: 'identifier', column: 'pan', op: 'is', target: 'pan' },
+    ]
+    const doc = exportOdcs({ name: 'Payroll', rules })
+    expect(validate(doc), JSON.stringify(validate.errors)).toBe(true)
+    const props = Object.fromEntries(doc.schema[0].properties.map((p) => [p.name, p]))
+    expect(props.employee_id.unique).toBe(true)
+    expect(props.employee_id.quality.map((q) => q.type)).toEqual(['custom'])
+    expect(importOdcs(parseOdcs(toOdcsYaml({ name: 'Payroll', rules })).doc).rules).toEqual(expect.arrayContaining(rules))
   })
 
   it('names another engine’s custom check instead of pretending to run it', () => {

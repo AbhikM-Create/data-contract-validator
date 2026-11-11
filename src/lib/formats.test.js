@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { createReader, decodeBytes, formatIssue, readNumberFully } from './formats.js'
+import { cleanFormat, createReader, decodeBytes, formatIssue, readNumberFully } from './formats.js'
 import { checkReadiness } from './readiness.js'
 import { reconcile } from './reconcile.js'
 import { checkRules } from './rules.js'
@@ -215,6 +215,84 @@ describe('readers — the fast paths change nothing', () => {
       for (let j = 0, n = 5 + Math.floor(next() * 10); j < n; j += 1) text += ALPHABET[Math.floor(next() * ALPHABET.length)]
       const fast = reader.number(text)
       const full = readNumberFully(text, decimal)
+      if (!Object.is(fast, full) && mismatches.length < 10) mismatches.push({ input: text, fast, full })
+    }
+    expect(mismatches).toEqual([])
+  })
+})
+
+// v3 F6. Indian digit grouping — lakh and crore: the last group has three
+// digits, every group before it two. Declared, never inferred: undeclared, a
+// value like 1,23,456.78 stays unreadable, exactly as before.
+describe('readers — Indian digit grouping (declared)', () => {
+  const indian = createReader({ grouping: 'indian' })
+  const western = createReader({})
+
+  it.each([
+    ['1,23,456.78', 123456.78], ['12,34,56,789', 123456789], ['1,00,00,000', 10000000], ['12,345', 12345],
+    ['1,234', 1234], ['999', 999], ['1234567.5', 1234567.5], ['-1,23,456', -123456], ['(1,23,456.00)', -123456],
+    ['1,23,456-', -123456], ['₹ 1,23,456.78', 123456.78], ['₹1,23,456', 123456],
+  ])('declared Indian reads %s as %d', (input, want) => {
+    expect(indian.number(input)).toBe(want)
+  })
+
+  it.each(['1,234,567', '1,23,4567', '12,3,456', '1,23,456,78', ',123', '1,,234', '1 23 456', "1'23'456", '1.23.456,78'])(
+    'declared Indian refuses %s rather than guess', (input) => {
+      expect(indian.number(input)).toBeNull()
+    },
+  )
+
+  it('undeclared, an Indian-grouped value is not read as a number at all', () => {
+    expect(western.number('1,23,456.78')).toBeNull()
+    expect(western.number('12,34,56,789')).toBeNull()
+    // The western reading is unchanged by the new part existing.
+    expect(western.number('1,234,567.5')).toBe(1234567.5)
+  })
+
+  it('is a known format part, saved and fingerprinted, and only with a decimal point', () => {
+    expect(formatIssue({ grouping: 'indian' })).toBeNull()
+    expect(formatIssue({ grouping: 'indian', decimal: '.' })).toBeNull()
+    expect(formatIssue({ grouping: 'lakh' })).toMatch(/"lakh" is not a known grouping/)
+    expect(formatIssue({ grouping: 'indian', decimal: ',' })).toMatch(/Indian digit grouping is written with a decimal point/)
+    expect(cleanFormat({ grouping: 'indian', encoding: 'utf-8' })).toEqual({ encoding: 'utf-8', grouping: 'indian' })
+  })
+
+  it('a reconciliation reads each side by its own declared grouping', () => {
+    const report = reconcile(
+      { key: { source: ['id'], target: ['id'] }, mapping: [{ source: 'amt', target: 'amt' }], formats: { source: { grouping: 'indian' } } },
+      [{ id: '1', amt: '1,23,456.78' }, { id: '2', amt: '12,34,56,789' }],
+      [{ id: '1', amt: '123456.78' }, { id: '2', amt: '123456789' }],
+    )
+    expect(report.fields[0].mismatched).toBe(0)
+    expect(report.fields[0].agreed).toBe(2)
+
+    // Negative control: the same files with nothing declared disagree, rather
+    // than being read the Indian way by a guess.
+    const undeclared = reconcile(
+      { key: { source: ['id'], target: ['id'] }, mapping: [{ source: 'amt', target: 'amt' }] },
+      [{ id: '1', amt: '1,23,456.78' }, { id: '2', amt: '12,34,56,789' }],
+      [{ id: '1', amt: '123456.78' }, { id: '2', amt: '123456789' }],
+    )
+    expect(undeclared.fields[0].agreed).toBe(0)
+  })
+
+  it('the fast path and the full path agree for Indian grouping too', () => {
+    const ALPHABET = ['0', '7', '-', '+', '.', ',', 'e', '%', ' ', '(', ')', "'", '₹', 'a']
+    const mismatches = []
+    const walk = (prefix, depth) => {
+      const fast = indian.number(prefix)
+      const full = readNumberFully(prefix, '.', 'indian')
+      if (!Object.is(fast, full) && mismatches.length < 10) mismatches.push({ input: prefix, fast, full })
+      if (depth > 0) for (const ch of ALPHABET) walk(prefix + ch, depth - 1)
+    }
+    walk('', 4)
+    let seed = 11
+    const next = () => (seed = (Math.imul(seed, 1103515245) + 12345) >>> 0) / 2 ** 32
+    for (let i = 0; i < 100_000; i += 1) {
+      let text = ''
+      for (let j = 0, n = 5 + Math.floor(next() * 10); j < n; j += 1) text += ALPHABET[Math.floor(next() * ALPHABET.length)]
+      const fast = indian.number(text)
+      const full = readNumberFully(text, '.', 'indian')
       if (!Object.is(fast, full) && mismatches.length < 10) mismatches.push({ input: text, fast, full })
     }
     expect(mismatches).toEqual([])

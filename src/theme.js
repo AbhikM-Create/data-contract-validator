@@ -10,9 +10,11 @@ export const colors = {
   panelEdge: '#DCE3E8',
   ink: '#16222B',
   mute: '#4E5D68',
-  faint: '#7C8A94',
+  // faint and pass were darkened in v3 F8 to reach WCAG AA 4.5:1 on every
+  // ground they sit on (the lightest was 3.2:1); the hues are unchanged.
+  faint: '#5F6C76',
   accent: '#1F6F8B',
-  pass: '#2E7D5B',
+  pass: '#2A7353',
   fail: '#B23A34',
   warn: '#8A6414',
 }

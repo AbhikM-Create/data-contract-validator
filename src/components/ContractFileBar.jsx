@@ -27,7 +27,6 @@ export default function ContractFileBar({ name, onName, rules, onLoad, onDownloa
           <button
             onClick={onSave}
             disabled={empty || saving}
-            title={empty ? 'Write a rule first — there is nothing to save yet.' : undefined}
             style={{
               ...primary,
               opacity: empty || saving ? 0.5 : 1,
@@ -41,11 +40,14 @@ export default function ContractFileBar({ name, onName, rules, onLoad, onDownloa
         <button
           onClick={onDownload}
           disabled={rules.length === 0}
-          title={rules.length === 0 ? 'Write a rule first — there is nothing to save yet.' : undefined}
           style={{ ...secondary, color: rules.length === 0 ? colors.faint : colors.ink, cursor: rules.length === 0 ? 'default' : 'pointer' }}
         >
           Download
         </button>
+        {/* A disabled button says why, in words on the page — not in a tooltip. */}
+        {rules.length === 0 && (
+          <span style={{ fontFamily: sans, fontSize: 12, color: colors.faint }}>Write a rule first — there is nothing to save yet.</span>
+        )}
         <input
           ref={inputRef}
           type="file"
@@ -62,13 +64,15 @@ export default function ContractFileBar({ name, onName, rules, onLoad, onDownloa
 
       {notice && (
         <div
+          role={notice.tone === 'bad' ? 'alert' : 'status'}
           style={{
             marginTop: 10, padding: '9px 11px', borderRadius: 6,
-            border: `1px solid ${notice.tone === 'bad' ? colors.fail : notice.tone === 'warn' ? colors.warn : colors.pass}55`,
-            background: `${notice.tone === 'bad' ? colors.fail : notice.tone === 'warn' ? colors.warn : colors.pass}10`,
+            border: `1px solid ${notice.tone === 'bad' ? colors.fail : notice.tone === 'warn' ? colors.warn : colors.accent}55`,
+            background: `${notice.tone === 'bad' ? colors.fail : notice.tone === 'warn' ? colors.warn : colors.accent}10`,
           }}
         >
-          <div style={{ fontFamily: sans, fontSize: 12.5, color: notice.tone === 'bad' ? colors.fail : notice.tone === 'warn' ? colors.warn : colors.pass, lineHeight: 1.5 }}>
+          {/* Green is a PASS verdict; a routine "saved" is the accent colour. */}
+          <div style={{ fontFamily: sans, fontSize: 12.5, color: notice.tone === 'bad' ? colors.fail : notice.tone === 'warn' ? colors.warn : colors.ink, lineHeight: 1.5 }}>
             {notice.text}
           </div>
           {notice.details?.length > 0 && (

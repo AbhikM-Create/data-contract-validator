@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
-import { RULE_KINDS, RULE_TYPES, describeRule, ruleIssue } from '../lib/rules.js'
+import { IDENTIFIERS, IDENTIFIER_NAMES } from '../lib/identifiers.js'
+import { AGGREGATE_FNS, RULE_KINDS, RULE_TYPES, describeRule, ruleIssue } from '../lib/rules.js'
 import { colors, mono, sans } from '../theme.js'
 
 // Composing a rule from dropdowns — never a typed expression. Every rule the
@@ -13,7 +14,13 @@ const KINDS = [
   { id: RULE_KINDS.COMPARISON, label: 'must compare to a fixed value', hint: 'A bound the column can never cross.' },
   { id: RULE_KINDS.RANGE, label: 'must fall between two values', hint: 'An allowed range, inclusive at both ends.' },
   { id: RULE_KINDS.TYPE, label: 'must hold one kind of value', hint: 'Numbers, dates or true/false — rejects anything that will not parse.' },
+  { id: RULE_KINDS.IDENTIFIER, label: 'must be a valid identifier', hint: 'A PAN, GSTIN (check character included), IFSC, UAN or PIN code, from a fixed list — never a pattern you type.' },
+  { id: RULE_KINDS.UNIQUE, label: 'must identify each record once', hint: 'No two records share this value — or this combination, with up to two more columns. Every copy of a repeat is a rejection.' },
+  { id: RULE_KINDS.REFERENCE, label: 'must exist in a reference file', hint: 'Every value must appear in a column of another file — a vendor master, an employee master — opened alongside the load file.' },
+  { id: RULE_KINDS.AGGREGATE, label: 'its total must tie out', hint: 'A sum or count over the whole file, or per group, against a number or another column’s total. It rejects no single record; a failure makes the file not ready.' },
 ]
+
+const FN_OPTIONS = AGGREGATE_FNS.map((fn) => ({ id: fn, label: fn === 'sum' ? 'the sum of it' : 'the count of its values' }))
 
 const COMPARISON_OPS = [
   { id: '=', label: 'equal to' },
@@ -60,6 +67,24 @@ function toRule(draft) {
   } else if (draft.kind === RULE_KINDS.TYPE) {
     rule.op = '='
     rule.target = draft.target || RULE_TYPES[0]
+  } else if (draft.kind === RULE_KINDS.IDENTIFIER) {
+    rule.op = 'is'
+    rule.target = draft.target || IDENTIFIER_NAMES[0]
+  } else if (draft.kind === RULE_KINDS.UNIQUE) {
+    rule.op = 'unique'
+    const extra = [draft.extra1, draft.extra2].filter(Boolean)
+    if (extra.length > 0) rule.target = extra
+  } else if (draft.kind === RULE_KINDS.REFERENCE) {
+    rule.op = 'in'
+    rule.target = { file: String(draft.refFile ?? '').trim(), column: String(draft.refColumn ?? '').trim() }
+  } else if (draft.kind === RULE_KINDS.AGGREGATE) {
+    rule.fn = draft.fn || 'sum'
+    rule.op = draft.op && draft.op !== 'in' ? draft.op : '='
+    rule.target = draft.target
+    if (draft.targetIsColumn) rule.targetIsColumn = true
+    if (draft.groupBy) rule.groupBy = draft.groupBy
+    const tolerance = Number(String(draft.tolerance ?? '').trim())
+    if (String(draft.tolerance ?? '').trim() !== '') rule.tolerance = Number.isFinite(tolerance) ? tolerance : -1
   } else {
     rule.target = draft.target
     rule.targetIsColumn = draft.kind === RULE_KINDS.CROSS_COLUMN ? true : !!draft.targetIsColumn
@@ -94,8 +119,8 @@ export default function RuleBuilder({ columns, onAdd, onCancel }) {
   return (
     <div style={{ background: colors.panelSunk, border: `1px solid ${colors.panelEdge}`, borderRadius: 8, padding: 14 }}>
       <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8 }}>
-        <Select value={draft.column} onChange={(v) => set({ column: v })} options={columns.map((c) => ({ id: c, label: c }))} width={172} mono />
-        <Select value={draft.kind} onChange={(v) => set({ kind: v, target: '', targetIsColumn: v === RULE_KINDS.CROSS_COLUMN })} options={KINDS.map((k) => ({ id: k.id, label: k.label }))} width={232} />
+        <Select value={draft.column} onChange={(v) => set({ column: v })} options={columns.map((c) => ({ id: c, label: c }))} width={172} mono label="rule column" />
+        <Select value={draft.kind} onChange={(v) => set({ kind: v, target: '', targetIsColumn: v === RULE_KINDS.CROSS_COLUMN })} options={KINDS.map((k) => ({ id: k.id, label: k.label }))} width={232} label="rule kind" />
 
         {draft.kind === RULE_KINDS.VALUE_SET && (
           <Field
@@ -108,14 +133,14 @@ export default function RuleBuilder({ columns, onAdd, onCancel }) {
         )}
 
         {draft.kind === RULE_KINDS.TYPE && (
-          <Select value={draft.target || RULE_TYPES[0]} onChange={(v) => set({ target: v })} options={RULE_TYPES.map((t) => ({ id: t, label: t }))} width={120} />
+          <Select value={draft.target || RULE_TYPES[0]} onChange={(v) => set({ target: v })} options={RULE_TYPES.map((t) => ({ id: t, label: t }))} width={120} label="expected type" />
         )}
 
         {(draft.kind === RULE_KINDS.COMPARISON || draft.kind === RULE_KINDS.CROSS_COLUMN) && (
           <>
-            <Select value={draft.op === 'in' ? '=' : draft.op} onChange={(v) => set({ op: v })} options={COMPARISON_OPS} width={140} />
+            <Select value={draft.op === 'in' ? '=' : draft.op} onChange={(v) => set({ op: v })} options={COMPARISON_OPS} width={140} label="comparison" />
             {draft.kind === RULE_KINDS.CROSS_COLUMN ? (
-              <Select value={draft.target} onChange={(v) => set({ target: v })} options={otherColumns.map((c) => ({ id: c, label: c }))} width={172} mono placeholder="pick a column" />
+              <Select value={draft.target} onChange={(v) => set({ target: v })} options={otherColumns.map((c) => ({ id: c, label: c }))} width={172} mono placeholder="pick a column" label="column to compare with" />
             ) : (
               <Field value={draft.target} onChange={(v) => set({ target: v })} placeholder="0" width={120} label="value" />
             )}
@@ -128,7 +153,49 @@ export default function RuleBuilder({ columns, onAdd, onCancel }) {
             <Field value={draft.high ?? ''} onChange={(v) => set({ high: v })} placeholder="high" width={96} label="high" />
           </>
         )}
+
+        {draft.kind === RULE_KINDS.IDENTIFIER && (
+          <Select value={draft.target || IDENTIFIER_NAMES[0]} onChange={(v) => set({ target: v })} options={IDENTIFIER_NAMES.map((id) => ({ id, label: IDENTIFIERS[id].label }))} width={150} label="identifier" />
+        )}
+
+        {draft.kind === RULE_KINDS.UNIQUE && (
+          <>
+            <span style={{ fontFamily: sans, fontSize: 12.5, color: colors.mute }}>together with</span>
+            <Select value={draft.extra1 ?? ''} onChange={(v) => set({ extra1: v, ...(v ? {} : { extra2: '' }) })} options={otherColumns.map((c) => ({ id: c, label: c }))} width={160} mono placeholder="(no other column)" label="second column" />
+            {draft.extra1 && (
+              <Select value={draft.extra2 ?? ''} onChange={(v) => set({ extra2: v })} options={otherColumns.filter((c) => c !== draft.extra1).map((c) => ({ id: c, label: c }))} width={160} mono placeholder="(no third column)" label="third column" />
+            )}
+          </>
+        )}
+
+        {draft.kind === RULE_KINDS.REFERENCE && (
+          <>
+            <Field value={draft.refFile ?? ''} onChange={(v) => set({ refFile: v })} placeholder="vendors" width={140} label="reference file name" />
+            <Field value={draft.refColumn ?? ''} onChange={(v) => set({ refColumn: v })} placeholder="vendor_id" width={140} label="its column" />
+          </>
+        )}
       </div>
+
+      {draft.kind === RULE_KINDS.AGGREGATE && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8, marginTop: 10 }}>
+          <Select value={draft.fn || 'sum'} onChange={(v) => set({ fn: v })} options={FN_OPTIONS} width={190} label="total" />
+          <span style={{ fontFamily: sans, fontSize: 12.5, color: colors.mute }}>must be</span>
+          <Select value={draft.op && draft.op !== 'in' ? draft.op : '='} onChange={(v) => set({ op: v })} options={COMPARISON_OPS} width={130} label="comparison" />
+          <Select
+            value={draft.targetIsColumn ? 'column' : 'number'}
+            onChange={(v) => set({ targetIsColumn: v === 'column', target: '' })}
+            options={[{ id: 'number', label: 'a number' }, { id: 'column', label: 'the same total of' }]}
+            width={150}
+            label="compared with"
+          />
+          {draft.targetIsColumn
+            ? <Select value={draft.target} onChange={(v) => set({ target: v })} options={otherColumns.map((c) => ({ id: c, label: c }))} width={160} mono placeholder="pick a column" label="column to total against" />
+            : <Field value={draft.target} onChange={(v) => set({ target: v })} placeholder="0" width={110} label="number" />}
+          <Field value={draft.tolerance ?? ''} onChange={(v) => set({ tolerance: v })} placeholder="± 0" width={80} label="tolerance" />
+          <span style={{ fontFamily: sans, fontSize: 12.5, color: colors.mute }}>for</span>
+          <Select value={draft.groupBy ?? ''} onChange={(v) => set({ groupBy: v })} options={otherColumns.map((c) => ({ id: c, label: `each ${c}` }))} width={170} mono placeholder="the whole file" label="group by" />
+        </div>
+      )}
 
       {kind && <p style={{ fontFamily: sans, fontSize: 12, color: colors.faint, marginTop: 8 }}>{kind.hint}</p>}
 
@@ -140,12 +207,13 @@ export default function RuleBuilder({ columns, onAdd, onCancel }) {
       {draft.whenOn && (
         <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8, marginTop: 10, paddingLeft: 24 }}>
           <span style={{ fontFamily: mono, fontSize: 11, color: colors.faint }}>WHEN</span>
-          <Select value={draft.when.column} onChange={(v) => setWhen({ column: v })} options={columns.map((c) => ({ id: c, label: c }))} width={172} mono />
+          <Select value={draft.when.column} onChange={(v) => setWhen({ column: v })} options={columns.map((c) => ({ id: c, label: c }))} width={172} mono label="condition column" />
           <Select
             value={draft.when.op}
             onChange={(v) => setWhen({ op: v })}
             options={[...COMPARISON_OPS, { id: 'notNull', label: 'is not blank' }]}
             width={140}
+            label="condition"
           />
           {draft.when.op !== 'notNull' && (
             <Field value={draft.when.target} onChange={(v) => setWhen({ target: v })} placeholder="N" width={120} label="value" />
@@ -155,7 +223,7 @@ export default function RuleBuilder({ columns, onAdd, onCancel }) {
 
       <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8, marginTop: 12 }}>
         <span style={{ fontFamily: sans, fontSize: 13, color: colors.ink }}>If a record breaks this rule, the target system</span>
-        <Select value={draft.severity} onChange={(v) => set({ severity: v })} options={SEVERITY_OPTIONS} width={200} />
+        <Select value={draft.severity} onChange={(v) => set({ severity: v })} options={SEVERITY_OPTIONS} width={200} label="what the target does" />
       </div>
 
       <div style={{ marginTop: 14, padding: '10px 12px', background: colors.ground, border: `1px solid ${colors.panelEdge}`, borderRadius: 6 }}>
@@ -207,9 +275,11 @@ const controlStyle = (width) => ({
   outline: 'none',
 })
 
-function Select({ value, onChange, options, width, mono: isMono, placeholder }) {
+// Named for a screen reader by what it chooses, never an unnamed "combo box".
+function Select({ value, onChange, options, width, mono: isMono, placeholder, label }) {
   return (
     <select
+      aria-label={label}
       value={value}
       onChange={(e) => onChange(e.target.value)}
       style={{ ...controlStyle(width), fontFamily: isMono ? mono : sans, cursor: 'pointer' }}

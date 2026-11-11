@@ -14,7 +14,7 @@
 
 import { isBlank } from './contract.js'
 import { createReader, DEFAULT_READER } from './formats.js'
-import { createRuleChecker, describeRule, ruleColumns, ruleIssue, ruleSeverity } from './rules.js'
+import { aggregateResult, createRuleChecker, describeRule, prepareRules, RULE_KINDS, ruleColumns, ruleIssue, ruleKey, ruleSeverity, uniqueValueOf, conditionHolds } from './rules.js'
 
 export const READINESS = {
   READY: 'READY',
@@ -41,11 +41,15 @@ function columnsOf(rows) {
   return [...seen]
 }
 
-// The key a record is identified by, or null when any part of it is blank.
+// The key a record is identified by, or null when any part of it is blank —
+// joined unambiguously (JSON), so values holding " / " cannot make two keys one.
 function keyValue(row, keyColumns) {
   if (keyColumns.some((column) => isBlank(row?.[column]))) return null
-  return keyColumns.map((column) => String(row[column]).trim()).join(' / ')
+  return JSON.stringify(keyColumns.map((column) => String(row[column]).trim()))
 }
+
+// The key as a person reads it, for examples and the fix list.
+const keyLabel = (value) => (value === null ? null : JSON.parse(value).join(' / '))
 
 function normalizeKey(key) {
   return (Array.isArray(key) ? key : key ? [key] : []).map((c) => String(c).trim()).filter(Boolean)
@@ -81,6 +85,11 @@ export function findDuplicateKeys(rows, key) {
 // collectFlagged keeps every flagged record in the report — right for a few
 // thousand rows, wrong for a stream, where the caller writes them out as row()
 // returns them instead.
+//
+// duplicates: Map ruleKey -> Set, each unique rule's repeated values, found
+// before any row is judged — the same reason duplicateKeys is. A streaming
+// caller fills the sets returned by uniqueRules; checkReadiness finds them in
+// memory. references: the reference files' values (rules.js createRuleChecker).
 export function createReadinessCheck(contract, options = {}) {
   const rules = Array.isArray(contract?.rules) ? contract.rules : []
   const skipped = Array.isArray(contract?.skipped) ? contract.skipped : []
@@ -126,7 +135,8 @@ export function createReadinessCheck(contract, options = {}) {
   // The load file is read in the format its contract declares — a target
   // template in 1.234,56 notation must not have its amounts read as 1.234.
   const reader = contract?.format ? createReader(contract.format) : DEFAULT_READER
-  const checker = createRuleChecker(evaluable, { keepFailures: EXAMPLES, reader })
+  const duplicates = options.duplicates ?? new Map()
+  const checker = createRuleChecker(evaluable, { keepFailures: EXAMPLES, reader, duplicates, references: options.references })
   const severities = evaluable.map(ruleSeverity)
   const descriptions = evaluable.map(describeRule)
   const keyDescription = `${quote(key)} must identify each record exactly once`
@@ -138,11 +148,18 @@ export function createReadinessCheck(contract, options = {}) {
 
   const labelFor = (row, rowNumber) => {
     if (key.length === 0) return `row ${rowNumber}`
-    return keyValue(row, key) ?? `row ${rowNumber}`
+    return keyLabel(keyValue(row, key)) ?? `row ${rowNumber}`
   }
+
+  // The unique rules whose repeated values must be found before rows are judged,
+  // each with the value it identifies a row by (null: not applicable).
+  const uniqueRules = evaluable
+    .filter((rule) => rule.kind === RULE_KINDS.UNIQUE)
+    .map((rule) => ({ key: ruleKey(rule), valueOf: (row) => (conditionHolds(rule.when, row, reader) ? uniqueValueOf(rule, row) : null) }))
 
   return {
     issues,
+    uniqueRules,
     keyOf: (row) => keyValue(row, key),
 
     // Judges one record; returns { severity, reasons } when it is flagged,
@@ -157,7 +174,7 @@ export function createReadinessCheck(contract, options = {}) {
         if (value === null || duplicateKeys.has(value)) {
           keyCheck.failing += 1
           if (keyCheck.examples.length < EXAMPLES) {
-            keyCheck.examples.push({ row: rowNumber, record: labelFor(row, rowNumber), value: value ?? '(blank key)' })
+            keyCheck.examples.push({ row: rowNumber, record: labelFor(row, rowNumber), value: keyLabel(value) ?? '(blank key)' })
           }
           severity = 'reject'
           reasons.push(keyDescription)
@@ -209,7 +226,40 @@ export function createReadinessCheck(contract, options = {}) {
           reason: null,
         })
       }
+      let fileLevelReject = false
       checker.states.forEach((state, index) => {
+        // Not evaluable after all: a reference file missing, a set not prepared.
+        if (state.problem) {
+          checks.push(unchecked(state.rule, state.problem))
+          return
+        }
+        // A total: judged over the file, it rejects no single record.
+        if (state.groups) {
+          const result = aggregateResult(state)
+          if (result.unreadable) {
+            checks.push(unchecked(state.rule, `${state.unreadable} value${state.unreadable === 1 ? '' : 's'} could not be read as numbers (row ${state.unreadableRows.join(', row ')}), so the total cannot be known`))
+            return
+          }
+          const failed = result.failing.length > 0
+          if (failed && severities[index] === 'reject') fileLevelReject = true
+          checks.push({
+            kind: state.rule.kind,
+            rule: state.rule,
+            fileLevel: true,
+            description: descriptions[index],
+            severity: severities[index],
+            status: failed ? 'FAIL' : 'PASS',
+            applicable: result.groups.length,
+            failing: result.failing.length,
+            share: result.groups.length ? result.failing.length / result.groups.length : 0,
+            // A total names no record, so it has no examples; what failed is
+            // said per group (an addition to the report, never a changed field).
+            examples: [],
+            groups: state.failures.slice(0, EXAMPLES).map((f) => ({ group: f.group || null, value: f.value })),
+            reason: null,
+          })
+          return
+        }
         checks.push({
           kind: state.rule.kind,
           rule: state.rule,
@@ -240,7 +290,7 @@ export function createReadinessCheck(contract, options = {}) {
       const uncheckedCount = checks.filter((c) => c.status === 'UNCHECKED').length
 
       let status
-      if (rejected > 0 || missingRequired) status = READINESS.NOT_READY
+      if (rejected > 0 || missingRequired || fileLevelReject) status = READINESS.NOT_READY
       else if (uncheckedCount > 0) status = READINESS.UNVERIFIED
       else status = READINESS.READY
 
@@ -269,15 +319,21 @@ export function createReadinessCheck(contract, options = {}) {
 // key:      column(s) identifying a record, e.g. ['employee_id']. Optional; when
 //           given, blank and duplicate keys are predicted rejections and every
 //           example names its record by key, not just by row number.
+// references: { [file]: { columns, values: { [column]: Set } } } for reference
+//           rules — the reference files, read locally. Without it those rules
+//           are UNCHECKED, and the file is not called ready.
 export function checkReadiness(contract, rows, options = {}) {
   const rowList = Array.isArray(rows) ? rows : []
   const columns = options.columns ?? columnsOf(rowList)
   const key = normalizeKey(options.key)
   const keyUsable = key.length > 0 && key.every((column) => columns.includes(column))
+  const reader = contract?.format ? createReader(contract.format) : DEFAULT_READER
   const check = createReadinessCheck(contract, {
     columns,
     key,
     duplicateKeys: keyUsable ? findDuplicateKeys(rowList, key) : new Set(),
+    duplicates: prepareRules(contract?.rules ?? [], rowList, { reader }).duplicates,
+    references: options.references,
     collectFlagged: true,
   })
   rowList.forEach((row, index) => check.row(row, index + 1))
@@ -320,6 +376,10 @@ function buildHeadline(status, counts, checks, missing, uncheckedCount) {
     parts.push(
       `${counts.rejected.toLocaleString('en-US')} of ${counts.records.toLocaleString('en-US')} records (${pct(counts.rejected / counts.records)}) would be rejected — most often because ${worst.description} (${plural(worst.failing, 'record')}).`,
     )
+  }
+  const fileLevel = checks.find((c) => c.fileLevel && c.status === 'FAIL' && c.severity === 'reject')
+  if (fileLevel) {
+    parts.push(`A file-level check fails: ${fileLevel.description} (${fileLevel.groups[0]?.value ?? 'see below'}).`)
   }
   if (missing.length > 0) {
     parts.push(`The load file is missing ${missing.length === 1 ? 'a column' : 'columns'} the contract checks: ${quote(missing)}.`)

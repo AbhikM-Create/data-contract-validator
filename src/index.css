@@ -15,12 +15,46 @@ body {
   box-sizing: border-box;
 }
 
+/* !important because many fields set `outline: none` inline for their resting
+   state; without it the keyboard focus ring never shows on them (WCAG 2.4.7). */
 button:focus-visible,
 input:focus-visible,
 select:focus-visible,
+textarea:focus-visible,
+a:focus-visible,
 [tabindex]:focus-visible {
-  outline: 2px solid #1f6f8b;
+  outline: 2px solid #1f6f8b !important;
   outline-offset: 2px;
+}
+
+/* The skip target itself needs no ring: focus lands there only to move on. */
+main:focus-visible {
+  outline: none !important;
+}
+
+/* The sticky header must not cover whatever focus or a link scrolls to (2.4.11). */
+html {
+  scroll-padding-top: 96px;
+}
+
+/* Off-screen until a keyboard reaches it, then the first thing on the page. */
+.skip-link {
+  position: absolute;
+  left: 12px;
+  top: -48px;
+  z-index: 20;
+  background: #ffffff;
+  color: #16222b;
+  border: 1px solid #1f6f8b;
+  border-radius: 6px;
+  padding: 8px 12px;
+  font-family: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  font-size: 13px;
+  text-decoration: none;
+}
+
+.skip-link:focus {
+  top: 8px;
 }
 
 p {

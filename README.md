@@ -52,6 +52,12 @@ Needs Node 20.19+ or 22.12+.
 npm install --global data-contract-validator
 
 dcv check employees.migration.json load.csv --rejects fixes.csv --junit readiness.xml
+dcv check ap.migration.json open_ap.csv --reference vendors=vendor_master.csv
+dcv pack list                                   # ready-made definitions, e.g. Tally → Zoho Books
+dcv pack finance-tally-zoho-books opening-trial-balance --out tb.migration.json
+dcv pack hr-payroll-zoho-payroll employee-master --param cutoverDate=2026-10-01 --out employees.migration.json
+dcv share employees.migration.json --out employees.shared.json   # definitions and counts only: safe to send
+# a client's export names its columns differently? match them in the workspace; the saved object carries the matching
 dcv reconcile employees.migration.json legacy.csv target.csv --evidence pack.html --junit reconcile.xml
 dcv odcs export contract.json > contract.odcs.yaml
 dcv --version
@@ -84,7 +90,8 @@ A German SAP extract says `1.234,56`, `01.03.2024`, `1200-` and stores employee
 `00012345`; the target says `1234.56`, `2024-03-01`, `-1200` and `12345`.
 Read in the wrong notation these do not fail — they become different, wrong
 values. So each file's format is declared once — encoding (UTF-8, Windows-1252,
-ISO-8859-1, UTF-16), decimal point or comma, date pattern — and keys can
+ISO-8859-1, UTF-16), decimal point or comma, date pattern, Indian digit
+grouping (12,34,567.89) — and keys can
 declare *ignore leading zeros* and *ignore case*. Undeclared, a value that could
 be read two ways is not read as a number or a date at all: a disagreement shows
 up as a disagreement, never as a guess. A file that is not valid UTF-8 is
@@ -161,9 +168,10 @@ code it replaced.
 
 | | |
 |---|---|
-| Browser | files up to 90 MB (memory, not policy) — beyond that, use the CLI |
+| Browser | CSV files up to 90 MB (memory, not policy) — beyond that, use the CLI |
+| Excel | `.xlsx` read in the browser, up to 25 MB (conservative, not yet measured): pick the sheet and header row; merged cells and multi-row headers are refused; legacy `.xls` is refused. The CLI reads CSV and refuses a workbook with the fix |
 | CLI | any size; memory is set by partition size, not file size |
-| Formats | per file, not per column; Indian digit grouping is refused |
+| Formats | per file, not per column; Indian digit grouping (1,23,456) only when declared |
 | Validate page | refuses non-UTF-8 files, but has no format picker yet |
 
 ## License

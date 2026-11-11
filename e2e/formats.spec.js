@@ -20,7 +20,8 @@ test('a Windows-1252, decimal-comma, day-first extract: refused until declared, 
   await page.getByLabel('encoding').nth(1).selectOption('windows-1252')
   await expect(page.getByText('3 rows')).toBeVisible()
   await uploadAs(page, 'target', target)
-  await expect(page.getByText('target.csv')).toBeVisible()
+  // On its upload card (the sign-off record's custody list names it too).
+  await expect(page.locator('input[data-upload="target"]').locator('xpath=..').getByText('target.csv')).toBeVisible()
 
   const pick = (placeholder, nth, value) => page.locator('select', { has: page.locator(`option:text-is("${placeholder}")`) }).nth(nth).selectOption(value)
   await pick('source column', 0, 'PERNR')

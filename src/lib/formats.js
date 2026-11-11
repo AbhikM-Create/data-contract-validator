@@ -11,6 +11,11 @@
 //
 //   { encoding: 'windows-1252', decimal: ',', date: 'DD.MM.YYYY' }
 //
+// Digit grouping is declared the same way. Western grouping (1,234,567.89) is
+// what an undeclared file is read with; Indian grouping (12,34,567.89 — lakh
+// and crore) must be declared, { grouping: 'indian' }, because 1,23,456 read
+// the western way is not a number at all and must not become one by a guess.
+//
 // and where nothing is declared and a value could be read two ways, it is not
 // read as a number or a date at all — it stays text, so a disagreement shows up
 // as a disagreement instead of being resolved by a guess.
@@ -38,10 +43,16 @@ export const DATE_FORMATS = [
   { id: 'YYYYMMDD', label: '20240301 — SAP internal' },
 ]
 
+export const GROUPINGS = [
+  { id: 'western', label: '1,234,567 — groups of three' },
+  { id: 'indian', label: '12,34,567 — Indian (lakh, crore)' },
+]
+
 const KNOWN = {
   encoding: new Set(ENCODINGS.map((e) => e.id)),
   decimal: new Set(DECIMALS.map((d) => d.id)),
   date: new Set(DATE_FORMATS.map((d) => d.id)),
+  grouping: new Set(GROUPINGS.map((g) => g.id)),
 }
 
 // formatIssue(format) -> a sentence, or null when every declared part is known.
@@ -49,8 +60,11 @@ export function formatIssue(format) {
   if (format === null || format === undefined) return null
   if (typeof format !== 'object' || Array.isArray(format)) return 'a file format must be an object such as { "decimal": "," }'
   for (const [part, value] of Object.entries(format)) {
-    if (!KNOWN[part]) return `"${part}" is not part of a file format (use encoding, decimal or date)`
+    if (!KNOWN[part]) return `"${part}" is not part of a file format (use encoding, decimal, date or grouping)`
     if (!KNOWN[part].has(value)) return `"${value}" is not a known ${part} — use one of ${[...KNOWN[part]].join(', ')}`
+  }
+  if (format.grouping === 'indian' && format.decimal === ',') {
+    return 'Indian digit grouping is written with a decimal point (12,34,567.89) — declare decimal "." or leave it out'
   }
   return null
 }
@@ -59,7 +73,7 @@ export function formatIssue(format) {
 export function cleanFormat(format) {
   if (!format || typeof format !== 'object') return undefined
   const out = {}
-  for (const part of ['encoding', 'decimal', 'date']) {
+  for (const part of ['encoding', 'decimal', 'date', 'grouping']) {
     if (KNOWN[part].has(format[part])) out[part] = format[part]
   }
   return Object.keys(out).length > 0 ? out : undefined
@@ -91,6 +105,11 @@ function groupingPattern(group, decimal) {
   return GROUPING.get(id)
 }
 
+// Indian grouping: the last group three digits, every group before it two,
+// the first one or two — 1,23,456 · 12,34,56,789 · and 12,345, which both
+// notations write alike. Commas only; decimal point only (formatIssue).
+const INDIAN_GROUPING = /^[+-]?\d{1,2}(,\d{2})*,\d{3}(\.\d*)?$/
+
 // Fast paths, held to readNumberFully by a fuzz test in formats.test.js: a
 // plain number needs no cleaning, and a value holding a character no number
 // can contain (a letter other than e/E, a slash, a colon) cannot become one.
@@ -100,16 +119,18 @@ const PLAIN_POINT = /^[+-]?\d+(\.\d+)?$/
 const PLAIN_COMMA = /^[+-]?\d+(,\d+)?$/
 const CANNOT_BE_NUMBER = /[^\d+\-.,'eE%()\s\p{Sc}]/u
 
-function readNumber(raw, decimal) {
+function readNumber(raw, decimal, grouping) {
   if (isBlank(raw)) return null
   const text = String(raw)
   if (decimal === '.' && PLAIN_POINT.test(text)) return Number(text)
   if (decimal === ',' && PLAIN_COMMA.test(text)) return Number(text.replace(',', '.'))
   if (CANNOT_BE_NUMBER.test(text)) return null
-  return readNumberFully(text, decimal)
+  return readNumberFully(text, decimal, grouping)
 }
 
-export function readNumberFully(raw, decimal) {
+// grouping is 'western' (the default, and what every undeclared file gets) or
+// 'indian'. With 'western' this is exactly the reader it always was.
+export function readNumberFully(raw, decimal, grouping = 'western') {
   if (isBlank(raw)) return null
   let text = String(raw).trim()
   let negative = false
@@ -129,11 +150,13 @@ export function readNumberFully(raw, decimal) {
   // Grouping: ONE kind of separator, in well-formed groups of three. "1,5" is
   // not a thousands-grouped number in any notation; reading it as 15 is how a
   // decimal comma silently becomes a value ten times too large.
+  const indian = grouping === 'indian'
   const groupChars = decimal === ',' ? ['.', ' '] : [',', ' ', "'"]
   const used = groupChars.filter((c) => text.includes(c))
   if (used.length > 1) return null
   if (used.length === 1) {
-    if (!groupingPattern(used[0], decimal).test(text)) return null
+    const wellFormed = indian ? used[0] === ',' && INDIAN_GROUPING.test(text) : groupingPattern(used[0], decimal).test(text)
+    if (!wellFormed) return null
     text = text.split(used[0]).join('')
   }
   if (decimal === ',') {
@@ -187,9 +210,10 @@ function readDate(raw, pattern) {
 // make a swapped date and a correct one agree.
 export function createReader(format = {}) {
   const decimal = format?.decimal === ',' ? ',' : '.'
+  const grouping = format?.grouping === 'indian' && decimal === '.' ? 'indian' : 'western'
   const pattern = format?.date ?? null
   return {
-    number: (raw) => readNumber(raw, decimal),
+    number: (raw) => readNumber(raw, decimal, grouping),
     date: (raw) => readDate(raw, pattern),
     boolean: parseBoolean,
     declared: true,

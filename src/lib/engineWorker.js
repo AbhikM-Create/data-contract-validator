@@ -11,11 +11,15 @@
 // render. It also means re-checking after a threshold change costs nothing: the
 // rows are already parsed.
 
+import { columnMapIssues, mappedColumns, renameRows } from './columnMap.js'
 import { inferContract } from './contract.js'
 import { parseCsv, toCsv } from './parseCsv.js'
+import { parseXlsx } from './parseXlsx.js'
 import { defineContract, withRules } from './authoredContract.js'
 import { checkReadiness } from './readiness.js'
+import { createMasker } from './masking.js'
 import { reconcile } from './reconcile.js'
+import { referenceValues, RULE_KINDS } from './rules.js'
 import { validate } from './validate.js'
 
 // baseline/candidate for Validate; load/source/target for the migration
@@ -39,8 +43,13 @@ function summarise(file) {
   return {
     name: file.name,
     rowCount: file.rows.length,
+    // columns: as the engine reads them (column matching applied);
+    // fileColumns: the headers the file itself has.
     columns: file.columns,
+    fileColumns: file.fileColumns ?? file.columns,
     errors: file.errors,
+    // A workbook says which sheet and header row were read, and what it noticed.
+    ...(file.kind === 'xlsx' ? { kind: 'xlsx', sheets: file.sheets, sheet: file.sheet, headerRow: file.headerRow, notes: file.notes } : {}),
   }
 }
 
@@ -53,13 +62,73 @@ function lightContract(contract) {
   }
 }
 
+// The reference files a contract's reference rules name, as the value sets the
+// rule checker reads. Each was opened as role "reference:<name>"; a name with no
+// file is simply absent, and its rules come back UNCHECKED with the reason.
+function referencesFor(contract) {
+  const references = {}
+  for (const rule of contract?.rules ?? []) {
+    if (rule?.kind !== RULE_KINDS.REFERENCE || !rule.target?.file) continue
+    const file = files[`reference:${rule.target.file}`]
+    if (!file?.rows.length) continue
+    const entry = references[rule.target.file] ?? { columns: file.columns, values: {} }
+    if (file.columns.includes(rule.target.column) && !entry.values[rule.target.column]) {
+      entry.values[rule.target.column] = referenceValues(file.rows, rule.target.column)
+    }
+    references[rule.target.file] = entry
+  }
+  return references
+}
+
+// Column matching (columnMap.js), applied HERE and nowhere else in the page:
+// the held rows are renamed to the names the definitions use, so every check
+// below reads them unchanged. Returns why the map cannot be applied, or [].
+function applyColumnMap(which, map = {}) {
+  const file = files[which]
+  if (!file) return []
+  const fileColumns = file.fileColumns ?? file.columns
+  const issues = columnMapIssues(map, fileColumns)
+  if (issues.length > 0) return issues
+  const to = mappedColumns(map, fileColumns)
+  file.rows = renameRows(file.rows, file.columns, to)
+  file.columns = to
+  file.fileColumns = fileColumns
+  return []
+}
+
+// Before a check: every file it reads must be under the object's current map.
+// A map that does not fit the file stops the check with the reason: a check
+// run under half a map would read blanks and call them clean.
+function requireColumnMap(columnMap, roles) {
+  for (const role of roles) {
+    const issues = applyColumnMap(role, columnMap?.[role] ?? {})
+    const name = role.startsWith('reference:') ? `reference file "${role.slice('reference:'.length)}"` : `${role} file`
+    if (issues.length > 0) throw new Error(`The column matching for the ${name} cannot be used. ${issues.join(' ')}`)
+  }
+}
+
 function handle(message) {
   const { type } = message
+
+  if (type === 'columnMap') {
+    const issues = applyColumnMap(message.which, message.map ?? {})
+    return { file: summarise(files[message.which]), issues }
+  }
 
   if (type === 'parse') {
     const { which, text, name } = message
     const parsed = parseCsv(text)
-    files[which] = { ...parsed, name }
+    files[which] = { ...parsed, fileColumns: parsed.columns, name }
+
+    const draft = which === 'baseline' && parsed.rows.length > 0 ? inferContract(parsed.rows) : null
+    return { file: summarise(files[which]), draft: lightContract(draft) }
+  }
+
+  // A workbook arrives as its bytes and is read here, so the rows never cross.
+  if (type === 'parseXlsx') {
+    const { which, bytes, name, sheet, headerRow, decimal } = message
+    const parsed = parseXlsx(bytes, { sheet, headerRow, decimal })
+    files[which] = { ...parsed, fileColumns: parsed.columns, name, kind: 'xlsx' }
 
     const draft = which === 'baseline' && parsed.rows.length > 0 ? inferContract(parsed.rows) : null
     return { file: summarise(files[which]), draft: lightContract(draft) }
@@ -72,6 +141,7 @@ function handle(message) {
   }
 
   if (type === 'reconcile') {
+    requireColumnMap(message.columnMap, ['source', 'target'])
     const { source, target } = files
     if (!source?.rows.length || !target?.rows.length) return { report: null }
     const report = reconcile(message.spec, source.rows, target.rows, {
@@ -83,9 +153,10 @@ function handle(message) {
   }
 
   if (type === 'readiness') {
+    requireColumnMap(message.columnMap, ['load', ...Object.keys(files).filter((role) => role.startsWith('reference:'))])
     const load = files.load
     if (!load?.rows.length) return { report: null }
-    const { flagged, ...report } = checkReadiness(message.contract, load.rows, { columns: load.columns, key: message.key })
+    const { flagged, ...report } = checkReadiness(message.contract, load.rows, { columns: load.columns, key: message.key, references: referencesFor(message.contract) })
     lastFlagged = { flagged, rows: load.rows, columns: load.columns }
     return { report: { ...report, flaggedCount: flagged.length } }
   }
@@ -95,13 +166,17 @@ function handle(message) {
   if (type === 'fixList') {
     if (!lastFlagged || lastFlagged.flagged.length === 0) return { csv: null }
     const { flagged, rows, columns } = lastFlagged
+    // The fix list leaves the page: tagged values are masked (masking.js), the
+    // record key and the reasons stay so each record can still be found.
+    const mask = createMasker(message.tags, { unmask: message.unmask === true, keys: message.key ?? [] })
     const csv = toCsv(
-      [...columns, '_row', '_readiness', '_reasons'],
+      [...columns, '_row', '_readiness', '_reasons', '_owner'],
       flagged.map((f) => [
-        ...columns.map((column) => rows[f.row - 1][column]),
+        ...columns.map((column) => mask(column, rows[f.row - 1][column])),
         f.row,
         f.severity === 'reject' ? 'REJECT' : 'WARN',
         f.reasons.join('; '),
+        message.owner ?? '',
       ]),
     )
     return { csv }

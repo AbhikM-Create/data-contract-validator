@@ -75,6 +75,12 @@ export function exportOdcs(contract, options = {}) {
       p.required = true
       continue
     }
+    // One column, every record, rejected: exactly ODCS `unique`. A set of
+    // columns or a gated rule stays an exact custom check below.
+    if (rule.kind === RULE_KINDS.UNIQUE && plain && !(rule.target?.length > 0) && !p.unique) {
+      p.unique = true
+      continue
+    }
     if (rule.kind === RULE_KINDS.VALUE_SET && !rule.when && !rule.layer) {
       addQuality(rule.column, {
         id: idFor(rule),
@@ -182,6 +188,10 @@ export function importOdcs(doc, options = {}) {
     skip(object.name, describeCheck(check), 'a check across the whole object (a row count, duplicates across columns) is not one of this tool’s rules')
   }
 
+  // Primary-key columns, by position: together they identify a record once,
+  // which is one uniqueness rule over all of them.
+  const primaryKey = []
+
   for (const prop of Array.isArray(object.properties) ? object.properties : []) {
     const column = prop?.name
     if (!column) continue
@@ -202,15 +212,20 @@ export function importOdcs(doc, options = {}) {
     const options2 = prop.logicalTypeOptions ?? {}
     importBounds(column, options2, rules, (what, reason) => skip(where, what, reason))
 
-    if (prop.unique === true || prop.primaryKey === true) {
-      skip(where, prop.primaryKey ? 'primaryKey' : 'unique', `uniqueness is checked as the record key — run the check with --key ${column} (or set it as the target key)`)
-    }
+    if (prop.unique === true) rules.push({ kind: RULE_KINDS.UNIQUE, column, op: 'unique' })
+    if (prop.primaryKey === true) primaryKey.push({ column, position: Number.isInteger(prop.primaryKeyPosition) && prop.primaryKeyPosition > 0 ? prop.primaryKeyPosition : Infinity })
 
     for (const check of Array.isArray(prop.quality) ? prop.quality : []) {
       const imported = importCheck(check, column)
       if (imported.rule) rules.push(imported.rule)
       else skip(where, describeCheck(check), imported.reason)
     }
+  }
+
+  if (primaryKey.length > 0) {
+    const [first, ...rest] = primaryKey.sort((a, b) => a.position - b.position).map((k) => k.column)
+    const already = rest.length === 0 && rules.some((r) => r.kind === RULE_KINDS.UNIQUE && r.column === first && !r.target)
+    if (!already) rules.push({ kind: RULE_KINDS.UNIQUE, column: first, op: 'unique', ...(rest.length ? { target: rest } : {}) })
   }
 
   return { name: String(doc.name ?? doc.id ?? '').trim() || 'Imported contract', rules, format, notImported, objects: names, error: null }

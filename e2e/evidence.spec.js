@@ -29,7 +29,7 @@ test('a pack built from script-laden data runs nothing when opened', async ({ pa
 
   expect(dialogs).toEqual([])
   expect(requests).toEqual([])
-  await expect(page).toHaveTitle('Evidence pack — <img src=x onerror=alert(9)>')
+  await expect(page).toHaveTitle('Cutover sign-off record — <img src=x onerror=alert(9)>')
   await expect(page.locator('img, svg, iframe, script')).toHaveCount(0)
   await expect(page.getByText('<script>alert(1)</script>').first()).toBeVisible()
 })

@@ -14,8 +14,12 @@
 // verdicts — never a key, a value, an example or a group label, because those
 // are real records out of the files. A test proves no value can reach it.
 
+import { cleanColumnMap } from './columnMap.js'
 import { readRules, serializeContract } from './contractFile.js'
 import { cleanFormat, formatIssue } from './formats.js'
+import { cleanTags } from './masking.js'
+import { cleanPackRef } from './packRef.js'
+import { cleanOwners, cleanSignoff, emptySignoff, signoffIsEmpty } from './signoff.js'
 
 export const MIGRATION_OBJECT_VERSION = 1
 const KIND = 'data-contract-validator/migration-object'
@@ -34,6 +38,17 @@ export function newMigrationObject(name = '') {
     // How each file is written (formats.js): the load file, the source extract,
     // the target extract. Declared once per object, used by every check.
     formats: { load: {}, source: {}, target: {} },
+    // Sensitivity tags (masking.js): column name -> personal | identifier | pay
+    // | aadhaar. Definitions — column names and those words, never a value.
+    tags: {},
+    // Whose fix each step is (signoff.js), where it differs from the default.
+    owners: {},
+    // Column matching (columnMap.js): per file role, the column a definition
+    // expects -> the column this client's file has. Column names, never a value.
+    columnMap: {},
+    // The cutover sign-off record: what people typed — identity, who exported
+    // each file, decisions on each difference, scope, signatures. No values.
+    signoff: emptySignoff(),
     runs: [],
   }
 }
@@ -55,6 +70,8 @@ function cleanMap(map) {
   return entries.length > 0 ? Object.fromEntries(entries) : undefined
 }
 
+const KINDS = ['codeList', 'keyMap']
+
 export function cleanSpec(spec) {
   const s = spec ?? {}
   const list = (value) => (Array.isArray(value) ? value : value ? [value] : []).map((v) => String(v ?? '').trim())
@@ -74,16 +91,21 @@ export function cleanSpec(spec) {
         if (field.ignoreCase) clean.ignoreCase = true
         const map = cleanMap(field.map)
         if (map) clean.map = map
+        // What the crosswalk IS (shareDefinitions.js): a code list may be
+        // shared, a key map never. Kept only beside a crosswalk.
+        if (map && KINDS.includes(field.mapKind)) clean.mapKind = field.mapKind
         return clean
       }),
     totals: (Array.isArray(s.totals) ? s.totals : [])
-      .filter((total) => total?.source || total?.target)
+      .filter((total) => total?.source || total?.target || total?.fn === 'count')
       .map((total) => {
-        const clean = { source: String(total.source ?? '').trim(), target: String(total.target ?? '').trim() }
+        // A count reads no amount; a sum (the default) is saved as before.
+        const clean = total.fn === 'count' ? { fn: 'count', source: '', target: '' } : { source: String(total.source ?? '').trim(), target: String(total.target ?? '').trim() }
         if (total.groupBy?.source || total.groupBy?.target) {
           clean.groupBy = { source: String(total.groupBy.source ?? '').trim(), target: String(total.groupBy.target ?? '').trim() }
           const map = cleanMap(total.groupBy.map)
           if (map) clean.groupBy.map = map
+          if (map && KINDS.includes(total.groupBy.mapKind)) clean.groupBy.mapKind = total.groupBy.mapKind
         }
         return clean
       }),
@@ -244,6 +266,11 @@ export function serializeMigrationObject(object, { savedAt } = {}) {
     contract: { name: contract.name, rules: contract.rules },
     spec: cleanSpec(object.spec),
     ...(cleanFormats(object.formats) ? { formats: cleanFormats(object.formats) } : {}),
+    ...(Object.keys(cleanTags(object.tags)).length ? { tags: cleanTags(object.tags) } : {}),
+    ...(Object.keys(cleanOwners(object.owners)).length ? { owners: cleanOwners(object.owners) } : {}),
+    ...(Object.keys(cleanColumnMap(object.columnMap)).length ? { columnMap: cleanColumnMap(object.columnMap) } : {}),
+    ...(signoffIsEmpty(object.signoff) ? {} : { signoff: cleanSignoff(object.signoff) }),
+    ...(cleanPackRef(object.pack) ? { pack: cleanPackRef(object.pack) } : {}),
     runs: (object.runs ?? []).map(cleanRun).filter(Boolean),
   }
 }
@@ -302,6 +329,11 @@ export function readMigrationObject(parsed) {
         source: cleanFormat(parsed.formats?.source) ?? {},
         target: cleanFormat(parsed.formats?.target) ?? {},
       },
+      tags: cleanTags(parsed.tags),
+      owners: cleanOwners(parsed.owners),
+      columnMap: cleanColumnMap(parsed.columnMap),
+      signoff: cleanSignoff(parsed.signoff),
+      pack: cleanPackRef(parsed.pack),
       runs: (Array.isArray(parsed.runs) ? parsed.runs : []).map(cleanRun).filter(Boolean),
     },
     skipped,
@@ -318,9 +350,21 @@ function fail(reason) {
 export function runnableSpec(object) {
   const source = cleanFormat(object?.formats?.source)
   const target = cleanFormat(object?.formats?.target)
+  // A crosswalk's declared kind changes no check, so the engine, the stamps
+  // and the fingerprints never see it.
+  const spec = cleanSpec(object?.spec)
+  const run = {
+    ...spec,
+    mapping: spec.mapping.map(({ mapKind: _kind, ...field }) => field),
+    totals: spec.totals.map((total) => {
+      if (!total.groupBy) return total
+      const { mapKind: _kind, ...groupBy } = total.groupBy
+      return { ...total, groupBy }
+    }),
+  }
   return {
     name: object?.name || null,
-    ...cleanSpec(object?.spec),
+    ...run,
     ...(source || target ? { formats: { ...(source ? { source } : {}), ...(target ? { target } : {}) } } : {}),
   }
 }
@@ -365,6 +409,11 @@ export function suggestFieldPairs(sourceColumns, targetColumns, taken = []) {
 // two different targets is refused — the crosswalk would be choosing for you.
 export function readCrosswalk(parsed) {
   const columns = parsed?.columns ?? []
+  // Exactly two. A file with more is a data file offered by mistake, and
+  // reading its first two columns would put record values into the object.
+  if (columns.length > 2) {
+    return { map: null, entries: 0, issues: [`This file has ${columns.length} columns, so it looks like a data file. A crosswalk has exactly two: the legacy value, then the value it becomes in the target.`] }
+  }
   if (columns.length < 2) {
     return { map: null, entries: 0, issues: ['A crosswalk needs two columns: the legacy value, then the value it becomes in the target.'] }
   }

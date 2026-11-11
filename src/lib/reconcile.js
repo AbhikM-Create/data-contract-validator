@@ -97,9 +97,12 @@ export function normalizeSpec(raw) {
       ignoreCase: field?.ignoreCase === true,
     }
   })
+  // A control total is a SUM of an amount (the default) or a COUNT of records —
+  // headcount by location — which reads no amount column at all.
   const totals = (Array.isArray(spec.totals) ? spec.totals : []).map((total) => ({
-    source: String(total?.source ?? '').trim(),
-    target: String(total?.target ?? total?.source ?? '').trim(),
+    fn: total?.fn === 'count' ? 'count' : 'sum',
+    source: total?.fn === 'count' ? '' : String(total?.source ?? '').trim(),
+    target: total?.fn === 'count' ? '' : String(total?.target ?? total?.source ?? '').trim(),
     groupBy: total?.groupBy
       ? {
           source: String(total.groupBy.source ?? '').trim(),
@@ -182,12 +185,14 @@ export function specIssues(rawSpec, sourceColumns, targetColumns) {
   })
 
   spec.totals.forEach((total, i) => {
-    if (!total.source || !total.target) {
-      issues.push(`Control total ${i + 1} needs both a source and a target column.`)
-      return
+    if (total.fn === 'sum') {
+      if (!total.source || !total.target) {
+        issues.push(`Control total ${i + 1} needs both a source and a target column.`)
+        return
+      }
+      needSource(total.source, `control total ${i + 1}`)
+      needTarget(total.target, `control total ${i + 1}`)
     }
-    needSource(total.source, `control total ${i + 1}`)
-    needTarget(total.target, `control total ${i + 1}`)
     if (total.groupBy) {
       needSource(total.groupBy.source, `the grouping of control total ${i + 1}`)
       needTarget(total.groupBy.target, `the grouping of control total ${i + 1}`)
@@ -319,9 +324,12 @@ function addToTotals(side, spec, sideName, row) {
       label = isBlank(raw) ? '(blank)' : translated.unmapped ? String(raw).trim() : String(translated.value).trim()
     }
     const entry = acc.groups.get(label) ?? { sum: 0, count: 0 }
-    const value = spec.readers[sideName].number(row[total[sideName]])
-    if (value !== null) entry.sum += value
-    else if (!isBlank(row[total[sideName]])) acc.unreadable += 1
+    if (total.fn === 'count') entry.sum += 1
+    else {
+      const value = spec.readers[sideName].number(row[total[sideName]])
+      if (value !== null) entry.sum += value
+      else if (!isBlank(row[total[sideName]])) acc.unreadable += 1
+    }
     entry.count += 1
     acc.groups.set(label, entry)
   })
@@ -660,13 +668,15 @@ function totalsStep(spec, sides, thresholds, limit) {
       }
     })
     const broken = groups.filter((g) => !g.ties)
+    const counting = total.fn === 'count'
+    const amount = counting ? (value) => value.toLocaleString('en-US') : money
     if (broken.length > 0) {
       const where = total.groupBy ? ` in ${plural(broken.length, 'group')} of ${groups.length} by "${total.groupBy.target}"` : ''
-      findings.push(finding('totals', 'total-mismatch', total.target,
-        `The total of "${total.target}" does not tie to "${total.source}"${where}.`,
+      findings.push(finding('totals', 'total-mismatch', counting ? (total.groupBy?.target ?? null) : total.target,
+        counting ? `The number of records does not tie${where}.` : `The total of "${total.target}" does not tie to "${total.source}"${where}.`,
         broken.slice(0, limit).map((g) => ({
           key: g.group,
-          detail: `source ${money(g.source)}, target ${money(g.target)}, difference ${g.difference > 0 ? '+' : ''}${money(g.difference)}`,
+          detail: `source ${amount(g.source)}, target ${amount(g.target)}, difference ${g.difference > 0 ? '+' : ''}${amount(g.difference)}`,
           source: g.source,
           target: g.target,
           difference: g.difference,
@@ -677,7 +687,7 @@ function totalsStep(spec, sides, thresholds, limit) {
       findings.push(finding('totals', 'unreadable-amount', total.target,
         `${plural(unreadable, 'value')} in "${total.source}" / "${total.target}" could not be read as a number and ${unreadable === 1 ? 'is' : 'are'} left out of the totals.`))
     }
-    return { source: total.source, target: total.target, groupBy: total.groupBy?.target ?? null, groups }
+    return { fn: total.fn, source: total.source, target: total.target, groupBy: total.groupBy?.target ?? null, groups }
   })
   return { result: step('totals', findings.length ? 'FAIL' : 'PASS', findings), totals }
 }

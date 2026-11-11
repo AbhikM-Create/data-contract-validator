@@ -33,6 +33,32 @@ export default class ErrorBoundary extends Component {
     const { error } = this.state
     if (!error) return this.props.children
 
+    // Inside the app shell: only this screen failed. The session above it —
+    // the migration object, the rules, the files read — is still there.
+    if (this.props.scope === 'screen') {
+      return (
+        <div role="alert" style={{ ...panel, padding: '22px 24px' }}>
+          <h1 style={{ fontFamily: sans, fontSize: 19, fontWeight: 650, color: colors.ink, margin: 0 }}>
+            This screen stopped working
+          </h1>
+          <p style={{ fontFamily: sans, fontSize: 14, color: colors.mute, lineHeight: 1.6, marginTop: 10 }}>
+            Something failed while drawing it. The rest of your work in this tab is kept — the migration object, your
+            rules and the files you read — and nothing was uploaded. Try this screen again, or move to another one.
+          </p>
+          <pre
+            style={{
+              fontFamily: 'ui-monospace, monospace', fontSize: 12, color: colors.ink,
+              background: colors.panelSunk, border: `1px solid ${colors.panelEdge}`, borderRadius: 6,
+              padding: '10px 12px', marginTop: 14, whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+            }}
+          >
+            {error?.message ?? String(error)}
+          </pre>
+          <button onClick={() => this.setState({ error: null })} style={{ ...primaryButton, marginTop: 16 }}>Try this screen again</button>
+        </div>
+      )
+    }
+
     return (
       <div style={{ background: colors.ground, minHeight: '100vh', padding: '64px 24px' }}>
         <div style={{ ...panel, maxWidth: 620, margin: '0 auto', padding: '28px 30px' }}>

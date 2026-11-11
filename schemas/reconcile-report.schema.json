@@ -70,12 +70,19 @@
         "type": "object",
         "required": ["source", "target", "groupBy", "groups"],
         "properties": {
+          "fn": { "enum": ["sum", "count"], "description": "A sum of an amount, or a count of records (source and target are then empty). Added within version 1." },
           "groups": {
             "type": "array",
             "items": {
               "type": "object",
               "required": ["group", "source", "target", "difference", "sourceCount", "targetCount", "ties"],
-              "properties": { "ties": { "type": "boolean" }, "source": { "type": "number" }, "target": { "type": "number" }, "difference": { "type": "number" } }
+              "properties": {
+                "ties": { "type": "boolean" },
+                "source": { "type": ["number", "null"] },
+                "target": { "type": ["number", "null"] },
+                "difference": { "type": ["number", "null"] },
+                "masked": { "const": true, "description": "The amounts are one person's figure (a tagged amount grouped by the record key or a tagged column) and are null in this output; ties still says whether they agreed. Added within version 1." }
+              }
             }
           }
         }
