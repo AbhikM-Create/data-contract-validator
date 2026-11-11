@@ -312,6 +312,13 @@ nav and the trust line, which must stay true.
 - Never show a blank screen: every dead end has a sentence (unreadable or empty
   file, baseline < 8 rows → INSUFFICIENT, candidate < 4 rows → distribution
   SKIPPED). Violations are plain-language sentences naming columns and numbers.
+- The home page leads with the cutover job ("Start a cutover", then "Monitor a
+  feed"), and its first worked example is finance: an opening trial balance,
+  Tally to Zoho Books, built from the Finance pack (`samples/financeSample.js`),
+  then the employee migration (`samples/migrationExamples.js` lists them; an
+  example names every file its checks read, reference files included). The
+  drift check follows on the same page as the after-go-live job.
+  `financeSample.test.js` pins its story step by step, like the others.
 - Reading order for a first-time reader: what this is → how it works → upload
   cards with real "Upload CSV file" buttons (drag-and-drop is the fallback) →
   ready-made examples → what the checks look for. Machinery (inferred columns,
@@ -425,5 +432,7 @@ does not track the SheetJS tarball: check cdn.sheetjs.com for releases.
 - Plain JS + React, function components, hooks. No state library.
 - Engine logic in `src/lib/`, pure, with unit tests.
 - Drift samples are generated from today's date so the clean pair never rots
-  into a false freshness failure; the migration example is static (no dates
-  measured against now). Every person in every sample is invented.
+  into a false freshness failure; the migration examples are static (no dates
+  measured against now). Every person, company and amount in every sample is
+  invented. In the employee example the load file is the one prepared for the
+  NEXT load (hence `load_file_mock3.csv` in cycle Mock 2); the example says so.

@@ -1,6 +1,7 @@
 import Staircase from '../components/Staircase.jsx'
 import { LAYERS } from '../lib/validate.js'
 import { CHECK_COPY, HOW_IT_WORKS } from '../copy.js'
+import { MIGRATION_EXAMPLES } from '../samples/migrationExamples.js'
 import { SAMPLE_PAIRS } from '../samples/samples.js'
 import { go } from '../routes.js'
 import { colors, mono, panel, primaryButton, sans, secondaryButton } from '../theme.js'
@@ -8,6 +9,10 @@ import { colors, mono, panel, primaryButton, sans, secondaryButton } from '../th
 // The first look. A visitor can read what the tool does and run a ready-made
 // example without an account — the checks all happen in their browser, so there
 // is nothing to gate behind a sign-up.
+//
+// It leads with the job most people arrive for: a cutover — checking a load
+// file before the load and proving the load after it (final-spec §4.1). The
+// drift check, for a feed after go-live, follows as its own section.
 // The same Staircase the report uses, filled with a worked example rather than
 // a mock-up: showing the app's one distinctive view on the way in beats
 // describing it. Labelled as an example so nobody reads it as their own result.
@@ -17,13 +22,49 @@ const EXAMPLE_LAYERS = LAYERS.map((layer) => ({
   violations: layer.id === 'distribution' ? [{ code: 'central-shift' }, { code: 'out-of-range' }] : [],
 }))
 
-export default function LandingScreen({ onLoadSample }) {
+export default function LandingScreen({ onLoadSample, onMigrationExample }) {
   return (
     <>
-      <section style={{ paddingTop: 14, maxWidth: 720 }}>
+      <section style={{ paddingTop: 14, maxWidth: 760 }}>
         <h1 style={{ fontFamily: sans, fontSize: 34, fontWeight: 660, letterSpacing: '-0.025em', color: colors.ink, margin: 0, lineHeight: 1.15 }}>
-          The columns match. That does not make it the same data.
+          Prove every load before anyone signs it off.
         </h1>
+        <p style={{ fontFamily: sans, fontSize: 16, color: colors.mute, lineHeight: 1.6, marginTop: 16 }}>
+          Before a load: will the new system accept this file? After it: did every record and balance arrive, correctly?
+          The step that catches a problem says what kind of problem it is, and whose fix it is. Your files are read in
+          this browser and never sent anywhere.
+        </p>
+        <div style={{ display: 'flex', gap: 10, marginTop: 22, flexWrap: 'wrap' }}>
+          <button onClick={() => go('migrations')} style={primaryButton}>Start a cutover</button>
+          <button onClick={() => go('validate')} style={secondaryButton}>Monitor a feed</button>
+        </div>
+      </section>
+
+      <section style={{ marginTop: 34 }}>
+        <h2 style={{ fontFamily: sans, fontSize: 18, fontWeight: 620, color: colors.ink, margin: 0 }}>
+          See a cutover checked — no account needed
+        </h2>
+        <p style={{ fontFamily: sans, fontSize: 13.5, color: colors.mute, lineHeight: 1.55, margin: '7px 0 0', maxWidth: 680 }}>
+          Each example opens with its files, rules and mapping in place. Every company, person and amount in them is invented.
+        </p>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 12, marginTop: 16 }}>
+          {MIGRATION_EXAMPLES.map((example) => (
+            <div key={example.id} style={{ ...panel, padding: '15px 16px', display: 'flex', flexDirection: 'column' }}>
+              <div style={{ fontFamily: sans, fontSize: 14.5, fontWeight: 600, color: colors.ink }}>{example.name}</div>
+              <div style={{ fontFamily: sans, fontSize: 12, color: colors.faint, marginTop: 4 }}>{example.path}</div>
+              <p style={{ fontFamily: sans, fontSize: 13, lineHeight: 1.5, color: colors.mute, marginTop: 9, flex: 1 }}>{example.blurb}</p>
+              <button onClick={() => onMigrationExample(example.id)} style={{ ...secondaryButton, marginTop: 14 }} aria-label={`Open the example: ${example.name}`}>
+                Open this example
+              </button>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section style={{ marginTop: 52, paddingTop: 30, borderTop: `1px solid ${colors.panelEdge}`, maxWidth: 720 }}>
+        <h2 style={{ fontFamily: sans, fontSize: 24, fontWeight: 650, letterSpacing: '-0.02em', color: colors.ink, margin: 0, lineHeight: 1.2 }}>
+          After go-live: the columns match. That does not make it the same data.
+        </h2>
         <p style={{ fontFamily: sans, fontSize: 16, color: colors.mute, lineHeight: 1.6, marginTop: 16 }}>
           A file can keep every column name, every type and every category, and still be wrong — values 83&times;
           what they were, a feed that stopped updating, a grade nobody has ever heard of. This checks a new CSV

@@ -108,9 +108,11 @@ export default function MigrationsScreen(props) {
         {empty && (
           <div style={{ marginTop: 12, padding: '12px 14px', background: colors.panelSunk, borderRadius: 7, display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
             <span style={{ fontFamily: sans, fontSize: 13.5, color: colors.ink, flex: 1, minWidth: 240 }}>
-              New here? Open a worked example: an employee migration in its second mock, with the files, rules and mapping already in place.
+              New here? Open a worked example, with the files, rules and mapping already in place: an opening trial balance moving
+              from Tally to Zoho Books, or an employee migration in its second mock.
             </span>
-            <button onClick={onSample} style={primaryButton}>Try the example migration</button>
+            <button onClick={() => onSample('finance')} style={primaryButton}>Try the finance example</button>
+            <button onClick={() => onSample('employees')} style={secondaryButton}>Try the example migration</button>
           </div>
         )}
       </section>

@@ -32,7 +32,7 @@ import ContractsScreen from './screens/ContractsScreen.jsx'
 import HistoryScreen from './screens/HistoryScreen.jsx'
 import LandingScreen from './screens/LandingScreen.jsx'
 import MigrationsScreen from './screens/MigrationsScreen.jsx'
-import { MIGRATION_SAMPLE, migrationLoadFile, migrationSampleObject, migrationSource, migrationTarget } from './samples/migrationSample.js'
+import { findMigrationExample } from './samples/migrationExamples.js'
 import SignInScreen from './screens/SignInScreen.jsx'
 import ValidateScreen from './screens/ValidateScreen.jsx'
 
@@ -584,26 +584,32 @@ export default function App() {
     setReadiness(null)
   }
 
-  const loadMigrationSample = async () => {
+  // A worked example (samples/migrationExamples.js): its object and every file
+  // its checks read, reference files included. Called with an id, or from a
+  // button with none — then it is the employee example.
+  const loadMigrationSample = async (id) => {
+    const example = findMigrationExample(typeof id === 'string' ? id : 'employees')
     setEngineError(null)
     setBusy('Opening the example migration…')
     try {
-      const parts = [
-        ['source', migrationSource(), MIGRATION_SAMPLE.sourceName],
-        ['target', migrationTarget(), MIGRATION_SAMPLE.targetName],
-        ['load', migrationLoadFile(), MIGRATION_SAMPLE.loadName],
-      ]
       const loaded = {}
-      for (const [which, text, name] of parts) {
-        const { file } = await parseTextInWorker(which, text, name)
-        loaded[which] = { ...file, sha256: await sha256Hex(text), bytes: new TextEncoder().encode(text).length }
+      for (const { role, name, text: make } of example.files) {
+        const text = make()
+        const { file } = await parseTextInWorker(role, text, name)
+        loaded[role] = { ...file, sha256: await sha256Hex(text), bytes: new TextEncoder().encode(text).length }
       }
-      setMigrationFiles(loaded)
-      setMigration(migrationSampleObject())
+      // A file left open from before, which this example does not have, would
+      // still be read by its checks: close it.
+      for (const role of Object.keys(migrationFiles)) {
+        if (migrationFiles[role] && !loaded[role]) await clearFileInWorker(role)
+      }
+      migrationFileRefs.current = {}
+      setMigrationFiles({ load: null, source: null, target: null, ...loaded })
+      setMigration(example.object())
       setMigrationDirty(false)
       setRecon(null)
       setReadiness(null)
-      setMigrationNotice({ tone: 'good', text: 'Example opened: an invented employee migration in Wave 1, Mock 2. Every person in it is made up. Check the load file, then reconcile.' })
+      setMigrationNotice({ tone: 'good', text: example.notice })
     } catch (error) {
       setEngineError(error.message)
     } finally {
@@ -731,7 +737,7 @@ export default function App() {
           sits below the state, so the migration object and the contract survive,
           and moving to another screen (a new key) starts this one afresh. */}
       <ErrorBoundary key={route} scope="screen">
-      {route === 'home' && <LandingScreen onLoadSample={loadSample} />}
+      {route === 'home' && <LandingScreen onLoadSample={loadSample} onMigrationExample={(id) => { go('migrations'); loadMigrationSample(id) }} />}
 
       {route === 'migrations' && (
         <MigrationsScreen
