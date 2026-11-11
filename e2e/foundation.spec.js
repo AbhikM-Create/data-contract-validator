@@ -12,7 +12,7 @@ const RULES = [
 
 async function openValidateExample(page) {
   await page.goto('/')
-  await page.locator('button', { hasText: /example|open|run|try/i }).first().click()
+  await page.getByRole('button', { name: 'Run this example' }).first().click()
   await expect(page.getByText('How far the file got')).toBeVisible()
 }
 

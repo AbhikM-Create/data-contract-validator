@@ -48,7 +48,7 @@ test('F8: no serious accessibility violation — the migration example, checked 
 
 test('F8: no serious accessibility violation — a Validate report', async ({ page }) => {
   await page.goto('/')
-  await page.locator('button', { hasText: /example|open|run|try/i }).first().click()
+  await page.getByRole('button', { name: 'Run this example' }).first().click()
   await expect(page.getByText('How far the file got')).toBeVisible()
   expect(await seriousViolations(page)).toEqual([])
 })
