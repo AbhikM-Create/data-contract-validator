@@ -74,7 +74,7 @@ export default function LandingScreen({ onLoadSample, onMigrationExample, onTour
               <div style={{ fontFamily: sans, fontSize: 14.5, fontWeight: 600, color: colors.ink }}>{example.name}</div>
               <div style={{ fontFamily: sans, fontSize: 12, color: colors.faint, marginTop: 4 }}>{example.path}</div>
               <p style={{ fontFamily: sans, fontSize: 13, lineHeight: 1.5, color: colors.mute, marginTop: 9, flex: 1 }}>{example.blurb}</p>
-              <button onClick={() => onMigrationExample(example.id)} style={{ ...secondaryButton, marginTop: 14 }} aria-label={`Open the example: ${example.name}`}>
+              <button onClick={() => onMigrationExample(example.id)} style={{ ...secondaryButton, marginTop: 14 }} aria-label={`Open this example: ${example.name}`}>
                 Open this example
               </button>
             </div>

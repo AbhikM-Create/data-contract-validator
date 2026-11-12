@@ -14,9 +14,9 @@ test('home leads with the cutover; the finance example opens ready to run and te
   await expect(page.getByRole('button', { name: 'Run this example' }).first()).toBeVisible()
 
   // Finance comes first.
-  const examples = page.getByRole('button', { name: /^Open the example:/ })
+  const examples = page.getByRole('button', { name: /^Open this example:/ })
   await expect(examples).toHaveCount(2)
-  await expect(examples.first()).toHaveAccessibleName('Open the example: Finance — an opening trial balance')
+  await expect(examples.first()).toHaveAccessibleName('Open this example: Finance — an opening trial balance')
   await examples.first().click()
 
   await expect(page).toHaveURL(/#\/migrations$/)
@@ -35,7 +35,7 @@ test('home leads with the cutover; the finance example opens ready to run and te
 
   // Switching to the other example closes the finance example's reference file.
   await page.goto('/')
-  await page.getByRole('button', { name: 'Open the example: HR — an employee master' }).click()
+  await page.getByRole('button', { name: 'Open this example: HR — an employee master' }).click()
   await expect(page.getByLabel('object name')).toHaveValue('Employees')
   await expect(page.getByText('zoho_chart_of_accounts.csv')).toHaveCount(0)
   await expect(page.getByText(/the load file is the one prepared for the next load, Mock 3/)).toBeVisible()
