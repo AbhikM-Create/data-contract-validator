@@ -27,5 +27,38 @@ export function write(dir, name, content) {
 // role, so crosswalk inputs in the spec builder can't be picked by mistake.
 const UPLOAD_TAG = { load: 'load file', source: 'source', target: 'target', baseline: 'baseline', candidate: 'new file' }
 export async function uploadAs(page, role, path) {
-  await page.locator(`input[data-upload="${UPLOAD_TAG[role] ?? role}"]`).setInputFiles(path)
+  const input = page.locator(`input[data-upload="${UPLOAD_TAG[role] ?? role}"]`)
+  // The migration workspace shows one step at a time; files are opened on Set up.
+  if ((await input.count()) === 0) await openStep(page, 'setup')
+  await input.setInputFiles(path)
+}
+
+// The workspace's steps: setup, before, after, signoff. The step is in the link.
+export async function openStep(page, step) {
+  await page.evaluate((hash) => { window.location.hash = hash }, step === 'setup' ? '/migrations' : `/migrations/${step}`)
+  await page.locator(`.step-rail button[aria-current="step"]`).waitFor()
+}
+
+export async function runReadiness(page) {
+  await openStep(page, 'before')
+  await page.getByRole('button', { name: 'Check load readiness' }).click()
+}
+
+export async function runReconcile(page) {
+  await openStep(page, 'after')
+  await page.getByRole('button', { name: 'Reconcile', exact: true }).click()
+}
+
+// Click "Download the evidence pack" on the Sign-off step.
+export async function clickEvidencePack(page) {
+  await openStep(page, 'signoff')
+  await page.getByRole('button', { name: 'Download the evidence pack' }).click()
+}
+
+// The mapping is a one-line summary on Set up when it is complete; this opens
+// the builder if it is folded.
+export async function openMapping(page) {
+  await openStep(page, 'setup')
+  const edit = page.getByRole('button', { name: 'Edit mapping' })
+  if (await edit.count()) await edit.click()
 }

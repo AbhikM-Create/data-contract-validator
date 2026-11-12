@@ -15,9 +15,30 @@ export const ROUTES = [
 // somewhere else, so it gets a URL without taking a place in the nav.
 const IDS = new Set([...ROUTES.map((route) => route.id), 'home', 'signin'])
 
+const segments = () => window.location.hash.replace(/^#\/?/, '').split('?')[0].trim().split('/')
+
 function readHash() {
-  const raw = window.location.hash.replace(/^#\/?/, '').split('?')[0].trim()
+  const raw = segments()[0]
   return IDS.has(raw) ? raw : 'home'
+}
+
+// The part after the screen — "#/migrations/before" -> "before" — so a step of
+// the workspace has a link, and the back button moves between steps.
+const readSub = () => segments()[1] ?? ''
+
+export function useSubRoute() {
+  const [sub, setSub] = useState(readSub)
+  useEffect(() => {
+    const onChange = () => setSub(readSub())
+    window.addEventListener('hashchange', onChange)
+    return () => window.removeEventListener('hashchange', onChange)
+  }, [])
+  return sub
+}
+
+export function goSub(id, sub) {
+  window.location.hash = sub ? `/${id}/${sub}` : `/${id}`
+  window.scrollTo({ top: 0 })
 }
 
 export function useRoute() {

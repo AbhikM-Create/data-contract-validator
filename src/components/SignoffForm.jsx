@@ -63,7 +63,7 @@ export default function SignoffForm({ object, files, readiness, recon, onChange 
               <div style={{ fontFamily: sans, fontSize: 13, color: colors.ink }}>
                 <span style={{ fontFamily: mono, fontSize: 11, color: colors.mute }}>{e.step} · </span>{e.what}
               </div>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 6 }}>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 6 }}>
                 <select aria-label={`decision — ${e.what}`} value={d.disposition ?? ''} onChange={(ev) => set({ disposition: ev.target.value })} style={{ ...input, width: 230, cursor: 'pointer' }}>
                   <option value="">not yet decided</option>
                   {DISPOSITIONS.map((x) => <option key={x.id} value={x.id}>{x.label}</option>)}
@@ -122,6 +122,9 @@ export default function SignoffForm({ object, files, readiness, recon, onChange 
 
 const grid = { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 10 }
 const input = {
+  // 28px high: wrapped onto its own line, a field must still be a full-size target (WCAG 2.5.8).
+  minHeight: 28,
+  boxSizing: 'border-box',
   background: colors.ground, border: `1px solid ${colors.panelEdge}`, borderRadius: 6, color: colors.ink,
   fontFamily: sans, fontSize: 12.5, padding: '6px 8px',
 }

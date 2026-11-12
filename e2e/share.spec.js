@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs'
 import { expect, test } from '@playwright/test'
-import { download, watchErrors, write } from './helpers.js'
+import { download, openMapping, openStep, runReconcile, watchErrors, write } from './helpers.js'
 
 // final-spec C7 in the browser: a crosswalk says what it is; a data file offered
 // as a crosswalk is refused; "Share definitions" writes a copy with no file
@@ -13,9 +13,11 @@ test('share definitions: declare a code list, refuse a data file as a crosswalk,
   await page.getByRole('button', { name: 'Try the example migration' }).click()
   await expect(page.getByLabel('object name')).not.toHaveValue('')
   await page.getByLabel('object name').fill('Acme Retail employees')
-  await page.getByRole('button', { name: 'Reconcile', exact: true }).click()
+  await runReconcile(page)
   await expect(page.getByText(/Stopped at Mapping/).first()).toBeVisible()
 
+  await openStep(page, 'setup')
+  await openMapping(page)
   const grade = page.getByLabel('what the crosswalk for TRFGR to grade holds')
   await expect(grade).toHaveValue('') // nobody has said what it is yet
 

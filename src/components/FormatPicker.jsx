@@ -1,12 +1,19 @@
+import { useState } from 'react'
 import { DATE_FORMATS, DECIMALS, ENCODINGS, GROUPINGS } from '../lib/formats.js'
-import { colors, mono, sans } from '../theme.js'
+import { colors, ghostButton, mono, sans } from '../theme.js'
 
 // How one file is written: its encoding, its number notation, its date order.
 // Declared, never guessed — a German extract's 1.234,56 read the US way is not
 // an error, it is a different number. Left undeclared, a value that could be
 // read two ways stays text, so it shows up as a disagreement, not a guess.
 
-export default function FormatPicker({ format, onChange, label = 'Read this file as' }) {
+// Shown as one line — "Read as UTF-8 · 1,234.56 · ISO dates only" — because
+// most files need no change, and four open dropdowns under every file were the
+// largest part of the screen. "Change" opens them.
+const short = (options, id, empty) => (options.find((o) => o.id === id)?.label ?? empty).split(' — ')[0]
+
+export default function FormatPicker({ format, onChange, label = 'Read this file as', what = 'file' }) {
+  const [open, setOpen] = useState(false)
   const set = (part, value) => {
     const next = { ...format }
     if (value) next[part] = value
@@ -14,6 +21,22 @@ export default function FormatPicker({ format, onChange, label = 'Read this file
     // A decimal comma and Indian grouping never go together (formatIssue).
     if (part === 'decimal' && value === ',') delete next.grouping
     onChange(next)
+  }
+  if (!open) {
+    const parts = [
+      short(ENCODINGS, format.encoding, 'UTF-8'),
+      short(DECIMALS, format.decimal, '1,234.56'),
+      short(DATE_FORMATS, format.date, 'ISO dates only'),
+      ...(format.grouping ? [short(GROUPINGS, format.grouping, '')] : []),
+    ]
+    return (
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center', marginTop: 8 }}>
+        <span style={{ fontFamily: sans, fontSize: 12, color: colors.faint }}>
+          Read as <span style={{ fontFamily: mono, color: colors.mute }}>{parts.join(' · ')}</span>
+        </span>
+        <button onClick={() => setOpen(true)} aria-label={`Change how the ${what} is read`} style={{ ...ghostButton, fontSize: 12, padding: '5px 10px', minHeight: 26 }}>Change</button>
+      </div>
+    )
   }
   return (
     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center', marginTop: 8 }}>

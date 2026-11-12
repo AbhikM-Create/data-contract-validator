@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs'
 import AxeBuilder from '@axe-core/playwright'
 import { expect, test } from '@playwright/test'
-import { download, uploadAs, watchErrors, write } from './helpers.js'
+import { clickEvidencePack, download, runReadiness, runReconcile, uploadAs, watchErrors, write } from './helpers.js'
 
 // v3 §6.2 in the browser: the HR pack's employee master asks for the cutover
 // date before it can start, judges joining dates by it, counts headcount by
@@ -31,16 +31,16 @@ test('the HR pack’s employee master: ask for the cutover date, check, reconcil
     '',
   ].join('\n')))
   await uploadAs(page, 'reference: locations', write(dir, 'locations.csv', 'Work Location Name\nPune\nBengaluru\n'))
-  await page.getByRole('button', { name: 'Check load readiness' }).click()
+  await runReadiness(page)
   await expect(page.getByText(/"Date of Joining" must be on or before 2026-10-01|"Date of Joining" must be .*2026-10-01/).first()).toBeVisible()
 
   // The legacy list against Zoho's: one employee loaded under the wrong location.
   await uploadAs(page, 'source', write(dir, 'legacy.csv', 'Emp Code,Employee Name,Date of Joining,Location,PAN,UAN,Bank A/c No,IFSC\nE001,Asha Kulkarni,01/04/2019,Pune,ABCPK1234F,100200300400,50100012345678,HDFC0001234\nE002,Ravi Shetty,15/06/2021,Bengaluru,AQWPS5678K,,,\n'))
   await uploadAs(page, 'target', write(dir, 'zoho.csv', 'Employee Number,First Name,Last Name,Date of Joining,Work Location Name,PAN Number,UAN Number,Account Number,IFSC Code\nE001,Asha,Kulkarni,01/04/2019,Pune,ABCPK1234F,100200300400,50100012345678,HDFC0001234\nE002,Ravi,Shetty,15/06/2021,Pune,AQWPS5867K,,,\n'))
-  await page.getByRole('button', { name: 'Reconcile', exact: true }).click()
+  await runReconcile(page)
   await expect(page.getByText('The number of records does not tie in 2 groups of 2 by "Work Location Name".').first()).toBeVisible()
 
-  const pack = readFileSync(await download(page, () => page.getByRole('button', { name: 'Download the evidence pack' }).click(), dir), 'utf8')
+  const pack = readFileSync(await download(page, () => clickEvidencePack(page), dir), 'utf8')
   expect(pack).toContain('pack hr-payroll-zoho-payroll v0.1.0 — DRAFT: not yet run on real exports')
   expect(pack).toContain('Masked in this pack:')
   expect(pack).not.toContain('AQWPS5867K') // the PAN changed in flight, tagged as an identifier

@@ -1,6 +1,6 @@
 import AxeBuilder from '@axe-core/playwright'
 import { expect, test } from '@playwright/test'
-import { watchErrors } from './helpers.js'
+import { openStep, runReadiness, runReconcile, watchErrors } from './helpers.js'
 
 // v3 F8. Accessibility basics, held by axe on every screen in the states people
 // actually see: empty, mid-work, and with a report on screen. A serious or
@@ -39,9 +39,9 @@ for (const [name, url] of SCREENS) {
 test('F8: no serious accessibility violation — the migration example, checked and reconciled', async ({ page }) => {
   await page.goto('/#/migrations')
   await page.getByRole('button', { name: 'Try the example migration' }).click()
-  await page.getByRole('button', { name: 'Check load readiness' }).click()
+  await runReadiness(page)
   await expect(page.getByText('NOT READY', { exact: true }).first()).toBeVisible()
-  await page.getByRole('button', { name: 'Reconcile', exact: true }).click()
+  await runReconcile(page)
   await expect(page.getByText(/^Stopped at Mapping\./).first()).toBeVisible()
   expect(await seriousViolations(page)).toEqual([])
 })
@@ -68,8 +68,11 @@ test('F8: progress, notices and errors are announced, and a disabled button says
   await page.goto('/#/migrations')
   // Always present, so its first message is read.
   await expect(page.locator('[role=status][aria-live=polite]').first()).toBeAttached()
+  await openStep(page, 'before')
   await expect(page.getByText('Needs the target rules and a load file.')).toBeVisible()
+  await openStep(page, 'signoff')
   await expect(page.getByText('Run a check first: only results that match the files on screen go in.')).toBeVisible()
+  await openStep(page, 'setup')
 
   await page.getByRole('button', { name: 'Try the example migration' }).click()
   await expect(page.getByRole('status').filter({ hasText: /Example opened/ })).toBeVisible()

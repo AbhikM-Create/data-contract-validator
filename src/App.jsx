@@ -576,6 +576,15 @@ export default function App() {
     setMigrationNotice({ tone: pack.status === 'verified' ? 'good' : 'warn', text: `Started “${object.name}” from ${pack.name} v${pack.version}${pack.status === 'verified' ? '.' : ' — a DRAFT pack: check its columns against your exports before relying on it.'}` })
   }
 
+  // The guided first run (TourPanel.jsx): on while someone follows it. It only
+  // watches what the person does in the real workspace; nothing is simulated.
+  const [tour, setTour] = useState({ on: false, signoff: false })
+  const startTour = () => {
+    setTour({ on: true, signoff: false })
+    go('migrations')
+    loadMigrationSample('finance')
+  }
+
   const newMigration = () => {
     setMigration(newMigrationObject(''))
     setMigrationDirty(false)
@@ -737,7 +746,7 @@ export default function App() {
           sits below the state, so the migration object and the contract survive,
           and moving to another screen (a new key) starts this one afresh. */}
       <ErrorBoundary key={route} scope="screen">
-      {route === 'home' && <LandingScreen onLoadSample={loadSample} onMigrationExample={(id) => { go('migrations'); loadMigrationSample(id) }} />}
+      {route === 'home' && <LandingScreen onLoadSample={loadSample} onMigrationExample={(id) => { go('migrations'); loadMigrationSample(id) }} onTour={startTour} />}
 
       {route === 'migrations' && (
         <MigrationsScreen
@@ -758,6 +767,8 @@ export default function App() {
           onClearFile={clearMigrationFile}
           onCrosswalk={applyCrosswalk}
           onShare={shareMigration}
+          tour={tour}
+          onTour={(patch) => setTour((current) => ({ ...current, ...patch }))}
           onReconcile={runReconciliation}
           onCheckReadiness={runReadiness}
           onDownloadFixList={downloadFixList}

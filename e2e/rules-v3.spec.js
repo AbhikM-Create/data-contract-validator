@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { expect, test } from '@playwright/test'
 import { contractToJson } from '../src/lib/contractFile.js'
-import { download, uploadAs, watchErrors, write } from './helpers.js'
+import { clickEvidencePack, download, runReadiness, uploadAs, watchErrors, write } from './helpers.js'
 
 // v3 §5.1 in the browser: reference, unique and aggregate rules on the example
 // load file. The reference file is opened beside the load file, never stored,
@@ -32,17 +32,17 @@ test('reference, unique and aggregate rules run on the load file, with the refer
   // The rules name a reference file, so its card is there — and without it the
   // file is not called ready.
   await expect(page.getByText('Reference file “companies”')).toBeVisible()
-  await page.getByRole('button', { name: 'Check load readiness' }).click()
+  await runReadiness(page)
   await expect(page.getByText('NOT CONFIRMED', { exact: true }).first()).toBeVisible() // UNVERIFIED, in the report's words
   await expect(page.getByText(/reference file "companies" was not provided/)).toBeVisible()
 
   await uploadAs(page, 'reference: companies', write(dir, 'companies.csv', COMPANIES))
-  await page.getByRole('button', { name: 'Check load readiness' }).click()
+  await runReadiness(page)
   await expect(page.getByText('"company_code" must exist in "code" of the reference file "companies"')).toBeVisible()
   await expect(page.getByText(/The rules, the key or the file have changed/)).toHaveCount(0)
   await expect(page.getByText('FILE TOTAL', { exact: true })).toBeVisible()
 
-  const pack = readFileSync(await download(page, () => page.getByRole('button', { name: 'Download the evidence pack' }).click(), dir), 'utf8')
+  const pack = readFileSync(await download(page, () => clickEvidencePack(page), dir), 'utf8')
   expect(pack).toContain(sha(COMPANIES))
   expect(pack).toContain('Reference file “companies”')
   expect(pack).toContain('--reference companies=companies.csv')

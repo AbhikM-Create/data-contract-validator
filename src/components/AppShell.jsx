@@ -67,6 +67,13 @@ export default function AppShell({ route, user, authLoading, busy, engineError, 
             })}
           </nav>
 
+          {/* Which state the person is in, said plainly: signed out, the work
+              lives on this device and nowhere else. */}
+          {!authLoading && !user && (
+            <span title="Signed out: your work is kept in this browser only." style={{ fontFamily: sans, fontSize: 12, color: colors.mute, border: `1px solid ${colors.panelEdge}`, borderRadius: 999, padding: '4px 10px', whiteSpace: 'nowrap' }}>
+              This device only
+            </span>
+          )}
           {isConfigured && (
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, paddingLeft: 10, borderLeft: `1px solid ${colors.panelEdge}` }}>
               {/* Nothing is claimed about the account until the session has
@@ -102,10 +109,9 @@ export default function AppShell({ route, user, authLoading, busy, engineError, 
             display: 'flex', alignItems: 'baseline', gap: 8,
           }}
         >
-          <span style={{ width: 5, height: 5, borderRadius: '50%', background: colors.pass, flexShrink: 0, transform: 'translateY(-1px)' }} />
           <span style={{ fontFamily: sans, fontSize: 12, color: colors.mute, flex: 1, minWidth: 0 }}>
-            Your files are read in this browser and never uploaded. Only what you author leaves this page — when you
-            download it or save it to your account — and saved checks hold counts, never your records.
+            Files stay on this device. Nothing is uploaded: the records and fix lists you download go only to your
+            computer, and an account, if you use one, stores only rules, names and counts.
           </span>
         </div>
       </div>
