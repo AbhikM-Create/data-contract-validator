@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs'
 import AxeBuilder from '@axe-core/playwright'
 import { expect, test } from '@playwright/test'
-import { download, uploadAs, watchErrors, write } from './helpers.js'
+import { clickEvidencePack, download, openStep, runReadiness, runReconcile, uploadAs, watchErrors, write } from './helpers.js'
 
 // final-spec C1 in the browser: a pack object meets a client's file whose
 // headers differ. The person matches the columns from dropdowns — one proposal
@@ -22,18 +22,19 @@ test('the Finance pack on a file with the client’s own headers: match columns,
   await expect(load.getByText(/3 columns the definitions read are not in this file under that name/)).toBeVisible()
 
   // Nothing is matched until a person says so: unmatched, the file is not judged.
-  await page.getByRole('button', { name: 'Check load readiness' }).click()
+  await runReadiness(page)
   await expect(page.getByText('This readiness check cannot run as set up.').first()).toBeVisible()
 
   // One proposal (same name apart from case), accepted; two chosen by hand.
+  await openStep(page, 'setup')
   await load.getByRole('button', { name: /Use “account name”/ }).click()
   await load.getByLabel('load file: file column for Debit').selectOption('Dr')
   await load.getByLabel('load file: file column for Credit').selectOption('Cr')
   await expect(load.getByText('Every column the definitions read is matched to a column of this file.')).toBeVisible()
   // The earlier result was run under no matching: it says it is out of date.
-  await expect(page.getByText(/The rules, the key or the file have changed/)).toBeVisible()
+  await expect(page.locator('.step-rail').getByText('Out of date — run again')).toBeVisible()
 
-  await page.getByRole('button', { name: 'Check load readiness' }).click()
+  await runReadiness(page)
   await expect(page.getByText(/The rules, the key or the file have changed/)).toHaveCount(0)
   await expect(page.getByText('FILE TOTAL', { exact: true })).toBeVisible()
   await expect(page.getByText(/the sum of "Debit" must be equal to the sum of "Credit"/).first()).toBeVisible()
@@ -44,18 +45,19 @@ test('the Finance pack on a file with the client’s own headers: match columns,
   const source = page.locator('[data-column-matcher="source extract"]')
   await source.getByLabel('source extract: file column for Particulars').selectOption('Ledger')
   await expect(page.locator('[data-column-matcher="target extract"]')).toHaveCount(0) // nothing to match there
-  await page.getByRole('button', { name: 'Reconcile', exact: true }).click()
+  await runReconcile(page)
   await expect(page.getByText('RECONCILED', { exact: true }).first()).toBeVisible()
 
   // Changing a match makes the result stale, on the result itself.
   // (A file column already standing for one name is not offered for another.)
+  await openStep(page, 'setup')
   await expect(load.getByLabel('load file: file column for Debit').locator('option', { hasText: /^Cr$/ })).toHaveCount(0)
   await load.getByLabel('load file: file column for Debit').selectOption('')
-  await expect(page.getByText(/The rules, the key or the file have changed/)).toBeVisible()
+  await expect(page.locator('.step-rail').getByText('Out of date — run again')).toBeVisible()
   await load.getByLabel('load file: file column for Debit').selectOption('Dr')
-  await expect(page.getByText(/The rules, the key or the file have changed/)).toHaveCount(0)
+  await expect(page.locator('.step-rail').getByText('Out of date — run again')).toHaveCount(0)
 
-  const pack = readFileSync(await download(page, () => page.getByRole('button', { name: 'Download the evidence pack' }).click(), dir), 'utf8')
+  const pack = readFileSync(await download(page, () => clickEvidencePack(page), dir), 'utf8')
   expect(pack).toContain('Column matching')
   expect(pack).toMatch(/Load file<\/td><td class="mono">Debit<\/td><td class="mono">Dr</)
   expect(pack).toMatch(/Source extract<\/td><td class="mono">Particulars<\/td><td class="mono">Ledger</)

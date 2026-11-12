@@ -1,4 +1,4 @@
-import { useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import ColumnMatcher from '../components/ColumnMatcher.jsx'
 import ConfirmButton from '../components/ConfirmButton.jsx'
 import CycleHistory from '../components/CycleHistory.jsx'
@@ -8,10 +8,13 @@ import PackPicker, { PackGuide } from '../components/PackPicker.jsx'
 import ReadinessReport from '../components/ReadinessReport.jsx'
 import ReconReport from '../components/ReconReport.jsx'
 import SpecBuilder from '../components/SpecBuilder.jsx'
+import StepRail from '../components/StepRail.jsx'
+import TourPanel from '../components/TourPanel.jsx'
 import UploadCard from '../components/UploadCard.jsx'
 import { expectedColumns } from '../lib/columnMap.js'
 import { SENSITIVITIES, suggestTag } from '../lib/masking.js'
-import { ownersOf } from '../lib/signoff.js'
+import { decisionFor, exceptionsFor, ownersOf } from '../lib/signoff.js'
+import { goSub, useSubRoute } from '../routes.js'
 import { CYCLES, cleanSpec, cycleHistory, suggestFieldPairs } from '../lib/migrationObject.js'
 import { normalizeSpec, specIssues } from '../lib/reconcile.js'
 import { colors, ghostButton, label, mono, panel, primaryButton, sans, secondaryButton } from '../theme.js'
@@ -33,7 +36,7 @@ export default function MigrationsScreen(props) {
     onChange, onOpenFile, onDownload, onNew, onSample, onStartFromPack,
     onLoadFile, onClearFile, onCrosswalk,
     onReconcile, onCheckReadiness, onDownloadFixList, onExportFinding,
-    onUseSessionRules, onEditRules, onLoadContract, onDownloadEvidence, onFormat, onWorkbook, unmask, onUnmask, onColumnMap, onShare,
+    onUseSessionRules, onEditRules, onLoadContract, onDownloadEvidence, onFormat, onWorkbook, unmask, onUnmask, onColumnMap, onShare, tour, onTour,
   } = props
   // Column matching: what the definitions read from each file, and which of
   // the file's columns stands for it (columnMap.js).
@@ -59,13 +62,77 @@ export default function MigrationsScreen(props) {
   const evidenceReady = Boolean((readiness && !readiness.stale) || (recon && !recon.stale))
   const empty = !object.name && rules.length === 0 && object.runs.length === 0 && spec.mapping.length === 0
 
+  // One step on screen at a time (final-spec §4.2). The step is in the link —
+  // #/migrations/before — so it survives a reload and the back button.
+  const sub = useSubRoute()
+  const step = STEP_IDS.includes(sub) ? sub : 'setup'
+  const setStep = (id) => goSub('migrations', id === 'setup' ? '' : id)
+  // The mapping is a one-line summary when it is complete (a pack filled it in),
+  // and the full builder when it needs work or someone asked to edit it. Once
+  // open it stays open: it must not fold away the moment the last field is valid.
+  const [mappingOpen, setMappingOpen] = useState(false)
+  const mappingNeedsWork = bothRead && (issues.length > 0 || (spec.mapping.length === 0 && spec.totals.length === 0))
+  if (mappingNeedsWork && !mappingOpen) setMappingOpen(true)
+  const showMapping = mappingOpen || mappingNeedsWork
+
+  const openFiles = Object.values(files).filter(Boolean).length
+  const failedAt = recon?.report.steps?.find((s) => s.status === 'FAIL')
+  const undecided = exceptionsFor(readiness && !readiness.stale ? readiness.report : null, recon && !recon.stale ? recon.report : null, ownersOf(object))
+    .filter((e) => !decisionFor(object.signoff, e).disposition).length
+  // The guided first run: each item is done when the person has really done it.
+  const reachedSignoff = tour?.on && step === 'signoff' && !tour.signoff
+  useEffect(() => { if (reachedSignoff) onTour({ signoff: true }) }, [reachedSignoff, onTour])
+  const tourItems = [
+    { id: 'open', label: 'Open the example', done: !empty, hint: 'An invented opening trial balance, Tally to Zoho Books.' },
+    {
+      id: 'before', label: 'Check the file before the load', done: Boolean(readiness),
+      hint: step === 'before' ? 'Press “Check load readiness”. The first failing check says what kind of problem it is, and whose fix.' : 'Would the new system accept this file? Find out before the load window.',
+      action: step === 'before' ? { label: 'Check load readiness', run: onCheckReadiness } : { label: 'Go to Before the load', run: () => setStep('before') },
+    },
+    {
+      id: 'after', label: 'Prove the load after it', done: Boolean(recon),
+      hint: step === 'after' ? 'Press “Reconcile”. Records are matched one by one; see which step it stops on.' : 'Did every record and balance arrive? The step it stops on says whose problem it is.',
+      action: step === 'after' ? { label: 'Reconcile', run: onReconcile } : { label: 'Go to After the load', run: () => setStep('after') },
+    },
+    {
+      id: 'signoff', label: 'Decide and sign', done: Boolean(tour?.signoff),
+      hint: 'Every difference gets a decision; the record names the files by fingerprint, so an auditor can check it.',
+      action: { label: 'Go to Sign-off', run: () => setStep('signoff') },
+    },
+    {
+      id: 'own', label: 'Try your own files', done: false,
+      hint: 'Start from a pack, or blank. Your files are read in this browser and never uploaded.',
+      action: { label: 'Start with my files', run: () => { onTour({ on: false }); onNew(); setStep('setup') } },
+    },
+  ]
+
+  const steps = [
+    { id: 'setup', label: 'Set up', status: openFiles === 0 && rules.length === 0 ? 'Open your files' : `${openFiles} file${openFiles === 1 ? '' : 's'} · ${rules.length} rule${rules.length === 1 ? '' : 's'}` },
+    {
+      id: 'before', label: 'Before the load',
+      ...(!readiness ? { status: 'Not run' }
+        : readiness.stale ? { status: 'Out of date — run again', tone: 'warn' }
+          : READINESS_WORDS[readiness.report.status] ?? { status: 'Not confirmed', tone: 'warn' }),
+    },
+    {
+      id: 'after', label: 'After the load',
+      ...(!recon ? { status: 'Not run' }
+        : recon.stale ? { status: 'Out of date — run again', tone: 'warn' }
+          : recon.report.status === 'PASS' ? { status: 'Reconciled', tone: 'pass' }
+            : failedAt ? { status: `Stopped at ${failedAt.label.toLowerCase()}`, tone: 'fail' } : { status: 'Cannot run as set up', tone: 'warn' }),
+    },
+    { id: 'signoff', label: 'Sign-off', status: !evidenceReady ? 'Run a check first' : undecided > 0 ? `${undecided} need${undecided === 1 ? 's' : ''} a decision` : 'Ready to sign' },
+  ]
+
   return (
     <div>
       <h1 style={{ fontFamily: sans, fontSize: 26, fontWeight: 650, color: colors.ink, margin: 0 }}>Migrations</h1>
+      {empty && (
       <p style={{ fontFamily: sans, fontSize: 14.5, lineHeight: 1.55, color: colors.mute, margin: '8px 0 0', maxWidth: 760 }}>
         One migration object — employees, vendors, open items — checked the same way every cycle: before each load, whether
         the target will accept the file; after it, whether every record arrived and still says the same thing.
       </p>
+      )}
 
       {/* --- the object --------------------------------------------------- */}
       <section style={{ ...panel, padding: 16, marginTop: 18 }}>
@@ -98,12 +165,12 @@ export default function MigrationsScreen(props) {
             New
           </ConfirmButton>
         </div>
+        {step === 'setup' && (<>
         <p style={{ fontFamily: sans, fontSize: 12, color: colors.faint, margin: '10px 0 0', lineHeight: 1.5 }}>
           The file holds this object’s rules, mapping spec and the results of every check — counts and verdicts, never a record
           from your data. The command line reads the same file: <span style={{ fontFamily: mono }}>dcv reconcile employees.migration.json …</span>
         </p>
         <PackPicker needsConfirm={dirty || !empty} onStart={onStartFromPack} />
-        {notice && <Notice notice={notice} />}
         {object.pack && <PackGuide packRef={object.pack} />}
         {empty && (
           <div style={{ marginTop: 12, padding: '12px 14px', background: colors.panelSunk, borderRadius: 7, display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
@@ -115,12 +182,21 @@ export default function MigrationsScreen(props) {
             <button onClick={() => onSample('employees')} style={secondaryButton}>Try the example migration</button>
           </div>
         )}
+        </>)}
+        {notice && <Notice notice={notice} />}
       </section>
 
-      {/* --- before the load ---------------------------------------------- */}
-      <Phase step="1" title="Before the load — will the target accept it?">
-        The target’s rules, run against the load file before the load window. A rejection found now costs an edit; found after the
-        load, it costs a re-extract, a re-transform and another load slot.
+      <div className="workspace">
+      <div>
+      <StepRail steps={steps} current={step} onStep={setStep} />
+      {tour?.on && <TourPanel items={tourItems} onEnd={() => onTour({ on: false })} />}
+      </div>
+      <div style={{ minWidth: 0 }}>
+
+      {step === 'setup' && (<>
+      <Phase step="1" title="Set up">
+        The files, the target’s rules, and how legacy fields become target fields. From a pack this is mostly confirming what it
+        filled in. Definitions are saved with the object; the records never are.
       </Phase>
 
       <div style={{ ...panel, padding: 14, marginTop: 10, display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center' }}>
@@ -153,7 +229,7 @@ export default function MigrationsScreen(props) {
           onClear={() => onClearFile('load')}
           onWorkbook={(choice) => onWorkbook('load', choice)}
         />
-        <FormatPicker format={formats.load ?? {}} onChange={(format) => onFormat('load', format)} />
+        <FormatPicker what="load file" format={formats.load ?? {}} onChange={(format) => onFormat('load', format)} />
         {matcher('load', 'load file')}
         </div>
         {referenceNames.map((name) => (
@@ -174,20 +250,6 @@ export default function MigrationsScreen(props) {
         ))}
       </div>
       <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap', marginTop: 10 }}>
-        <button
-          onClick={onCheckReadiness}
-          disabled={!(files.load?.rowCount > 0 && rules.length > 0)}
-          style={{ ...primaryButton, opacity: files.load?.rowCount > 0 && rules.length > 0 ? 1 : 0.45, cursor: files.load?.rowCount > 0 && rules.length > 0 ? 'pointer' : 'default' }}
-        >
-          Check load readiness
-        </button>
-        {!(files.load?.rowCount > 0 && rules.length > 0) && (
-          <span style={{ fontFamily: sans, fontSize: 12.5, color: colors.faint }}>
-            {rules.length === 0 && !(files.load?.rowCount > 0)
-              ? 'Needs the target rules and a load file.'
-              : rules.length === 0 ? 'Needs the target rules — write them on Contracts or load a contract file.' : 'Needs a load file.'}
-          </span>
-        )}
         {/* The target key is one setting, shared with the mapping spec below —
             the same column identifies a record in the load file and in the
             target. Offered here too, so checking a load file alone does not
@@ -216,13 +278,36 @@ export default function MigrationsScreen(props) {
           </span>
         )}
       </div>
-      {readiness && <ReadinessReport report={readiness.report} stale={readiness.stale} onDownloadFixList={onDownloadFixList} owner={ownersOf(object).readiness} />}
+      </>)}
 
-      {/* --- after the load ----------------------------------------------- */}
-      <Phase step="2" title="After the load — did it arrive whole?">
-        The source extract and what the target holds now, matched record by record on their key. Which step the load stops on says
-        whose problem it is: a mapping gap belongs to the functional team, a value changed in flight to the load.
+      {step === 'before' && (<>
+      <Phase step="2" title="Before the load — will the target accept it?">
+        The target’s rules, run against the load file before the load window. A rejection found now costs an edit; found after the
+        load, it costs a re-extract, a re-transform and another load slot.
       </Phase>
+      <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap', marginTop: 10 }}>
+        <button
+          onClick={onCheckReadiness}
+          disabled={!(files.load?.rowCount > 0 && rules.length > 0)}
+          style={{ ...primaryButton, opacity: files.load?.rowCount > 0 && rules.length > 0 ? 1 : 0.45, cursor: files.load?.rowCount > 0 && rules.length > 0 ? 'pointer' : 'default' }}
+        >
+          Check load readiness
+        </button>
+        {!(files.load?.rowCount > 0 && rules.length > 0) && (
+          <span style={{ fontFamily: sans, fontSize: 12.5, color: colors.faint }}>
+            {rules.length === 0 && !(files.load?.rowCount > 0)
+              ? 'Needs the target rules and a load file.'
+              : rules.length === 0 ? 'Needs the target rules — write them on Contracts or load a contract file.' : 'Needs a load file.'}
+          </span>
+        )}
+        {!(files.load?.rowCount > 0 && rules.length > 0) && <button onClick={() => setStep('setup')} style={ghostButton}>Go to Set up</button>}
+      </div>
+      {readiness && <ReadinessReport report={readiness.report} stale={readiness.stale} onDownloadFixList={onDownloadFixList} owner={ownersOf(object).readiness} />}
+      <NextStep onClick={() => setStep('after')}>Next: after the load</NextStep>
+      </>)}
+
+      {step === 'setup' && (<>
+      <h3 style={{ fontFamily: sans, fontSize: 15, fontWeight: 650, color: colors.ink, margin: '26px 0 0' }}>The extracts to reconcile after the load</h3>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 14, marginTop: 10 }}>
         <div>
@@ -237,7 +322,7 @@ export default function MigrationsScreen(props) {
           onClear={() => onClearFile('source')}
           onWorkbook={(choice) => onWorkbook('source', choice)}
         />
-        <FormatPicker format={formats.source ?? {}} onChange={(format) => onFormat('source', format)} />
+        <FormatPicker what="source extract" format={formats.source ?? {}} onChange={(format) => onFormat('source', format)} />
         {matcher('source', 'source extract')}
         </div>
         <div>
@@ -252,23 +337,51 @@ export default function MigrationsScreen(props) {
           onClear={() => onClearFile('target')}
           onWorkbook={(choice) => onWorkbook('target', choice)}
         />
-        <FormatPicker format={formats.target ?? {}} onChange={(format) => onFormat('target', format)} />
+        <FormatPicker what="target extract" format={formats.target ?? {}} onChange={(format) => onFormat('target', format)} />
         {matcher('target', 'target extract')}
         </div>
       </div>
 
       {bothRead ? (
         <>
-          <SpecBuilder
-            spec={spec}
-            sourceColumns={sourceColumns}
-            targetColumns={targetColumns}
-            suggestions={suggestions}
-            issues={issues}
-            onChange={(next) => onChange({ spec: next })}
-            onCrosswalk={onCrosswalk}
-          />
-          <div style={{ marginTop: 12 }}>
+          {showMapping ? (
+            <SpecBuilder
+              spec={spec}
+              sourceColumns={sourceColumns}
+              targetColumns={targetColumns}
+              suggestions={suggestions}
+              issues={issues}
+              onChange={(next) => onChange({ spec: next })}
+              onCrosswalk={onCrosswalk}
+            />
+          ) : (
+            <div style={{ ...panel, padding: 14, marginTop: 10, display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center' }}>
+              <div style={{ flex: 1, minWidth: 240 }}>
+                <div style={label}>Mapping</div>
+                <div style={{ fontFamily: sans, fontSize: 13.5, color: colors.ink, marginTop: 4 }}>
+                  Records matched on <span style={{ fontFamily: mono }}>{spec.key.source.filter(Boolean).join(' + ')} → {spec.key.target.filter(Boolean).join(' + ')}</span>
+                  {` · ${spec.mapping.length} field${spec.mapping.length === 1 ? '' : 's'} compared · ${spec.totals.length} control total${spec.totals.length === 1 ? '' : 's'}`}
+                  {spec.scope?.source?.column ? ' · some source records out of scope' : ''}
+                </div>
+              </div>
+              <button onClick={() => setMappingOpen(true)} style={ghostButton}>Edit mapping</button>
+            </div>
+          )}
+        </>
+      ) : (
+        <p style={{ fontFamily: sans, fontSize: 13, color: colors.faint, marginTop: 10 }}>
+          Read both extracts and the mapping spec appears here, its dropdowns filled with their columns.
+        </p>
+      )}
+      </>)}
+
+      {step === 'after' && (<>
+      <Phase step="3" title="After the load — did it arrive whole?">
+        The source extract and what the target holds now, matched record by record on their key. Which step the load stops on says
+        whose problem it is: a mapping gap belongs to the functional team, a value changed in flight to the load.
+      </Phase>
+      {bothRead ? (
+        <div style={{ marginTop: 12 }}>
             <button
               onClick={onReconcile}
               disabled={issues.length > 0}
@@ -282,25 +395,29 @@ export default function MigrationsScreen(props) {
               </span>
             )}
           </div>
-        </>
       ) : (
         <p style={{ fontFamily: sans, fontSize: 13, color: colors.faint, marginTop: 10 }}>
-          Read both extracts and the mapping spec appears here, its dropdowns filled with their columns.
+          Needs the source and target extracts. <button onClick={() => setStep('setup')} style={ghostButton}>Go to Set up</button>
         </p>
       )}
       {recon && <ReconReport report={recon.report} stale={recon.stale} onExport={onExportFinding} owners={ownersOf(object)} />}
+      </>)}
 
-      {/* --- evidence ------------------------------------------------------ */}
-      <Phase step="3" title="Evidence for sign-off">
-        One self-contained document for the people who sign this cycle off: the verdicts, the records behind them, the
-        SHA-256 fingerprint of every file and of the rules and mapping, and a sign-off block. It quotes records from your
-        files, so it is made in this page and never uploaded. Print it, or save it as PDF from the browser.
-      </Phase>
+      {step === 'setup' && (<>
       <SensitiveFields
         tags={object.tags ?? {}}
         columns={[...new Set(Object.values(files).filter(Boolean).flatMap((f) => f.columns ?? []))]}
         onChange={(tags) => onChange({ tags })}
       />
+      <NextStep onClick={() => setStep('before')}>Next: check the load file</NextStep>
+      </>)}
+
+      {step === 'signoff' && (<>
+      <Phase step="4" title="Sign-off">
+        One self-contained record for the people who sign this cycle off: the verdicts, the records behind them, the SHA-256
+        fingerprint of every file and of the rules and mapping. It quotes records from your files, so it is made in this page and
+        never uploaded. Print it, or save it as PDF from the browser.
+      </Phase>
       <SignoffForm object={object} files={files} readiness={readiness} recon={recon} onChange={onChange} />
       <div style={{ ...panel, padding: 14, marginTop: 10 }}>
         <EvidenceLine title="Before the load" state={readiness ? (readiness.stale ? 'stale' : 'current') : 'none'} />
@@ -334,11 +451,34 @@ export default function MigrationsScreen(props) {
         )}
       </div>
 
-      {/* --- history ------------------------------------------------------- */}
-      <Phase step="4" title="Cycle by cycle">
-        Every check on this object, newest first, against the previous check of the same kind.
-      </Phase>
+      </>)}
+
+      {step === 'after' && (<>
+      <NextStep onClick={() => setStep('signoff')}>Next: sign-off</NextStep>
+      <h3 style={{ fontFamily: sans, fontSize: 15, fontWeight: 650, color: colors.ink, margin: '30px 0 0' }}>Cycle by cycle</h3>
+      <p style={{ fontFamily: sans, fontSize: 13, color: colors.mute, margin: '4px 0 0' }}>Every check on this object, newest first, against the previous check of the same kind.</p>
       <CycleHistory rows={cycleHistory(object.runs)} />
+      </>)}
+      </div>
+      </div>
+    </div>
+  )
+}
+
+const STEP_IDS = ['setup', 'before', 'after', 'signoff']
+
+// The rail's words for a readiness verdict. Green and red are verdicts only.
+const READINESS_WORDS = {
+  READY: { status: 'Ready to load', tone: 'pass' },
+  NOT_READY: { status: 'Not ready', tone: 'fail' },
+  UNVERIFIED: { status: 'Not confirmed', tone: 'warn' },
+  INVALID: { status: 'Cannot run as set up', tone: 'warn' },
+}
+
+function NextStep({ onClick, children }) {
+  return (
+    <div style={{ marginTop: 18, display: 'flex', justifyContent: 'flex-end' }}>
+      <button onClick={onClick} style={secondaryButton}>{children}</button>
     </div>
   )
 }

@@ -8,6 +8,33 @@ import { ScreenHead } from './ValidateScreen.jsx'
 // validating a file works fully without an account, and this screen says so,
 // because a sign-in wall in front of something that needs no account is the
 // fastest way to lose the person evaluating your tool.
+const ACCESS = [
+  {
+    title: 'Without an account',
+    items: [
+      'Check a load file, reconcile a load, monitor a feed',
+      'Packs, examples and the guided tour',
+      'Download the fix list and the sign-off record',
+      'Your work kept in this browser',
+    ],
+  },
+  {
+    title: 'An account also keeps',
+    items: [
+      'Your contracts: the rules you wrote, their names and declared formats',
+      'Run summaries of feed checks: which step caught what, as counts',
+    ],
+  },
+  {
+    title: 'An account never keeps',
+    items: [
+      'Your files, or any record in them',
+      'Report messages and examples, because they quote real values',
+      'Migration objects: those stay files you keep',
+    ],
+  },
+]
+
 export default function SignInScreen({ user }) {
   const [mode, setMode] = useState('in')
   const [email, setEmail] = useState('')
@@ -54,6 +81,20 @@ export default function SignInScreen({ user }) {
         title={creating ? 'Create an account' : 'Sign in'}
         blurb="An account saves your contracts and your validation history. Checking a file needs no account at all — that works signed out."
       />
+
+      {/* What each state can do, said before anyone types a password. Each line
+          is what the code stores today (contractFile.js, runRecord.js) — a
+          promise here that the product does not keep would be the worst kind. */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 12, marginTop: 18, maxWidth: 860 }}>
+        {ACCESS.map((group) => (
+          <div key={group.title} style={{ ...panel, padding: '14px 16px' }}>
+            <div style={{ fontFamily: sans, fontSize: 13.5, fontWeight: 650, color: colors.ink }}>{group.title}</div>
+            <ul style={{ margin: '8px 0 0', paddingLeft: 18 }}>
+              {group.items.map((item) => <li key={item} style={{ fontFamily: sans, fontSize: 13, lineHeight: 1.55, color: colors.mute }}>{item}</li>)}
+            </ul>
+          </div>
+        ))}
+      </div>
 
       {!isConfigured && (
         <Notice tone="warn">

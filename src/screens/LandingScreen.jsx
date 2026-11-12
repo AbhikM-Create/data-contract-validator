@@ -22,27 +22,48 @@ const EXAMPLE_LAYERS = LAYERS.map((layer) => ({
   violations: layer.id === 'distribution' ? [{ code: 'central-shift' }, { code: 'out-of-range' }] : [],
 }))
 
-export default function LandingScreen({ onLoadSample, onMigrationExample }) {
+// What the tool answers, for someone who has never heard of it.
+const BEATS = [
+  { title: 'Before the load', body: 'Will the new system accept this file? See what it would reject while fixing it still costs an edit.' },
+  { title: 'After the load', body: 'Did every record and balance arrive, correctly? The step that catches a problem says whose fix it is.' },
+  { title: 'Sign-off', body: 'One record of what was checked, on which files, with every difference decided. An auditor can check it.' },
+]
+
+export default function LandingScreen({ onLoadSample, onMigrationExample, onTour }) {
   return (
     <>
       <section style={{ paddingTop: 14, maxWidth: 760 }}>
         <h1 style={{ fontFamily: sans, fontSize: 34, fontWeight: 660, letterSpacing: '-0.025em', color: colors.ink, margin: 0, lineHeight: 1.15 }}>
           Prove every load before anyone signs it off.
         </h1>
-        <p style={{ fontFamily: sans, fontSize: 16, color: colors.mute, lineHeight: 1.6, marginTop: 16 }}>
-          Before a load: will the new system accept this file? After it: did every record and balance arrive, correctly?
-          The step that catches a problem says what kind of problem it is, and whose fix it is. Your files are read in
-          this browser and never sent anywhere.
+        <p style={{ fontFamily: sans, fontSize: 16, color: colors.mute, lineHeight: 1.6, marginTop: 14 }}>
+          For teams moving finance and HR data into a new system.
         </p>
-        <div style={{ display: 'flex', gap: 10, marginTop: 22, flexWrap: 'wrap' }}>
-          <button onClick={() => go('migrations')} style={primaryButton}>Start a cutover</button>
+      </section>
+
+      <section style={{ marginTop: 22 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))', gap: 12 }}>
+          {BEATS.map((beat, index) => (
+            <div key={beat.title} style={{ ...panel, padding: '14px 16px' }}>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+                <span style={{ fontFamily: mono, fontSize: 12, color: colors.accent }}>{index + 1}</span>
+                <span style={{ fontFamily: sans, fontSize: 15, fontWeight: 620, color: colors.ink }}>{beat.title}</span>
+              </div>
+              <p style={{ fontFamily: sans, fontSize: 13.5, lineHeight: 1.5, color: colors.mute, margin: '7px 0 0' }}>{beat.body}</p>
+            </div>
+          ))}
+        </div>
+        <div style={{ display: 'flex', gap: 10, marginTop: 20, flexWrap: 'wrap', alignItems: 'center' }}>
+          <button onClick={onTour} style={primaryButton}>See it work in 2 minutes</button>
+          <button onClick={() => go('migrations')} style={secondaryButton}>Start with my files</button>
           <button onClick={() => go('validate')} style={secondaryButton}>Monitor a feed</button>
+          <span style={{ fontFamily: sans, fontSize: 13, color: colors.mute }}>No account needed. Your files stay on this device.</span>
         </div>
       </section>
 
       <section style={{ marginTop: 34 }}>
         <h2 style={{ fontFamily: sans, fontSize: 18, fontWeight: 620, color: colors.ink, margin: 0 }}>
-          See a cutover checked — no account needed
+          Or open an example and look around
         </h2>
         <p style={{ fontFamily: sans, fontSize: 13.5, color: colors.mute, lineHeight: 1.55, margin: '7px 0 0', maxWidth: 680 }}>
           Each example opens with its files, rules and mapping in place. Every company, person and amount in them is invented.

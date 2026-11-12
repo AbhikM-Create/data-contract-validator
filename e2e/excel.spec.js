@@ -3,7 +3,7 @@ import { expect, test } from '@playwright/test'
 import { utils, write } from 'xlsx'
 import { parseCsv } from '../src/lib/parseCsv.js'
 import { migrationLoadFile } from '../src/samples/migrationSample.js'
-import { download, uploadAs, watchErrors } from './helpers.js'
+import { clickEvidencePack, download, openStep, runReadiness, uploadAs, watchErrors } from './helpers.js'
 
 // v3 F7. An Excel workbook is read in the page like a CSV: the Excel and CSV
 // versions of the same data give the same report, the sheet and header row are
@@ -38,7 +38,7 @@ test('F7: the Excel and CSV versions of the load file give the same readiness re
   await page.getByRole('button', { name: 'Try the example migration' }).click()
   await expect(page.getByText(/Example opened/)).toBeVisible()
 
-  await page.getByRole('button', { name: 'Check load readiness' }).click()
+  await runReadiness(page)
   await expect(page.getByText('NOT READY', { exact: true }).first()).toBeVisible()
   const fromCsv = { headline: await headline(page).innerText(), figures: await figures(page) }
   const csvFixes = parseCsv(readFileSync(await download(page, () => page.getByRole('button', { name: /Download the fix list/ }).click(), dir), 'utf8'))
@@ -47,8 +47,9 @@ test('F7: the Excel and CSV versions of the load file give the same readiness re
   await expect(page.getByText('sheet “Employees”, header row 1', { exact: false })).toBeVisible()
   // The CSV's report is now stale (different bytes); only a re-check clears it,
   // so what is compared below is the workbook's own report.
+  await openStep(page, 'before')
   await expect(page.getByText('The rules, the key or the file have changed since this ran')).toBeVisible()
-  await page.getByRole('button', { name: 'Check load readiness' }).click()
+  await runReadiness(page)
   await expect(page.getByText('The rules, the key or the file have changed since this ran')).toHaveCount(0)
 
   expect({ headline: await headline(page).innerText(), figures: await figures(page) }).toEqual(fromCsv)
@@ -56,7 +57,7 @@ test('F7: the Excel and CSV versions of the load file give the same readiness re
   expect(xlsxFixes.rows.map((r) => [r.employee_id, r._readiness, r._reasons])).toEqual(csvFixes.rows.map((r) => [r.employee_id, r._readiness, r._reasons]))
 
   // The pack names the workbook by the SHA-256 of its bytes and the sheet read.
-  const pack = readFileSync(await download(page, () => page.getByRole('button', { name: 'Download the evidence pack' }).click(), dir), 'utf8')
+  const pack = readFileSync(await download(page, () => clickEvidencePack(page), dir), 'utf8')
   expect(pack).toContain('sheet “Employees”, header row 1')
   expect(errors).toEqual([])
 })

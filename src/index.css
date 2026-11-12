@@ -140,3 +140,37 @@ p {
 @media (prefers-reduced-motion: reduce) {
   .pulse { animation: none; }
 }
+
+/* The workspace: a rail of steps beside the step on screen; stacked when narrow. */
+.workspace {
+  display: grid;
+  grid-template-columns: 220px minmax(0, 1fr);
+  gap: 22px;
+  margin-top: 18px;
+  align-items: start;
+}
+
+.step-rail {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  position: sticky;
+  top: 108px;
+}
+
+@media (max-width: 860px) {
+  .workspace {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .step-rail {
+    position: static;
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+
+  .step-rail > button {
+    width: auto !important;
+    flex: 1 1 160px;
+  }
+}

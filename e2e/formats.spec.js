@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs'
 import { expect, test } from '@playwright/test'
-import { download, uploadAs, watchErrors, write } from './helpers.js'
+import { download, openStep, runReconcile, uploadAs, watchErrors, write } from './helpers.js'
 
 // A German SAP extract saved as Windows-1252, against an ISO UTF-8 target. One
 // planted difference: a salary of 1200- arrived as -1300.
@@ -17,7 +17,9 @@ test('a Windows-1252, decimal-comma, day-first extract: refused until declared, 
 
   await uploadAs(page, 'source', sap)
   await expect(page.getByText(/not valid UTF-8 — most likely it was saved as Windows-1252/)).toBeVisible()
-  await page.getByLabel('encoding').nth(1).selectOption('windows-1252')
+  // How a file is read is one line until someone changes it.
+  await page.getByRole('button', { name: 'Change how the source extract is read' }).click()
+  await page.getByLabel('encoding').selectOption('windows-1252')
   await expect(page.getByText('3 rows')).toBeVisible()
   await uploadAs(page, 'target', target)
   // On its upload card (the sign-off record's custody list names it too).
@@ -35,13 +37,15 @@ test('a Windows-1252, decimal-comma, day-first extract: refused until declared, 
   await page.getByText('ignore case').first().click()
 
   const disagreements = () => page.locator('p', { hasText: /disagrees with/ }).allInnerTexts()
-  await page.getByRole('button', { name: 'Reconcile', exact: true }).click()
+  await runReconcile(page)
   await expect(page.getByText('How far the load got')).toBeVisible()
   expect((await disagreements()).length).toBe(2) // undeclared: every date and both European amounts disagree
 
-  await page.getByLabel('number notation').nth(1).selectOption(',')
-  await page.getByLabel('date format').nth(1).selectOption('DD.MM.YYYY')
-  await page.getByRole('button', { name: 'Reconcile', exact: true }).click()
+  await openStep(page, 'setup')
+  await page.getByRole('button', { name: 'Change how the source extract is read' }).click()
+  await page.getByLabel('number notation').selectOption(',')
+  await page.getByLabel('date format').selectOption('DD.MM.YYYY')
+  await runReconcile(page)
   await expect(page.locator('p', { hasText: /disagrees with/ })).toHaveCount(1)
   await expect(page.locator('p', { hasText: /disagrees with/ })).toHaveText(/"pay" disagrees with "ANSAL" on 1 record of 3 compared/)
 

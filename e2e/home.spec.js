@@ -1,6 +1,6 @@
 import AxeBuilder from '@axe-core/playwright'
 import { expect, test } from '@playwright/test'
-import { watchErrors } from './helpers.js'
+import { runReadiness, runReconcile, watchErrors } from './helpers.js'
 
 // final-spec §4.1: the home page leads with the cutover job, and its first
 // example is a finance cutover built from the pack. Every amount is invented.
@@ -25,12 +25,12 @@ test('home leads with the cutover; the finance example opens ready to run and te
   // Its reference file is opened with it: nothing is left for the visitor to find.
   await expect(page.getByText('zoho_chart_of_accounts.csv').first()).toBeVisible()
 
-  await page.getByRole('button', { name: 'Check load readiness' }).click()
+  await runReadiness(page)
   await expect(page.getByText('NOT READY', { exact: true }).first()).toBeVisible()
   await expect(page.getByText('FILE TOTAL', { exact: true })).toBeVisible()
   await expect(page.getByText(/2,280,500\.5 against 2,280,000\.5 \(difference 500\)/).first()).toBeVisible()
 
-  await page.getByRole('button', { name: 'Reconcile', exact: true }).click()
+  await runReconcile(page)
   await expect(page.getByText(/Stopped at Completeness\. 9 of 10 in-scope records matched one to one/).first()).toBeVisible()
 
   // Switching to the other example closes the finance example's reference file.
@@ -39,7 +39,7 @@ test('home leads with the cutover; the finance example opens ready to run and te
   await expect(page.getByLabel('object name')).toHaveValue('Employees')
   await expect(page.getByText('zoho_chart_of_accounts.csv')).toHaveCount(0)
   await expect(page.getByText(/the load file is the one prepared for the next load, Mock 3/)).toBeVisible()
-  await page.getByRole('button', { name: 'Check load readiness' }).click()
+  await runReadiness(page)
   await expect(page.getByText(/2 of 46 records/).first()).toBeVisible()
 
   await page.goto('/')

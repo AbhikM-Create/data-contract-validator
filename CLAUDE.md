@@ -293,7 +293,10 @@ uniqueness and other engines' checks are listed in `notImported` with reasons
 ## UI
 Screens: Migrations, Contracts, Validate, History (`routes.js`, hash routing —
 a static app needs no server rewrites). `components/AppShell.jsx` carries the
-nav and the trust line, which must stay true.
+nav and the trust line, which must stay true ("Files stay on this device.
+Nothing is uploaded: the records and fix lists you download go only to your
+computer, and an account, if you use one, stores only rules, names and
+counts."). It carries no green dot: green is a verdict's colour.
 - `components/Staircase.jsx` is the signature view and leads every report —
   four layers on Validate, five steps on Migrations. A flat list of verdicts
   hides the one fact that matters: the checks ABOVE the failure passed.
@@ -306,9 +309,29 @@ nav and the trust line, which must stay true.
 - Rules and specs are built from dropdowns only (`RuleBuilder`, `SpecBuilder`):
   nothing can be authored that the engine cannot read. Inference proposes
   (`suggestions.js`) with its evidence; the person disposes.
-- The Migrations screen runs in cycle order: before the load (readiness), after
-  it (reconciliation), evidence for sign-off, cycle by cycle (history). Reports
-  say when the files or definitions changed since they ran.
+- The Migrations screen is a workspace of FOUR STEPS, one on screen at a time:
+  Set up (files, column matching, rules, mapping, sensitive fields) → Before the
+  load (readiness) → After the load (reconciliation, cycle history) → Sign-off
+  (decisions, the record). `StepRail.jsx` shows each step's status, so the whole
+  object reads at a glance; a stale result reads "Out of date — run again" on
+  the rail from any step, and on the result itself. The step is in the link
+  (`#/migrations/before`; `useSubRoute`/`goSub` in `routes.js`). Do not put the
+  steps back on one page: with an example run it was 7.7 screens and 126
+  controls (measured 11 Nov 2026).
+- Machinery folds to one line until someone wants it: `FormatPicker` reads
+  "Read as UTF-8 · 1,234.56 · ISO dates only · Change"; the mapping reads as a
+  summary with "Edit mapping" when it is complete, and stays open once opened
+  or needed — it must never fold away under someone mid-edit.
+- User states (approved design, 12 Nov 2026). Built: (1) first visit — the home
+  page says what this is in three beats, with "See it work in 2 minutes";
+  (2) first use — `TourPanel.jsx`, a checklist beside the finance example whose
+  items are done only when the person has really done them in the real
+  workspace, never simulated, always leavable; (3) signed out — a "This device
+  only" chip, and the sign-in screen lists what works without an account, what
+  an account keeps and what it never keeps, each line true of the code today.
+  NOT built: (4) projects saved to an account; (5) organisations, invitations,
+  roles. Nothing on screen may promise either until it exists
+  (`e2e/journeys.spec.js` holds that).
 - Never show a blank screen: every dead end has a sentence (unreadable or empty
   file, baseline < 8 rows → INSUFFICIENT, candidate < 4 rows → distribution
   SKIPPED). Violations are plain-language sentences naming columns and numbers.
