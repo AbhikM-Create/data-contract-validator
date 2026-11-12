@@ -28,6 +28,12 @@ Prepared 11 Nov 2026 (final-spec C8). **Nothing has been pushed or published.**
 3. **The name.** The package stays `data-contract-validator` and the command `dcv`;
    "Plumbstep" is a working product name and appears in no published identifier.
 
+## Before hosting a build with accounts
+
+`supabase/schema.sql` gained the `migration_objects` table (12 Nov 2026). It is
+idempotent: run the whole file again in the project's SQL editor. Until it has
+run, "Save to account" says the table does not exist yet.
+
 ## Steps
 
 ### 1. Commit (local)

@@ -4,6 +4,7 @@ import ErrorBoundary from './components/ErrorBoundary.jsx'
 import { hasWork, loadDraft, saveDraft } from './lib/autosave.js'
 import { contractToJson, parseContractFile } from './lib/contractFile.js'
 import { deleteContract, listContracts, loadContract, saveContract } from './lib/contractStore.js'
+import { deleteObject, listObjects, loadObject, saveObject } from './lib/objectStore.js'
 import {
   clearFileInWorker, columnMapInWorker, fixListInWorker, parseBytesInWorker, parseFileInWorker, parseTextInWorker, readinessInWorker, reconcileInWorker, validateInWorker,
 } from './lib/engineClient.js'
@@ -83,6 +84,11 @@ export default function App() {
   const [migration, setMigration] = useState(() => initialDraft?.migration ?? newMigrationObject(''))
   const [migrationDirty, setMigrationDirty] = useState(() => initialDraft?.migrationDirty ?? false)
   const [migrationNotice, setMigrationNotice] = useState(null)
+  // The account's copy of the object on screen, if it came from or went to one
+  // (objectStore.js). Null for a file, a pack, an example or a new object.
+  const [migrationCloudId, setMigrationCloudId] = useState(null)
+  const [savedObjects, setSavedObjects] = useState([])
+  const [objectsLoading, setObjectsLoading] = useState(false)
   const [migrationFiles, setMigrationFiles] = useState({ load: null, source: null, target: null })
   const [recon, setRecon] = useState(null)
   const [readiness, setReadiness] = useState(null)
@@ -239,6 +245,70 @@ export default function App() {
   // the rule below exists to allow; the state it sets is the fetch result.
   // oxlint-disable-next-line react/set-state-in-effect
   useEffect(() => { refreshContracts() }, [refreshContracts])
+
+  // --- saved migration objects (user state 4) --------------------------------
+  const refreshObjects = useCallback(async () => {
+    if (!user) {
+      setSavedObjects([])
+      return
+    }
+    setObjectsLoading(true)
+    const { objects, error } = await listObjects()
+    setSavedObjects(objects)
+    setObjectsLoading(false)
+    if (error) setMigrationNotice({ tone: 'bad', text: error })
+  }, [user])
+
+  // The same synchronisation with the database as the contracts above.
+  // oxlint-disable-next-line react/set-state-in-effect
+  useEffect(() => { refreshObjects() }, [refreshObjects])
+
+  const saveMigrationToAccount = async () => {
+    setBusy('Saving to your account…')
+    const { saved, error } = await saveObject({ id: migrationCloudId, object: migration })
+    setBusy(null)
+    if (error) {
+      setMigrationNotice({ tone: 'bad', text: error })
+      return
+    }
+    setMigrationCloudId(saved.id)
+    setMigrationDirty(false)
+    setMigrationNotice({ tone: 'good', text: `Saved “${saved.name}” to your account — its rules, mapping and ${count(migration.runs.length, 'check')} as counts, never a record from your files. Open it from any device you sign in on; open the files there again.` })
+    refreshObjects()
+  }
+
+  const openMigrationFromAccount = async (id) => {
+    const opened = await loadObject(id)
+    if (opened.error) {
+      setMigrationNotice({ tone: 'bad', text: opened.error })
+      return
+    }
+    setMigration(opened.object)
+    setMigrationCloudId(opened.id)
+    setMigrationDirty(false)
+    setRecon(null)
+    setReadiness(null)
+    setMigrationNotice(opened.skipped.length > 0
+      ? {
+          tone: 'warn',
+          text: `Opened “${opened.object.name}” from your account, but ${count(opened.skipped.length, 'rule')} could not be read and ${opened.skipped.length === 1 ? 'is' : 'are'} NOT being checked.`,
+          details: opened.skipped.map((entry) => `${entry.rule?.column ?? '(no column)'}: ${entry.reason}`),
+        }
+      : { tone: 'good', text: `Opened “${opened.object.name}” from your account — ${count(opened.object.contract.rules.length, 'rule')}, ${count(opened.object.spec.mapping.length, 'mapped field')}, ${count(opened.object.runs.length, 'earlier check')}. Open its files again to run a check.` })
+  }
+
+  const deleteMigrationFromAccount = async (id) => {
+    const { error } = await deleteObject(id)
+    if (error) {
+      setMigrationNotice({ tone: 'bad', text: error })
+      return
+    }
+    // The copy on screen stays; it is no longer the account's, so the next
+    // save inserts rather than failing against a row that is gone.
+    if (id === migrationCloudId) setMigrationCloudId(null)
+    setMigrationNotice({ tone: 'good', text: 'Deleted from your account. The copy on this screen is unchanged.' })
+    refreshObjects()
+  }
 
   const saveToAccount = async () => {
     setSaving(true)
@@ -545,6 +615,7 @@ export default function App() {
       return
     }
     setMigration(opened.object)
+    setMigrationCloudId(null)
     setMigrationDirty(false)
     setRecon(null)
     setReadiness(null)
@@ -570,6 +641,7 @@ export default function App() {
     }
     if (!object) return
     setMigration(object)
+    setMigrationCloudId(null)
     setMigrationDirty(true)
     setRecon(null)
     setReadiness(null)
@@ -587,6 +659,7 @@ export default function App() {
 
   const newMigration = () => {
     setMigration(newMigrationObject(''))
+    setMigrationCloudId(null)
     setMigrationDirty(false)
     setMigrationNotice(null)
     setRecon(null)
@@ -615,6 +688,7 @@ export default function App() {
       migrationFileRefs.current = {}
       setMigrationFiles({ load: null, source: null, target: null, ...loaded })
       setMigration(example.object())
+      setMigrationCloudId(null)
       setMigrationDirty(false)
       setRecon(null)
       setReadiness(null)
@@ -746,7 +820,7 @@ export default function App() {
           sits below the state, so the migration object and the contract survive,
           and moving to another screen (a new key) starts this one afresh. */}
       <ErrorBoundary key={route} scope="screen">
-      {route === 'home' && <LandingScreen onLoadSample={loadSample} onMigrationExample={(id) => { go('migrations'); loadMigrationSample(id) }} onTour={startTour} />}
+      {route === 'home' && <LandingScreen onLoadSample={loadSample} onMigrationExample={(id) => { go('migrations'); loadMigrationSample(id) }} onTour={startTour} recent={user ? savedObjects.slice(0, 5) : []} onOpenRecent={(id) => { go('migrations'); openMigrationFromAccount(id) }} />}
 
       {route === 'migrations' && (
         <MigrationsScreen
@@ -767,6 +841,13 @@ export default function App() {
           onClearFile={clearMigrationFile}
           onCrosswalk={applyCrosswalk}
           onShare={shareMigration}
+          signedIn={Boolean(user)}
+          savedObjects={savedObjects}
+          objectsLoading={objectsLoading}
+          cloudId={migrationCloudId}
+          onSaveToAccount={saveMigrationToAccount}
+          onOpenFromAccount={openMigrationFromAccount}
+          onDeleteFromAccount={deleteMigrationFromAccount}
           tour={tour}
           onTour={(patch) => setTour((current) => ({ ...current, ...patch }))}
           onReconcile={runReconciliation}

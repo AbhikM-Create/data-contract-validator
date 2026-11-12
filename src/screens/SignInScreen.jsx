@@ -21,6 +21,7 @@ const ACCESS = [
   {
     title: 'An account also keeps',
     items: [
+      'Migration objects you save to it: rules, mapping, formats, column matching, tags and run counts, on every device you sign in from',
       'Your contracts: the rules you wrote, their names and declared formats',
       'Run summaries of feed checks: which step caught what, as counts',
     ],
@@ -30,7 +31,7 @@ const ACCESS = [
     items: [
       'Your files, or any record in them',
       'Report messages and examples, because they quote real values',
-      'Migration objects: those stay files you keep',
+      'The files an object was checked against: open them again on each device, and the app confirms by fingerprint that they are the ones',
     ],
   },
 ]
