@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { DATE_FORMATS, DECIMALS, ENCODINGS, GROUPINGS } from '../lib/formats.js'
+import { DATE_FORMATS, DECIMALS, ENCODINGS, GROUPINGS, SIDES } from '../lib/formats.js'
 import { colors, ghostButton, mono, sans } from '../theme.js'
 
 // How one file is written: its encoding, its number notation, its date order.
@@ -28,6 +28,7 @@ export default function FormatPicker({ format, onChange, label = 'Read this file
       short(DECIMALS, format.decimal, '1,234.56'),
       short(DATE_FORMATS, format.date, 'ISO dates only'),
       ...(format.grouping ? [short(GROUPINGS, format.grouping, '')] : []),
+      ...(format.side ? [short(SIDES, format.side, '')] : []),
     ]
     return (
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center', marginTop: 8 }}>
@@ -48,6 +49,8 @@ export default function FormatPicker({ format, onChange, label = 'Read this file
       {format.decimal !== ',' && (
         <Choice value={format.grouping ?? ''} onChange={(v) => set('grouping', v)} options={GROUPINGS} empty="1,234,567" label="digit grouping" width={150} />
       )}
+      {/* Tally's 25,000.00 Cr: read signed only when declared. */}
+      <Choice value={format.side ?? ''} onChange={(v) => set('side', v)} options={SIDES} empty="No Dr/Cr" label="Dr and Cr" width={150} />
     </div>
   )
 }

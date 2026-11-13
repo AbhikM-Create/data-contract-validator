@@ -16,6 +16,13 @@
 // and crore) must be declared, { grouping: 'indian' }, because 1,23,456 read
 // the western way is not a number at all and must not become one by a guess.
 //
+// Tally writes a balance with its side after it — 25,000.00 Dr, 25,000.00 Cr —
+// in text exports, and in Excel through the cell's number format (parseXlsx
+// keeps the side). Read undeclared, "25000 Cr" is not a number; declared,
+// { side: 'drcr' }, Dr reads as plus and Cr as minus. It is never assumed: in
+// Indian notation "Cr" also means crore, and a credit read as a debit is a
+// balance with the wrong sign that still adds up.
+//
 // and where nothing is declared and a value could be read two ways, it is not
 // read as a number or a date at all — it stays text, so a disagreement shows up
 // as a disagreement instead of being resolved by a guess.
@@ -48,11 +55,16 @@ export const GROUPINGS = [
   { id: 'indian', label: '12,34,567 — Indian (lakh, crore)' },
 ]
 
+export const SIDES = [
+  { id: 'drcr', label: '1,234.56 Dr / 1,234.56 Cr — Dr read as plus, Cr as minus' },
+]
+
 const KNOWN = {
   encoding: new Set(ENCODINGS.map((e) => e.id)),
   decimal: new Set(DECIMALS.map((d) => d.id)),
   date: new Set(DATE_FORMATS.map((d) => d.id)),
   grouping: new Set(GROUPINGS.map((g) => g.id)),
+  side: new Set(SIDES.map((s) => s.id)),
 }
 
 // formatIssue(format) -> a sentence, or null when every declared part is known.
@@ -60,7 +72,7 @@ export function formatIssue(format) {
   if (format === null || format === undefined) return null
   if (typeof format !== 'object' || Array.isArray(format)) return 'a file format must be an object such as { "decimal": "," }'
   for (const [part, value] of Object.entries(format)) {
-    if (!KNOWN[part]) return `"${part}" is not part of a file format (use encoding, decimal, date or grouping)`
+    if (!KNOWN[part]) return `"${part}" is not part of a file format (use encoding, decimal, date, grouping or side)`
     if (!KNOWN[part].has(value)) return `"${value}" is not a known ${part} — use one of ${[...KNOWN[part]].join(', ')}`
   }
   if (format.grouping === 'indian' && format.decimal === ',') {
@@ -73,7 +85,7 @@ export function formatIssue(format) {
 export function cleanFormat(format) {
   if (!format || typeof format !== 'object') return undefined
   const out = {}
-  for (const part of ['encoding', 'decimal', 'date', 'grouping']) {
+  for (const part of ['encoding', 'decimal', 'date', 'grouping', 'side']) {
     if (KNOWN[part].has(format[part])) out[part] = format[part]
   }
   return Object.keys(out).length > 0 ? out : undefined
@@ -169,6 +181,22 @@ export function readNumberFully(raw, decimal, grouping = 'western') {
   return negative ? -value : value
 }
 
+// "25,000.00 Dr" / "25,000.00 Cr" — the side AFTER the amount, as Tally writes
+// it, with or without a space or a full stop. Dr is plus, Cr is minus, so a
+// negative credit ("-500 Cr") is a debit. Anything else — a side before the
+// amount, or a bare "Dr" — is not a number. A value with no side is read as
+// it would be without the declaration.
+const SIDED = /^(.*?\d\)?)\s*(dr|cr)\.?$/i
+
+function readSided(raw, plain) {
+  if (isBlank(raw)) return null
+  const match = SIDED.exec(String(raw).trim())
+  if (!match) return plain(raw)
+  const value = plain(match[1])
+  if (value === null) return null
+  return match[2].toLowerCase() === 'cr' ? -value : value
+}
+
 const TIME = '(?:[T ](\\d{1,2}):(\\d{2})(?::(\\d{2}))?)?'
 const PATTERNS = {
   'DD.MM.YYYY': { re: new RegExp(`^(\\d{1,2})\\.(\\d{1,2})\\.(\\d{4})${TIME}$`), order: ['d', 'm', 'y'] },
@@ -212,8 +240,9 @@ export function createReader(format = {}) {
   const decimal = format?.decimal === ',' ? ',' : '.'
   const grouping = format?.grouping === 'indian' && decimal === '.' ? 'indian' : 'western'
   const pattern = format?.date ?? null
+  const plain = (raw) => readNumber(raw, decimal, grouping)
   return {
-    number: (raw) => readNumber(raw, decimal, grouping),
+    number: format?.side === 'drcr' ? (raw) => readSided(raw, plain) : plain,
     date: (raw) => readDate(raw, pattern),
     boolean: parseBoolean,
     declared: true,

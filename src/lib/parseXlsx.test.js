@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 // ever reads, through parseXlsx.js.
 import { utils, write } from 'xlsx'
 import { parseCsv, toCsv } from './parseCsv.js'
+import { createReader } from './formats.js'
 import { looksLikeWorkbook, parseXlsx, plainNumber } from './parseXlsx.js'
 import { checkReadiness } from './readiness.js'
 import { reconcile } from './reconcile.js'
@@ -22,6 +23,51 @@ const book = (sheets, { hidden = [], merges = {} } = {}) => {
 
 // A cell with an explicit type and number format, as Excel stores it.
 const dateCell = (serial) => ({ t: 'n', v: serial, z: 'yyyy-mm-dd' })
+
+// Tally's Excel trial balance: a title merged across the top, the side of each
+// balance shown only by the cell's number format, the stored value positive.
+const sided = (v, z) => ({ t: 'n', v, z })
+const tallyTrialBalance = () => book(
+  {
+    TB: [
+      ['Example Traders Pvt Ltd', null, null],
+      ['Trial Balance 1-Apr-25 to 31-Mar-26', null, null],
+      ['Particulars', 'Closing Balance', 'Code'],
+      ['Cash', sided(25000, '#,##0.00 "Dr"'), 'L1'],
+      ['Capital', sided(25000, '#,##0.00 "Cr"'), 'L2'],
+      // One format for both sides, the minus dropped: negative shows as Cr.
+      ['Sundry Creditors', sided(-1200.5, '#,##0.00 "Dr";#,##0.00 "Cr"'), 'L3'],
+      ['Suspense', sided(-10, '#,##0.00 "Cr"'), 'L4'],
+      ['Plain', 300, 'L5'],
+    ],
+  },
+  { merges: { TB: [{ s: { r: 0, c: 0 }, e: { r: 0, c: 2 } }, { s: { r: 1, c: 0 }, e: { r: 1, c: 2 } }] } },
+)
+
+describe('parseXlsx — Tally: the side a number format shows', () => {
+  it('keeps Dr/Cr as written, and says how to read it', () => {
+    const r = parseXlsx(tallyTrialBalance(), { headerRow: 3 })
+    expect(r.errors).toEqual([])
+    expect(r.rows.map((row) => row['Closing Balance'])).toEqual(['25000 Dr', '25000 Cr', '1200.5 Cr', '-10 Cr', '300'])
+    expect(r.notes.join(' ')).toMatch(/column "Closing Balance" shows Dr or Cr through its number format in 4 cells/)
+    expect(r.notes.join(' ')).toMatch(/2 merged cells above row 3 \(a title\) were left out/)
+  })
+
+  it('declared, the balances read signed; undeclared, not as numbers — never as the bare stored value', () => {
+    const rows = parseXlsx(tallyTrialBalance(), { headerRow: 3 }).rows.map((row) => row['Closing Balance'])
+    expect(rows.map(createReader({ side: 'drcr' }).number)).toEqual([25000, -25000, -1200.5, 10, 300])
+    expect(rows.map(createReader({}).number)).toEqual([null, null, null, null, 300])
+  })
+
+  it('a decimal comma is honoured with the side', () => {
+    const r = parseXlsx(tallyTrialBalance(), { headerRow: 3, decimal: ',' })
+    expect(r.rows[2]['Closing Balance']).toBe('1200,5 Cr')
+  })
+
+  it('a merge that reaches the header row is still refused', () => {
+    expect(parseXlsx(tallyTrialBalance(), { headerRow: 2 }).errors[0]).toMatch(/merged cells \(A2:C2\)/)
+  })
+})
 
 describe('parseXlsx — cells keep what they hold', () => {
   const bytes = book({
