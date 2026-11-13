@@ -155,3 +155,65 @@ create policy "delete own runs"
 
 create index if not exists validation_runs_user_ran_idx
   on public.validation_runs (user_id, ran_at desc);
+
+-- ---------------------------------------------------------------------------
+-- Migration objects (user state 4: the same object on any device)
+--
+-- WHAT THIS STORES: a migration object exactly as its file holds it — rules,
+-- mapping spec, formats, column matching, sensitivity tags, owners, the
+-- sign-off record as the person typed it, and each run's COUNTS and verdicts.
+--
+-- WHAT IT MUST NEVER STORE: a record from any file the object was checked
+-- against. src/lib/objectStore.js builds these rows through the one serializer
+-- the file download uses (serializeMigrationObject), and its test plants real
+-- cell values and asserts none reaches the row. The files themselves are opened
+-- again on each device; the stamps say whether they are the ones.
+
+create table if not exists public.migration_objects (
+  id             uuid primary key default gen_random_uuid(),
+  user_id        uuid not null references auth.users (id) on delete cascade default auth.uid(),
+  name           text not null check (char_length(trim(name)) between 1 and 200),
+  format_version integer not null default 1,
+  object         jsonb not null,
+  created_at     timestamptz not null default now(),
+  updated_at     timestamptz not null default now(),
+
+  -- No uniqueness on the name: two clients may each have an "Employees"
+  -- object, and a save must never land on the other client's row.
+  constraint object_is_object check (jsonb_typeof(object) = 'object')
+);
+
+comment on table public.migration_objects is
+  'Migration objects as their files hold them: definitions and run counts. Never a record from a checked file.';
+
+alter table public.migration_objects enable row level security;
+
+drop policy if exists "read own objects"   on public.migration_objects;
+drop policy if exists "insert own objects" on public.migration_objects;
+drop policy if exists "update own objects" on public.migration_objects;
+drop policy if exists "delete own objects" on public.migration_objects;
+
+create policy "read own objects"
+  on public.migration_objects for select
+  using (auth.uid() = user_id);
+
+create policy "insert own objects"
+  on public.migration_objects for insert
+  with check (auth.uid() = user_id);
+
+create policy "update own objects"
+  on public.migration_objects for update
+  using (auth.uid() = user_id)
+  with check (auth.uid() = user_id);
+
+create policy "delete own objects"
+  on public.migration_objects for delete
+  using (auth.uid() = user_id);
+
+create index if not exists migration_objects_user_updated_idx
+  on public.migration_objects (user_id, updated_at desc);
+
+drop trigger if exists migration_objects_touch_updated_at on public.migration_objects;
+create trigger migration_objects_touch_updated_at
+  before update on public.migration_objects
+  for each row execute function public.touch_updated_at();

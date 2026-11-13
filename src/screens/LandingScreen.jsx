@@ -29,7 +29,7 @@ const BEATS = [
   { title: 'Sign-off', body: 'One record of what was checked, on which files, with every difference decided. An auditor can check it.' },
 ]
 
-export default function LandingScreen({ onLoadSample, onMigrationExample, onTour }) {
+export default function LandingScreen({ onLoadSample, onMigrationExample, onTour, recent = [], onOpenRecent }) {
   return (
     <>
       <section style={{ paddingTop: 14, maxWidth: 760 }}>
@@ -60,6 +60,28 @@ export default function LandingScreen({ onLoadSample, onMigrationExample, onTour
           <span style={{ fontFamily: sans, fontSize: 13, color: colors.mute }}>No account needed. Your files stay on this device.</span>
         </div>
       </section>
+
+      {recent.length > 0 && (
+        <section style={{ marginTop: 34 }} aria-label="Pick up where you left off">
+          <h2 style={{ fontFamily: sans, fontSize: 18, fontWeight: 620, color: colors.ink, margin: 0 }}>Pick up where you left off</h2>
+          <p style={{ fontFamily: sans, fontSize: 13.5, color: colors.mute, lineHeight: 1.55, margin: '7px 0 0', maxWidth: 680 }}>
+            Objects saved to your account. Open one, then open its files again on this device.
+          </p>
+          <ul style={{ listStyle: 'none', padding: 0, margin: '12px 0 0', maxWidth: 760 }}>
+            {recent.map((item) => (
+              <li key={item.id} style={{ ...panel, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', padding: '10px 14px', marginBottom: 6 }}>
+                <div style={{ flex: 1, minWidth: 180 }}>
+                  <div style={{ fontFamily: sans, fontSize: 14, fontWeight: 600, color: colors.ink }}>{item.name}</div>
+                  <div style={{ fontFamily: sans, fontSize: 12, color: colors.faint, marginTop: 2 }}>
+                    {[item.wave, item.cycle].filter(Boolean).join(' · ')}{item.runs ? ` · ${item.runs} check${item.runs === 1 ? '' : 's'}` : ''}
+                  </div>
+                </div>
+                <button onClick={() => onOpenRecent(item.id)} style={secondaryButton} aria-label={`Open ${item.name}`}>Open</button>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       <section style={{ marginTop: 34 }}>
         <h2 style={{ fontFamily: sans, fontSize: 18, fontWeight: 620, color: colors.ink, margin: 0 }}>

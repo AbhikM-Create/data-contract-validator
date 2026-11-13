@@ -40,16 +40,28 @@ select pg_temp.check((select count(*) = 1 from public.contracts), 'Alice sees he
 select pg_temp.check((select count(*) = 1 from public.validation_runs), 'Alice sees her own run');
 select pg_temp.check((select user_id = auth.uid() from public.contracts limit 1), 'a new row belongs to whoever inserted it');
 
+insert into public.migration_objects (name, object) values ('Opening trial balance', '{"kind":"migration-object","name":"Opening trial balance","runs":[]}');
+select pg_temp.check((select count(*) = 1 from public.migration_objects), 'Alice sees her own migration object');
+
 -- Remember Alice's ids as the superuser, so Bob's attempts can name them.
 reset role;
 select id as alice_contract from public.contracts where name = 'Employees' \gset
 select id as alice_run from public.validation_runs limit 1 \gset
+select id as alice_object from public.migration_objects limit 1 \gset
 
 -- --- Bob, against Alice's rows -------------------------------------------------
 select pg_temp.act_as(:bob);
 select pg_temp.check((select count(*) = 0 from public.contracts), 'Bob cannot read Alice''s contracts');
 select pg_temp.check((select count(*) = 0 from public.validation_runs), 'Bob cannot read Alice''s runs');
 select pg_temp.check((select count(*) = 0 from public.contracts where id = :'alice_contract'), 'Bob cannot read Alice''s contract even by id');
+select pg_temp.check((select count(*) = 0 from public.migration_objects), 'Bob cannot read Alice''s migration objects');
+select pg_temp.check((select count(*) = 0 from public.migration_objects where id = :'alice_object'), 'Bob cannot read Alice''s object even by id');
+with changed as (update public.migration_objects set object = '{}' where id = :'alice_object' returning 1)
+select pg_temp.check((select count(*) = 0 from changed), 'Bob cannot change Alice''s object');
+with gone as (delete from public.migration_objects where id = :'alice_object' returning 1)
+select pg_temp.check((select count(*) = 0 from gone), 'Bob cannot delete Alice''s object');
+select pg_temp.refused(format('insert into public.migration_objects (user_id, name, object) values (%L, %L, %L)', :alice, 'Planted', '{}'),
+  'Bob cannot create an object in Alice''s account');
 
 with changed as (update public.contracts set rules = '[]' where id = :'alice_contract' returning 1)
 select pg_temp.check((select count(*) = 0 from changed), 'Bob cannot change Alice''s contract');
@@ -70,6 +82,10 @@ insert into public.contracts (name) values ('Employees');
 select pg_temp.check((select count(*) = 1 from public.contracts), 'Bob can use a name Alice already uses — names are per account');
 select pg_temp.refused(format('update public.contracts set user_id = %L where name = %L', :alice, 'Employees'),
   'Bob cannot move his contract into Alice''s account');
+insert into public.migration_objects (name, object) values ('Opening trial balance', '{"kind":"migration-object"}');
+select pg_temp.check((select count(*) = 1 from public.migration_objects), 'Bob can use an object name Alice already uses — names are per account');
+select pg_temp.refused(format('update public.migration_objects set user_id = %L', :alice),
+  'Bob cannot move his object into Alice''s account');
 
 -- Runs are history: not even their owner may rewrite one.
 insert into public.validation_runs (candidate_name, status) values ('mine.csv', 'FAIL');
@@ -80,6 +96,9 @@ select pg_temp.check((select count(*) = 0 from changed), 'nobody can rewrite a r
 select pg_temp.act_as(null);
 select pg_temp.check((select count(*) = 0 from public.contracts), 'anonymous visitors read no contracts');
 select pg_temp.check((select count(*) = 0 from public.validation_runs), 'anonymous visitors read no runs');
+select pg_temp.check((select count(*) = 0 from public.migration_objects), 'anonymous visitors read no migration objects');
+select pg_temp.refused(format('insert into public.migration_objects (user_id, name, object) values (%L, %L, %L)', :alice, 'Anon', '{}'),
+  'anonymous visitors cannot write a migration object');
 select pg_temp.refused(format('insert into public.contracts (user_id, name) values (%L, %L)', :alice, 'Anon'),
   'anonymous visitors cannot write a contract');
 
@@ -87,5 +106,6 @@ select pg_temp.refused(format('insert into public.contracts (user_id, name) valu
 select pg_temp.act_as(:alice);
 select pg_temp.check((select rules <> '[]'::jsonb from public.contracts where id = :'alice_contract'), 'Alice''s contract is unchanged after all of that');
 select pg_temp.check((select count(*) = 1 from public.validation_runs), 'Alice''s history holds only her own run');
+select pg_temp.check((select object ->> 'name' = 'Opening trial balance' from public.migration_objects where id = :'alice_object'), 'Alice''s object is unchanged, and she still sees only her own');
 reset role;
 \echo ALL ISOLATION CHECKS PASSED

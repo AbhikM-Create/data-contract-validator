@@ -81,9 +81,13 @@ test('signed out: the page says where the work lives and what an account adds â€
   await expect(page.getByText('This device only')).toBeVisible()
   for (const title of ['Without an account', 'An account also keeps', 'An account never keeps']) await expect(page.getByText(title, { exact: true })).toBeVisible()
   await expect(page.getByText('Your files, or any record in them')).toBeVisible()
-  await expect(page.getByText('Migration objects: those stay files you keep')).toBeVisible()
+  await expect(page.getByText(/The files an object was checked against: open them again on each device/)).toBeVisible()
   // The trust line, on every screen, word for word.
   await expect(page.getByText(/Files stay on this device\. Nothing is uploaded/)).toBeVisible()
-  // Nothing on the page promises projects on other devices, teams or invitations: none is built.
-  await expect(page.getByText(/any device|invite|teammate|organisation/i)).toHaveCount(0)
+  // Nothing on the page promises teams, invitations or organisations: none is built.
+  await expect(page.getByText(/invite|teammate|organisation|team member/i)).toHaveCount(0)
+  // Signed out, the workspace offers no account save â€” and says where the work is.
+  await page.goto('/#/migrations')
+  await expect(page.getByRole('button', { name: 'Save to account' })).toHaveCount(0)
+  await expect(page.getByText(/kept in this browser, and in the file you download\. Sign in to keep it in your account as well/)).toBeVisible()
 })

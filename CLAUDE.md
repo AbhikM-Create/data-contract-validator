@@ -329,9 +329,12 @@ counts."). It carries no green dot: green is a verdict's colour.
   workspace, never simulated, always leavable; (3) signed out — a "This device
   only" chip, and the sign-in screen lists what works without an account, what
   an account keeps and what it never keeps, each line true of the code today.
-  NOT built: (4) projects saved to an account; (5) organisations, invitations,
-  roles. Nothing on screen may promise either until it exists
-  (`e2e/journeys.spec.js` holds that).
+  (4) signed in — "Save to account" on the workspace, "Your objects" on Set up,
+  "Pick up where you left off" on the home page (`objectStore.js`). NOT built:
+  (5) organisations, invitations, roles; password reset and a second sign-in
+  method (both need the Supabase project's own configuration to verify).
+  Nothing on screen may promise what does not exist (`e2e/journeys.spec.js`
+  holds that).
 - Never show a blank screen: every dead end has a sentence (unreadable or empty
   file, baseline < 8 rows → INSUFFICIENT, candidate < 4 rows → distribution
   SKIPPED). Violations are plain-language sentences naming columns and numbers.
@@ -355,14 +358,23 @@ counts."). It carries no green dot: green is a verdict's colour.
   threshold needs no UI change.
 
 ## Accounts and persistence (Supabase)
-Optional: without `.env.local` the app runs fully, minus saving. Contracts and
-run summaries save to the signed-in account; row-level security scoped to
-`auth.uid()` is the whole access model (the publishable key ships in the
-bundle by design). `npm run verify:rls` applies `supabase/schema.sql` to a
-throwaway Postgres with a Supabase auth shim and runs 20 isolation checks
-(`supabase/tests/rls.sql`); CI runs it. A foreign key is checked WITHOUT RLS —
-the run insert policy therefore requires the contract to be the inserter's own.
-Migration objects persist as files only (Supabase storage for them is not built).
+Optional: without `.env.local` the app runs fully, minus saving. Contracts,
+run summaries and — from user state 4 — migration objects save to the
+signed-in account; row-level security scoped to `auth.uid()` is the whole
+access model (the publishable key ships in the bundle by design).
+`npm run verify:rls` applies `supabase/schema.sql` to a throwaway Postgres with
+a Supabase auth shim and runs 31 isolation checks (`supabase/tests/rls.sql`);
+CI runs it. A foreign key is checked WITHOUT RLS — the run insert policy
+therefore requires the contract to be the inserter's own.
+- `objectStore.js` saves a migration object through `serializeMigrationObject`,
+  the one serializer the file download uses, so the account holds exactly what
+  the file holds (definitions, typed sign-off, run COUNTS) and never a record;
+  `objectStore.test.js` plants real cells and asserts none reaches the row.
+  Reads go through `readMigrationObject`. No uniqueness on the name (two
+  clients may each have "Employees"); a save updates by id or inserts, never
+  upserts on the name. The files are opened again on each device; the stamps
+  say whether they are the ones. A project with many objects (state 5) is not
+  built: the list is flat.
 
 ## Security
 - The production build carries a Content-Security-Policy (`vite.config.js`,

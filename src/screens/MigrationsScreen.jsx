@@ -3,6 +3,7 @@ import ColumnMatcher from '../components/ColumnMatcher.jsx'
 import ConfirmButton from '../components/ConfirmButton.jsx'
 import CycleHistory from '../components/CycleHistory.jsx'
 import FormatPicker from '../components/FormatPicker.jsx'
+import SavedObjects from '../components/SavedObjects.jsx'
 import SignoffForm from '../components/SignoffForm.jsx'
 import PackPicker, { PackGuide } from '../components/PackPicker.jsx'
 import ReadinessReport from '../components/ReadinessReport.jsx'
@@ -37,6 +38,7 @@ export default function MigrationsScreen(props) {
     onLoadFile, onClearFile, onCrosswalk,
     onReconcile, onCheckReadiness, onDownloadFixList, onExportFinding,
     onUseSessionRules, onEditRules, onLoadContract, onDownloadEvidence, onFormat, onWorkbook, unmask, onUnmask, onColumnMap, onShare, tour, onTour,
+    signedIn, savedObjects = [], objectsLoading, cloudId, onSaveToAccount, onOpenFromAccount, onDeleteFromAccount,
   } = props
   // Column matching: what the definitions read from each file, and which of
   // the file's columns stands for it (columnMap.js).
@@ -153,6 +155,11 @@ export default function MigrationsScreen(props) {
           <input ref={openInput} type="file" accept=".json,application/json" style={{ display: 'none' }} onChange={(e) => { if (e.target.files?.[0]) onOpenFile(e.target.files[0]); e.target.value = '' }} />
           <button onClick={() => openInput.current?.click()} style={secondaryButton}>Open a file</button>
           <button onClick={onDownload} style={secondaryButton}>Download{dirty ? ' · unsaved changes' : ''}</button>
+          {signedIn && (
+            <button onClick={onSaveToAccount} disabled={empty} title="Keeps this object’s rules, mapping and run counts in your account — never a record from your files" style={{ ...secondaryButton, opacity: empty ? 0.45 : 1, cursor: empty ? 'default' : 'pointer' }}>
+              {cloudId ? 'Save to account' : 'Save to account'}
+            </button>
+          )}
           <button onClick={onShare} disabled={empty} title="A copy safe to send: definitions and counts, no file names, no key maps, no sign-off" style={{ ...secondaryButton, opacity: empty ? 0.45 : 1, cursor: empty ? 'default' : 'pointer' }}>Share definitions</button>
           <ConfirmButton
             needsConfirm={dirty || !empty}
@@ -172,6 +179,7 @@ export default function MigrationsScreen(props) {
         </p>
         <PackPicker needsConfirm={dirty || !empty} onStart={onStartFromPack} />
         {object.pack && <PackGuide packRef={object.pack} />}
+        <SavedObjects objects={savedObjects} loading={objectsLoading} openId={cloudId} signedIn={signedIn} onOpen={onOpenFromAccount} onDelete={onDeleteFromAccount} />
         {empty && (
           <div style={{ marginTop: 12, padding: '12px 14px', background: colors.panelSunk, borderRadius: 7, display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
             <span style={{ fontFamily: sans, fontSize: 13.5, color: colors.ink, flex: 1, minWidth: 240 }}>
