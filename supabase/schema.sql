@@ -217,3 +217,186 @@ drop trigger if exists migration_objects_touch_updated_at on public.migration_ob
 create trigger migration_objects_touch_updated_at
   before update on public.migration_objects
   for each row execute function public.touch_updated_at();
+
+-- ---------------------------------------------------------------------------
+-- Organisations, members, invitations (user state 5)
+--
+-- WHAT THIS STORES: who works together, and in what role. An organisation's
+-- objects are migration_objects rows with org_id set: the same definitions and
+-- run counts a personal object holds, visible to every member and writable by
+-- admins, editors and approvers. Files are never uploaded, so nothing here can
+-- share a record: a member opens the same files on their own machine.
+--
+-- Every policy below reads the member's role through role_in(), a SECURITY
+-- DEFINER function, so a policy on memberships never consults memberships
+-- under its own policy (which Postgres refuses as recursive).
+
+create table if not exists public.organisations (
+  id         uuid primary key default gen_random_uuid(),
+  name       text not null check (char_length(trim(name)) between 1 and 120),
+  created_by uuid not null references auth.users (id) default auth.uid(),
+  created_at timestamptz not null default now()
+);
+
+create table if not exists public.memberships (
+  org_id     uuid not null references public.organisations (id) on delete cascade,
+  user_id    uuid not null references auth.users (id) on delete cascade,
+  -- The member's email as invited, so the members list can name people:
+  -- auth.users is not readable from the browser.
+  email      text,
+  role       text not null check (role in ('admin', 'editor', 'approver', 'viewer')),
+  created_at timestamptz not null default now(),
+  primary key (org_id, user_id)
+);
+
+create table if not exists public.invitations (
+  id          uuid primary key default gen_random_uuid(),
+  org_id      uuid not null references public.organisations (id) on delete cascade,
+  email       text not null check (char_length(trim(email)) between 3 and 320),
+  role        text not null check (role in ('admin', 'editor', 'approver', 'viewer')),
+  invited_by  uuid not null references auth.users (id) default auth.uid(),
+  created_at  timestamptz not null default now(),
+  accepted_at timestamptz
+);
+
+create unique index if not exists invitations_one_per_email
+  on public.invitations (org_id, lower(email)) where accepted_at is null;
+
+comment on table public.organisations is 'Who works together. Objects are shared by org_id on migration_objects; files never are.';
+
+-- The signed-in user's role in an organisation, or null. SECURITY DEFINER so
+-- the policies below can ask without recursing into memberships' own policy.
+create or replace function public.role_in(org uuid)
+returns text
+language sql stable security definer
+set search_path = public
+as $$
+  select role from public.memberships where org_id = org and user_id = auth.uid()
+$$;
+
+-- Whoever creates an organisation is its first admin.
+create or replace function public.add_creator_as_admin()
+returns trigger
+language plpgsql security definer
+set search_path = public
+as $$
+begin
+  insert into public.memberships (org_id, user_id, email, role) values (new.id, new.created_by, auth.email(), 'admin');
+  return new;
+end;
+$$;
+
+drop trigger if exists organisations_add_creator on public.organisations;
+create trigger organisations_add_creator
+  after insert on public.organisations
+  for each row execute function public.add_creator_as_admin();
+
+-- An organisation keeps at least one admin, or nobody could manage it. Skipped
+-- when the organisation itself is being deleted (its row is already gone).
+create or replace function public.keep_an_admin()
+returns trigger
+language plpgsql
+as $$
+begin
+  if old.role = 'admin'
+     and (tg_op = 'DELETE' or new.role <> 'admin')
+     and exists (select 1 from public.organisations where id = old.org_id)
+     and not exists (select 1 from public.memberships where org_id = old.org_id and role = 'admin' and user_id <> old.user_id) then
+    raise exception 'an organisation keeps at least one admin' using errcode = 'check_violation';
+  end if;
+  return coalesce(new, old);
+end;
+$$;
+
+drop trigger if exists memberships_keep_an_admin on public.memberships;
+create trigger memberships_keep_an_admin
+  before update or delete on public.memberships
+  for each row execute function public.keep_an_admin();
+
+-- Every pending invitation to the signed-in email becomes a membership. The
+-- app calls this on sign-in; it returns how many were accepted.
+create or replace function public.accept_invitations()
+returns integer
+language plpgsql security definer
+set search_path = public
+as $$
+declare
+  joined integer := 0;
+begin
+  if auth.uid() is null or auth.email() is null then return 0; end if;
+  insert into public.memberships (org_id, user_id, email, role)
+    select i.org_id, auth.uid(), lower(i.email), i.role
+    from public.invitations i
+    where lower(i.email) = lower(auth.email()) and i.accepted_at is null
+  on conflict (org_id, user_id) do nothing;
+  get diagnostics joined = row_count;
+  update public.invitations set accepted_at = now()
+    where lower(email) = lower(auth.email()) and accepted_at is null;
+  return joined;
+end;
+$$;
+
+alter table public.organisations enable row level security;
+alter table public.memberships  enable row level security;
+alter table public.invitations  enable row level security;
+
+drop policy if exists "members read their organisations" on public.organisations;
+drop policy if exists "anyone signed in creates an organisation" on public.organisations;
+drop policy if exists "admins rename an organisation" on public.organisations;
+drop policy if exists "admins delete an organisation" on public.organisations;
+-- "or created_by": INSERT ... RETURNING (what the app sends) checks this policy
+-- BEFORE the trigger above has made the creator a member.
+create policy "members read their organisations" on public.organisations for select using (public.role_in(id) is not null or created_by = auth.uid());
+create policy "anyone signed in creates an organisation" on public.organisations for insert with check (auth.uid() = created_by);
+create policy "admins rename an organisation" on public.organisations for update using (public.role_in(id) = 'admin') with check (public.role_in(id) = 'admin');
+create policy "admins delete an organisation" on public.organisations for delete using (public.role_in(id) = 'admin');
+
+drop policy if exists "members see members" on public.memberships;
+drop policy if exists "admins add members" on public.memberships;
+drop policy if exists "admins change roles" on public.memberships;
+drop policy if exists "admins remove members; anyone leaves" on public.memberships;
+create policy "members see members" on public.memberships for select using (public.role_in(org_id) is not null);
+create policy "admins add members" on public.memberships for insert with check (public.role_in(org_id) = 'admin');
+create policy "admins change roles" on public.memberships for update using (public.role_in(org_id) = 'admin') with check (public.role_in(org_id) = 'admin');
+create policy "admins remove members; anyone leaves" on public.memberships for delete using (public.role_in(org_id) = 'admin' or user_id = auth.uid());
+
+drop policy if exists "admins see invitations" on public.invitations;
+drop policy if exists "admins invite" on public.invitations;
+drop policy if exists "admins revoke invitations" on public.invitations;
+create policy "admins see invitations" on public.invitations for select using (public.role_in(org_id) = 'admin');
+create policy "admins invite" on public.invitations for insert with check (public.role_in(org_id) = 'admin' and auth.uid() = invited_by);
+create policy "admins revoke invitations" on public.invitations for delete using (public.role_in(org_id) = 'admin');
+
+-- An object may belong to an organisation. Deleting the organisation returns
+-- its objects to whoever saved them, as personal objects — never deletes them.
+alter table public.migration_objects
+  add column if not exists org_id uuid references public.organisations (id) on delete set null;
+
+create index if not exists migration_objects_org_idx on public.migration_objects (org_id) where org_id is not null;
+
+-- A personal object is its owner's alone. An organisation's object: every
+-- member reads; admins, editors and approvers write (an approver's decisions
+-- and signatures live in the same row, so the row is theirs to update too);
+-- admins delete. A row can be moved into an organisation only by someone who
+-- may write there.
+drop policy if exists "read own objects"   on public.migration_objects;
+drop policy if exists "insert own objects" on public.migration_objects;
+drop policy if exists "update own objects" on public.migration_objects;
+drop policy if exists "delete own objects" on public.migration_objects;
+
+create policy "read own objects"
+  on public.migration_objects for select
+  using ((org_id is null and auth.uid() = user_id) or (org_id is not null and public.role_in(org_id) is not null));
+
+create policy "insert own objects"
+  on public.migration_objects for insert
+  with check (auth.uid() = user_id and (org_id is null or public.role_in(org_id) in ('admin', 'editor', 'approver')));
+
+create policy "update own objects"
+  on public.migration_objects for update
+  using ((org_id is null and auth.uid() = user_id) or public.role_in(org_id) in ('admin', 'editor', 'approver'))
+  with check ((org_id is null and auth.uid() = user_id) or public.role_in(org_id) in ('admin', 'editor', 'approver'));
+
+create policy "delete own objects"
+  on public.migration_objects for delete
+  using ((org_id is null and auth.uid() = user_id) or public.role_in(org_id) = 'admin');

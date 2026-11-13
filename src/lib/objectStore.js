@@ -15,7 +15,6 @@ import { isConfigured, supabase } from './supabase.js'
 // field, so a row written by a future version, or edited by hand, cannot
 // smuggle a value in or a rule this build cannot read go unnoticed.
 
-const NOT_SIGNED_IN = 'Sign in to save this object to your account.'
 const NOT_CONFIGURED = 'This copy of the app has no Supabase project configured, so objects can only be saved as files.'
 
 const guard = () => (isConfigured ? null : NOT_CONFIGURED)
@@ -23,17 +22,18 @@ const guard = () => (isConfigured ? null : NOT_CONFIGURED)
 function readable(error) {
   if (!error) return null
   if (error.code === '42P01') return 'The migration_objects table does not exist yet — run the latest supabase/schema.sql in your project.'
-  if (error.code === '42501' || /row-level security/i.test(error.message ?? '')) return NOT_SIGNED_IN
+  if (error.code === '42501' || /row-level security/i.test(error.message ?? '')) return 'You cannot save there: sign in, or check your role in that organisation.'
   if (/jwt|not authenticated|session/i.test(error.message ?? '')) return 'Your session has expired. Sign in again to save.'
   if (/fetch|network/i.test(error.message ?? '')) return 'Could not reach the server. Your work is still here — try saving again.'
   return `Something went wrong saving: ${error.message}`
 }
 
-// objectRow(object) -> the row as written. Pure, so the boundary can be tested
-// without a database: whatever is not in this row is not in the account.
-export function objectRow(object) {
+// objectRow(object, orgId) -> the row as written. Pure, so the boundary can be
+// tested without a database: whatever is not in this row is not in the account.
+// orgId: the organisation the object belongs to (user state 5), or null.
+export function objectRow(object, orgId = null) {
   const saved = serializeMigrationObject(object)
-  return { name: saved.name, object: saved, format_version: saved.formatVersion }
+  return { name: saved.name, object: saved, format_version: saved.formatVersion, org_id: orgId || null }
 }
 
 // What the list shows, from the saved object: never the object itself, which
@@ -48,6 +48,8 @@ function summary(row) {
     pack: saved.pack?.id ? `${saved.pack.id} v${saved.pack.version}` : null,
     runs: Array.isArray(saved.runs) ? saved.runs.length : 0,
     updatedAt: row.updated_at,
+    orgId: row.org_id ?? null,
+    orgName: row.organisations?.name ?? null,
   }
 }
 
@@ -57,7 +59,7 @@ export async function listObjects() {
   if (blocked) return { objects: [], error: blocked }
   const { data, error } = await supabase
     .from('migration_objects')
-    .select('id, name, object, updated_at')
+    .select('id, name, object, updated_at, org_id, organisations ( name )')
     .order('updated_at', { ascending: false })
   if (error) return { objects: [], error: readable(error) }
   return { objects: (data ?? []).map(summary), error: null }
@@ -66,10 +68,10 @@ export async function listObjects() {
 // loadObject(id) -> { id, object, skipped, error }
 export async function loadObject(id) {
   const blocked = guard()
-  if (blocked) return { id: null, object: null, skipped: [], error: blocked }
+  if (blocked) return { id: null, orgId: null, object: null, skipped: [], error: blocked }
   const { data, error } = await supabase
     .from('migration_objects')
-    .select('id, name, object, format_version, updated_at')
+    .select('id, name, object, format_version, updated_at, org_id')
     .eq('id', id)
     .single()
   if (error) return { id: null, object: null, skipped: [], error: readable(error) }
@@ -78,18 +80,18 @@ export async function loadObject(id) {
   }
   const opened = readMigrationObject(data.object)
   if (opened.error) return { id: null, object: null, skipped: [], error: `"${data.name}" could not be read: ${opened.error}` }
-  return { id: data.id, object: opened.object, skipped: opened.skipped, error: null }
+  return { id: data.id, orgId: data.org_id ?? null, object: opened.object, skipped: opened.skipped, error: null }
 }
 
-// saveObject({ id, object }) -> { saved: { id, name, updatedAt }, error }
+// saveObject({ id, object, orgId }) -> { saved: { id, name, updatedAt }, error }
 //
 // With an id this updates that row; without one it inserts. Never an upsert on
 // the name: two clients may each have an "Employees" object, and silently
 // saving one over the other is how a partner loses a client's definitions.
-export async function saveObject({ id, object }) {
+export async function saveObject({ id, object, orgId = null }) {
   const blocked = guard()
   if (blocked) return { saved: null, error: blocked }
-  const row = objectRow(object)
+  const row = objectRow(object, orgId)
   const query = id
     ? supabase.from('migration_objects').update(row).eq('id', id).select('id, name, updated_at').single()
     : supabase.from('migration_objects').insert(row).select('id, name, updated_at').single()

@@ -60,6 +60,13 @@ describe('a migration object saved to an account', () => {
     expect(reopened.object.runs.map((r) => r.kind)).toEqual(['readiness', 'reconcile'])
   })
 
+  it('an organisation is a column beside the object, never inside it', () => {
+    const row = objectRow(object, 'org-1')
+    expect(row.org_id).toBe('org-1')
+    expect(JSON.stringify(row.object)).not.toContain('org-1')
+    expect(objectRow(object).org_id).toBeNull()
+  })
+
   it('a value planted in a run does not survive the trip', () => {
     const planted = { ...object, runs: [{ ...object.runs[0], evidence: 'row 21: 1250000.00', counts: { ...object.runs[0].counts, note: 'OKAFOR' } }] }
     const text = JSON.stringify(objectRow(planted))

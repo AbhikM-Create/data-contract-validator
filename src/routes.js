@@ -9,6 +9,7 @@ export const ROUTES = [
   { id: 'contracts', label: 'Contracts', blurb: 'Author the rules a file must obey' },
   { id: 'validate', label: 'Validate', blurb: 'Check a file and read the result' },
   { id: 'history', label: 'History', blurb: 'Runs you have saved' },
+  { id: 'organisation', label: 'Organisation', blurb: 'The people who share your migration objects, and their roles' },
 ]
 
 // Reachable but not a destination: signing in is something you do on the way to

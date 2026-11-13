@@ -25,6 +25,7 @@ const SCREENS = [
   ['validate (empty)', '/#/validate'],
   ['history', '/#/history'],
   ['sign in', '/#/signin'],
+  ['organisation', '/#/organisation'],
   ['migrations (empty)', '/#/migrations'],
 ]
 

@@ -49,7 +49,7 @@ export default function SavedObjects({ objects, loading, openId, signedIn, onOpe
                   <div style={{ fontFamily: sans, fontSize: 13.5, fontWeight: open ? 650 : 500, color: colors.ink }}>{item.name}</div>
                   <div style={{ fontFamily: sans, fontSize: 11.5, color: colors.faint, marginTop: 2 }}>
                     {[item.wave, item.cycle].filter(Boolean).join(' · ')}
-                    {item.pack ? ` · from ${item.pack}` : ''}
+                    {item.orgName ? ` · ${item.orgName}` : ''}{item.pack ? ` · from ${item.pack}` : ''}
                     {` · ${item.runs} check${item.runs === 1 ? '' : 's'} · saved ${when(item.updatedAt)}`}
                     {open ? ' · open' : ''}
                   </div>

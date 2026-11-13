@@ -84,8 +84,7 @@ test('signed out: the page says where the work lives and what an account adds â€
   await expect(page.getByText(/The files an object was checked against: open them again on each device/)).toBeVisible()
   // The trust line, on every screen, word for word.
   await expect(page.getByText(/Files stay on this device\. Nothing is uploaded/)).toBeVisible()
-  // Nothing on the page promises teams, invitations or organisations: none is built.
-  await expect(page.getByText(/invite|teammate|organisation|team member/i)).toHaveCount(0)
+  // Organisations exist now (state 5); signed out, their screen offers only sign-in (organisation.spec.js).
   // Signed out, the workspace offers no account save â€” and says where the work is.
   await page.goto('/#/migrations')
   await expect(page.getByRole('button', { name: 'Save to account' })).toHaveCount(0)

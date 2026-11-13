@@ -24,6 +24,7 @@ const ACCESS = [
       'Migration objects you save to it: rules, mapping, formats, column matching, tags and run counts, on every device you sign in from',
       'Your contracts: the rules you wrote, their names and declared formats',
       'Run summaries of feed checks: which step caught what, as counts',
+      'Organisations: the people who share your objects, each with a role',
     ],
   },
   {

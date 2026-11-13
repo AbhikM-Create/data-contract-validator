@@ -5,6 +5,8 @@ import { hasWork, loadDraft, saveDraft } from './lib/autosave.js'
 import { contractToJson, parseContractFile } from './lib/contractFile.js'
 import { deleteContract, listContracts, loadContract, saveContract } from './lib/contractStore.js'
 import { deleteObject, listObjects, loadObject, saveObject } from './lib/objectStore.js'
+import { acceptInvitations, changeRole, createOrganisation, deleteOrganisation, invite, listMembers, listOrganisations, removeMember, revokeInvitation } from './lib/orgStore.js'
+import { can } from './lib/roles.js'
 import {
   clearFileInWorker, columnMapInWorker, fixListInWorker, parseBytesInWorker, parseFileInWorker, parseTextInWorker, readinessInWorker, reconcileInWorker, validateInWorker,
 } from './lib/engineClient.js'
@@ -31,6 +33,7 @@ import { useAuth } from './lib/useAuth.js'
 import { go, useRoute } from './routes.js'
 import ContractsScreen from './screens/ContractsScreen.jsx'
 import HistoryScreen from './screens/HistoryScreen.jsx'
+import OrganisationScreen from './screens/OrganisationScreen.jsx'
 import LandingScreen from './screens/LandingScreen.jsx'
 import MigrationsScreen from './screens/MigrationsScreen.jsx'
 import { findMigrationExample } from './samples/migrationExamples.js'
@@ -89,6 +92,17 @@ export default function App() {
   const [migrationCloudId, setMigrationCloudId] = useState(null)
   const [savedObjects, setSavedObjects] = useState([])
   const [objectsLoading, setObjectsLoading] = useState(false)
+  // The organisation the open object belongs to (null: personal), and where
+  // the next save goes.
+  const [migrationOrgId, setMigrationOrgId] = useState(null)
+  // Organisations (user state 5): the ones the person is in, the selected one's
+  // members and pending invitations.
+  const [organisations, setOrganisations] = useState([])
+  const [orgId, setOrgId] = useState(null)
+  const [members, setMembers] = useState([])
+  const [invitations, setInvitations] = useState([])
+  const [orgLoading, setOrgLoading] = useState(false)
+  const [orgNotice, setOrgNotice] = useState(null)
   const [migrationFiles, setMigrationFiles] = useState({ load: null, source: null, target: null })
   const [recon, setRecon] = useState(null)
   const [readiness, setReadiness] = useState(null)
@@ -263,9 +277,70 @@ export default function App() {
   // oxlint-disable-next-line react/set-state-in-effect
   useEffect(() => { refreshObjects() }, [refreshObjects])
 
+  // --- organisations (user state 5) -------------------------------------------
+  const refreshOrganisations = useCallback(async () => {
+    if (!user) {
+      setOrganisations([])
+      setOrgId(null)
+      setMembers([])
+      setInvitations([])
+      return
+    }
+    setOrgLoading(true)
+    // Any invitation to this email becomes a membership first.
+    const accepted = await acceptInvitations()
+    const { organisations: list, error } = await listOrganisations(user.id)
+    setOrganisations(list)
+    setOrgId((current) => (list.some((o) => o.id === current) ? current : list[0]?.id ?? null))
+    setOrgLoading(false)
+    if (error) setOrgNotice({ tone: 'bad', text: error })
+    else if (accepted.joined > 0) setOrgNotice({ tone: 'good', text: `You joined ${accepted.joined === 1 ? 'an organisation' : `${accepted.joined} organisations`} you were invited to.` })
+  }, [user])
+
+  // oxlint-disable-next-line react/set-state-in-effect
+  useEffect(() => { refreshOrganisations() }, [refreshOrganisations])
+
+  const refreshMembers = useCallback(async () => {
+    if (!orgId) {
+      setMembers([])
+      setInvitations([])
+      return
+    }
+    const { members: m, invitations: i, error } = await listMembers(orgId)
+    setMembers(m)
+    setInvitations(i)
+    if (error) setOrgNotice({ tone: 'bad', text: error })
+  }, [orgId])
+
+  // oxlint-disable-next-line react/set-state-in-effect
+  useEffect(() => { refreshMembers() }, [refreshMembers])
+
+  const orgAction = async (run, done) => {
+    const { error } = await run()
+    if (error) {
+      setOrgNotice({ tone: 'bad', text: error })
+      return
+    }
+    setOrgNotice(done ? { tone: 'good', text: done } : null)
+    await refreshOrganisations()
+    await refreshMembers()
+  }
+
+  const createOrg = async (name) => {
+    const { organisation, error } = await createOrganisation(name)
+    if (error) {
+      setOrgNotice({ tone: 'bad', text: error })
+      return
+    }
+    setOrgNotice({ tone: 'good', text: `Created “${organisation.name}”. You are its admin; invite the people who work on your objects.` })
+    await refreshOrganisations()
+    setOrgId(organisation.id)
+  }
+
   const saveMigrationToAccount = async () => {
+    const where = organisations.find((o) => o.id === migrationOrgId)
     setBusy('Saving to your account…')
-    const { saved, error } = await saveObject({ id: migrationCloudId, object: migration })
+    const { saved, error } = await saveObject({ id: migrationCloudId, object: migration, orgId: where ? where.id : null })
     setBusy(null)
     if (error) {
       setMigrationNotice({ tone: 'bad', text: error })
@@ -273,7 +348,7 @@ export default function App() {
     }
     setMigrationCloudId(saved.id)
     setMigrationDirty(false)
-    setMigrationNotice({ tone: 'good', text: `Saved “${saved.name}” to your account — its rules, mapping and ${count(migration.runs.length, 'check')} as counts, never a record from your files. Open it from any device you sign in on; open the files there again.` })
+    setMigrationNotice({ tone: 'good', text: `Saved “${saved.name}” to ${where ? `“${where.name}”` : 'your account'} — its rules, mapping and ${count(migration.runs.length, 'check')} as counts, never a record from your files. ${where ? 'Every member can open it; they open the files on their own machine.' : 'Open it from any device you sign in on; open the files there again.'}` })
     refreshObjects()
   }
 
@@ -285,6 +360,7 @@ export default function App() {
     }
     setMigration(opened.object)
     setMigrationCloudId(opened.id)
+    setMigrationOrgId(opened.orgId)
     setMigrationDirty(false)
     setRecon(null)
     setReadiness(null)
@@ -845,6 +921,9 @@ export default function App() {
           savedObjects={savedObjects}
           objectsLoading={objectsLoading}
           cloudId={migrationCloudId}
+          organisations={organisations.filter((o) => can(o.role, 'save'))}
+          orgId={migrationOrgId}
+          onOrgId={setMigrationOrgId}
           onSaveToAccount={saveMigrationToAccount}
           onOpenFromAccount={openMigrationFromAccount}
           onDeleteFromAccount={deleteMigrationFromAccount}
@@ -924,6 +1003,26 @@ export default function App() {
           error={runsError}
           signedIn={Boolean(user)}
           onRefresh={refreshRuns}
+        />
+      )}
+
+      {route === 'organisation' && (
+        <OrganisationScreen
+          signedIn={Boolean(user)}
+          user={user}
+          organisations={organisations}
+          selectedId={orgId}
+          members={members}
+          invitations={invitations}
+          loading={orgLoading}
+          notice={orgNotice}
+          onSelect={setOrgId}
+          onCreate={createOrg}
+          onInvite={(email, role) => orgAction(() => invite(orgId, email, role), `Invited ${email.trim().toLowerCase()}. They join when they sign in with that email.`)}
+          onChangeRole={(userId, role) => orgAction(() => changeRole(orgId, userId, role))}
+          onRemove={(userId) => orgAction(() => removeMember(orgId, userId), userId === user?.id ? 'You left the organisation.' : 'Member removed.')}
+          onRevoke={(id) => orgAction(() => revokeInvitation(id), 'Invitation revoked.')}
+          onDelete={() => orgAction(() => deleteOrganisation(orgId), 'Organisation deleted. Its objects stay with whoever saved them.')}
         />
       )}
 
