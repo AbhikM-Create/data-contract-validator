@@ -67,6 +67,8 @@ test('the Finance pack on a file with the client’s own headers: match columns,
   expect(JSON.parse(saved).columnMap).toEqual({ load: { 'Account Name': 'account name', Debit: 'Dr', Credit: 'Cr' }, source: { Particulars: 'Ledger' } })
   expect(saved).not.toContain('25000')
 
+  // From the top: a control scrolled half under the sticky bar reads to the checker as an undersized target.
+  await page.evaluate(() => window.scrollTo(0, 0))
   const { violations } = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag22aa']).analyze()
   expect(violations.filter((v) => v.impact === 'serious' || v.impact === 'critical').map((v) => v.id)).toEqual([])
   expect(errors).toEqual([])

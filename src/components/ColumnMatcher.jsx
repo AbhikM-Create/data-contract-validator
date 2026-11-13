@@ -7,7 +7,7 @@ const field = (width) => ({
   border: `1px solid ${colors.panelEdge}`,
   borderRadius: 6,
   color: colors.ink,
-  fontSize: 12.5,
+  fontSize: 13,
   padding: '6px 8px',
 })
 
@@ -41,7 +41,7 @@ export default function ColumnMatcher({ what, expected, file, map = {}, onChange
   return (
     <div style={{ ...panel, background: colors.panelSunk, padding: 12, marginTop: 8 }} data-column-matcher={what}>
       <div style={label}>Match columns — {what}</div>
-      <p style={{ fontFamily: sans, fontSize: 12.5, lineHeight: 1.5, color: colors.mute, margin: '4px 0 8px' }}>
+      <p style={{ fontFamily: sans, fontSize: 13, lineHeight: 1.5, color: colors.mute, margin: '4px 0 8px' }}>
         {unmatched.length > 0
           ? `${unmatched.length} column${unmatched.length === 1 ? '' : 's'} the definitions read ${unmatched.length === 1 ? 'is' : 'are'} not in this file under that name. Choose the file’s column for each; one left unmatched is reported as not checked, never guessed.`
           : 'Every column the definitions read is matched to a column of this file.'}
@@ -74,7 +74,7 @@ export default function ColumnMatcher({ what, expected, file, map = {}, onChange
       })}
       {issues.length > 0 && (
         <ul role="alert" style={{ margin: '8px 0 0', paddingLeft: 18 }}>
-          {issues.map((issue) => <li key={issue} style={{ fontFamily: sans, fontSize: 12.5, color: colors.warn, lineHeight: 1.5 }}>{issue} Checks on this file will not run until it is fixed.</li>)}
+          {issues.map((issue) => <li key={issue} style={{ fontFamily: sans, fontSize: 13, color: colors.warn, lineHeight: 1.5 }}>{issue} Checks on this file will not run until it is fixed.</li>)}
         </ul>
       )}
     </div>

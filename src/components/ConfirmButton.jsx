@@ -19,7 +19,7 @@ export default function ConfirmButton({ children, question, confirmLabel, keepLa
 
   return (
     <span role="group" aria-label={question} style={{ display: 'inline-flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-      <span role="status" style={{ fontFamily: sans, fontSize: 12.5, color: colors.ink, fontWeight: 600 }}>{question}</span>
+      <span role="status" style={{ fontFamily: sans, fontSize: 13, color: colors.ink, fontWeight: 600 }}>{question}</span>
       <button
         onClick={() => { setAsking(false); onConfirm() }}
         style={{ ...ghostButton, color: colors.ink, borderColor: colors.mute, fontWeight: 600 }}

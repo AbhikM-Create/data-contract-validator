@@ -17,12 +17,12 @@ export default function PackPicker({ needsConfirm, onStart }) {
   const missing = object ? paramIssues(pack, objectId, values) : []
   return (
     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center', marginTop: 12 }}>
-      <span style={{ fontFamily: sans, fontSize: 12.5, color: colors.mute }}>Or start from a pack</span>
+      <span style={{ fontFamily: sans, fontSize: 13, color: colors.mute }}>Or start from a pack</span>
       <select
         aria-label="pack object to start from"
         value={choice}
         onChange={(e) => setChoice(e.target.value)}
-        style={{ background: colors.ground, border: `1px solid ${colors.panelEdge}`, borderRadius: 6, color: colors.ink, fontFamily: sans, fontSize: 12.5, padding: '6px 8px', cursor: 'pointer', maxWidth: 360 }}
+        style={{ background: colors.ground, border: `1px solid ${colors.panelEdge}`, borderRadius: 6, color: colors.ink, fontFamily: sans, fontSize: 13, padding: '6px 8px', cursor: 'pointer', maxWidth: 360 }}
       >
         <option value="">choose a pack object</option>
         {PACKS.map((p) => (
@@ -32,7 +32,7 @@ export default function PackPicker({ needsConfirm, onStart }) {
         ))}
       </select>
       {params.map((param) => (
-        <label key={param.id} style={{ display: 'inline-flex', gap: 6, alignItems: 'center', fontFamily: sans, fontSize: 12.5, color: colors.ink }}>
+        <label key={param.id} style={{ display: 'inline-flex', gap: 6, alignItems: 'center', fontFamily: sans, fontSize: 13, color: colors.ink }}>
           {param.label}
           <input
             type="date"
@@ -62,31 +62,31 @@ export function PackGuide({ packRef }) {
   const pack = findPack(packRef.id)
   const object = pack?.objects.find((o) => o.id === packRef.object)
   if (!pack || !object) {
-    return <p style={{ fontFamily: sans, fontSize: 12.5, color: colors.warn, marginTop: 10 }}>Built from {packLabel(packRef)}, which this version does not ship.</p>
+    return <p style={{ fontFamily: sans, fontSize: 13, color: colors.warn, marginTop: 10 }}>Built from {packLabel(packRef)}, which this version does not ship.</p>
   }
   return (
     <div style={{ ...panel, background: colors.panelSunk, padding: 12, marginTop: 12 }}>
       <div style={label}>From {pack.name} · v{pack.version}</div>
       {pack.status !== 'verified' && (
-        <p style={{ fontFamily: sans, fontSize: 12.5, color: colors.warn, margin: '6px 0 0' }}>
+        <p style={{ fontFamily: sans, fontSize: 13, color: colors.warn, margin: '6px 0 0' }}>
           DRAFT — this pack has not yet run on real exports. Check the columns below against your files before relying on a result.
         </p>
       )}
-      <dl style={{ fontFamily: sans, fontSize: 12.5, color: colors.ink, margin: '8px 0 0', lineHeight: 1.55 }}>
+      <dl style={{ fontFamily: sans, fontSize: 13, color: colors.ink, margin: '8px 0 0', lineHeight: 1.55 }}>
         <dt style={{ fontWeight: 600 }}>Export</dt><dd style={{ margin: '0 0 6px' }}>{object.guide?.export}</dd>
         <dt style={{ fontWeight: 600 }}>Load file</dt><dd style={{ margin: '0 0 6px' }}>{object.guide?.load}</dd>
         <dt style={{ fontWeight: 600 }}>Compare</dt><dd style={{ margin: '0 0 6px' }}>{object.guide?.compare}</dd>
         {['load', 'source', 'target'].filter((role) => object.columns?.[role]?.length).map((role) => (
           <div key={role}>
             <dt style={{ fontWeight: 600 }}>Columns expected — {role === 'load' ? 'load file' : `${role} extract`}</dt>
-            <dd style={{ margin: '0 0 6px', fontFamily: mono, fontSize: 11.5 }}>{object.columns[role].join(' · ')}</dd>
+            <dd style={{ margin: '0 0 6px', fontFamily: mono, fontSize: 12 }}>{object.columns[role].join(' · ')}</dd>
           </div>
         ))}
       </dl>
       {pack.status !== 'verified' && pack.toConfirm?.length > 0 && (
         <details style={{ marginTop: 4 }}>
           <summary style={{ ...ghostButton, display: 'inline-block', cursor: 'pointer' }}>To confirm before relying on it ({pack.toConfirm.length})</summary>
-          <ul style={{ fontFamily: sans, fontSize: 12.5, color: colors.mute, margin: '6px 0 0', paddingLeft: 18 }}>
+          <ul style={{ fontFamily: sans, fontSize: 13, color: colors.mute, margin: '6px 0 0', paddingLeft: 18 }}>
             {pack.toConfirm.map((item) => <li key={item}>{item}</li>)}
           </ul>
         </details>

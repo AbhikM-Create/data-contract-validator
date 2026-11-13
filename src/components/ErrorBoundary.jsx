@@ -38,7 +38,7 @@ export default class ErrorBoundary extends Component {
     if (this.props.scope === 'screen') {
       return (
         <div role="alert" style={{ ...panel, padding: '22px 24px' }}>
-          <h1 style={{ fontFamily: sans, fontSize: 19, fontWeight: 650, color: colors.ink, margin: 0 }}>
+          <h1 style={{ fontFamily: sans, fontSize: 16, fontWeight: 650, color: colors.ink, margin: 0 }}>
             This screen stopped working
           </h1>
           <p style={{ fontFamily: sans, fontSize: 14, color: colors.mute, lineHeight: 1.6, marginTop: 10 }}>
@@ -62,7 +62,7 @@ export default class ErrorBoundary extends Component {
     return (
       <div style={{ background: colors.ground, minHeight: '100vh', padding: '64px 24px' }}>
         <div style={{ ...panel, maxWidth: 620, margin: '0 auto', padding: '28px 30px' }}>
-          <h1 style={{ fontFamily: sans, fontSize: 20, fontWeight: 650, color: colors.ink, margin: 0 }}>
+          <h1 style={{ fontFamily: sans, fontSize: 22, fontWeight: 650, color: colors.ink, margin: 0 }}>
             This screen stopped working
           </h1>
           <p style={{ fontFamily: sans, fontSize: 14, color: colors.mute, lineHeight: 1.6, marginTop: 10 }}>

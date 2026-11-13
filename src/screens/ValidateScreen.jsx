@@ -39,7 +39,7 @@ export default function ValidateScreen({
   return (
     <>
       <ScreenHead
-        title="Validate a file"
+        title="Monitor a feed"
         blurb="Check a CSV or Excel file against a baseline you trust, against the rules you have written, or both."
       />
 
@@ -74,12 +74,12 @@ export default function ValidateScreen({
 
       <div style={{ ...panel, padding: '14px 16px', marginTop: 18, display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
         <div style={{ flex: '1 1 320px' }}>
-          <div style={{ fontFamily: sans, fontSize: 13.5, fontWeight: 600, color: colors.ink }}>
+          <div style={{ fontFamily: sans, fontSize: 14, fontWeight: 600, color: colors.ink }}>
             {rules.length > 0
               ? `${rules.length} rule${rules.length === 1 ? '' : 's'} will be checked alongside the comparison`
               : 'No rules loaded'}
           </div>
-          <div style={{ fontFamily: sans, fontSize: 12.5, color: colors.mute, marginTop: 3 }}>
+          <div style={{ fontFamily: sans, fontSize: 13, color: colors.mute, marginTop: 3 }}>
             {rules.length > 0
               ? 'Rules are checked on the new file directly, whether or not a baseline is loaded.'
               : 'Rules state what the data must be — legal values, dates that must follow each other.'}
@@ -136,7 +136,7 @@ function Report({
         <span style={chip(result.status === 'PASS' ? 'PASS' : result.status === 'FAIL' ? 'FAIL' : 'INSUFFICIENT')}>
           {result.status === 'PASS' ? 'ALL CHECKS PASSED' : result.status === 'FAIL' ? 'PROBLEM FOUND' : 'CANNOT CHECK'}
         </span>
-        <h1 style={{ fontFamily: sans, fontSize: 24, fontWeight: 650, color: colors.ink, letterSpacing: '-0.015em', margin: '10px 0 0', maxWidth: 760, lineHeight: 1.25 }}>
+        <h1 style={{ fontFamily: sans, fontSize: 22, fontWeight: 650, color: colors.ink, letterSpacing: '-0.015em', margin: '10px 0 0', maxWidth: 760, lineHeight: 1.25 }}>
           {result.headline.text}
         </h1>
         {result.headline.detail && (
@@ -149,7 +149,7 @@ function Report({
       {/* The check itself already happened, in this browser, and is on screen.
           Failing to record it is worth saying and never worth interrupting. */}
       {runNotice && (
-        <p style={{ fontFamily: sans, fontSize: 12.5, color: colors.warn, lineHeight: 1.5, marginTop: 12 }}>
+        <p style={{ fontFamily: sans, fontSize: 13, color: colors.warn, lineHeight: 1.5, marginTop: 12 }}>
           {runNotice} The result above is still correct — only the history entry is missing.
         </p>
       )}
@@ -232,8 +232,8 @@ function FileChip({ tone, caption, name, rows }) {
     <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
       <span style={{ width: 6, height: 6, borderRadius: '50%', background: tone, flexShrink: 0 }} />
       <div style={{ minWidth: 0 }}>
-        <div style={{ fontFamily: mono, fontSize: 12.5, color: colors.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</div>
-        <div style={{ fontFamily: sans, fontSize: 11, color: colors.faint }}>
+        <div style={{ fontFamily: mono, fontSize: 13, color: colors.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</div>
+        <div style={{ fontFamily: sans, fontSize: 12, color: colors.faint }}>
           {caption} &middot; {rows.toLocaleString('en-US')} rows
         </div>
       </div>
@@ -262,7 +262,7 @@ function StatusLine({ baseline, candidate, contract, hasRules }) {
     text = 'A contract is loaded. Add the file you want to check — a baseline is optional.'
   }
 
-  return <p style={{ fontFamily: sans, fontSize: 12.5, color: tone, lineHeight: 1.5, marginTop: 14 }}>{text}</p>
+  return <p style={{ fontFamily: sans, fontSize: 13, color: tone, lineHeight: 1.5, marginTop: 14 }}>{text}</p>
 }
 
 function ruleStatus(result, rules) {

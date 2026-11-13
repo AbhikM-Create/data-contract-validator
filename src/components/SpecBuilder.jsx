@@ -66,7 +66,7 @@ export default function SpecBuilder({ spec, sourceColumns, targetColumns, sugges
         </label>
         {scope && (
           <Row>
-            <span style={{ fontFamily: mono, fontSize: 11, color: colors.faint }}>ONLY WHERE</span>
+            <span style={{ fontFamily: mono, fontSize: 12, color: colors.faint }}>ONLY WHERE</span>
             <Pick value={scope.column} options={sourceColumns} onChange={(v) => setScope({ column: v })} label="scope column" />
             <select aria-label="scope condition" value={scope.op} onChange={(e) => setScope({ op: e.target.value })} style={control(130)}>
               {OPS.map((op) => <option key={op.id} value={op.id}>{op.label}</option>)}
@@ -118,13 +118,13 @@ export default function SpecBuilder({ spec, sourceColumns, targetColumns, sugges
               aria-label={`control total ${i + 1}: sum or count`}
               value={total.fn === 'count' ? 'count' : 'sum'}
               onChange={(e) => setTotal(i, e.target.value === 'count' ? { fn: 'count', source: '', target: '' } : { fn: undefined })}
-              style={{ background: colors.ground, border: `1px solid ${colors.panelEdge}`, borderRadius: 6, color: colors.ink, fontFamily: mono, fontSize: 11, padding: '4px 6px', cursor: 'pointer' }}
+              style={{ background: colors.ground, border: `1px solid ${colors.panelEdge}`, borderRadius: 6, color: colors.ink, fontFamily: mono, fontSize: 12, padding: '4px 6px', cursor: 'pointer' }}
             >
               <option value="sum">SUM</option>
               <option value="count">COUNT</option>
             </select>
             {total.fn === 'count' ? (
-              <span style={{ fontFamily: sans, fontSize: 12.5, color: colors.mute }}>records</span>
+              <span style={{ fontFamily: sans, fontSize: 13, color: colors.mute }}>records</span>
             ) : (
               <>
                 <Pick value={total.source} options={sourceColumns} onChange={(v) => setTotal(i, { source: v })} placeholder="source amount" />
@@ -132,7 +132,7 @@ export default function SpecBuilder({ spec, sourceColumns, targetColumns, sugges
                 <Pick value={total.target} options={targetColumns} onChange={(v) => setTotal(i, { target: v })} placeholder="target amount" />
               </>
             )}
-            <span style={{ fontFamily: mono, fontSize: 11, color: colors.faint }}>BY</span>
+            <span style={{ fontFamily: mono, fontSize: 12, color: colors.faint }}>BY</span>
             <Pick
               value={total.groupBy?.source ?? ''}
               options={sourceColumns}
@@ -182,7 +182,7 @@ function KeyOption({ spec, set, option, text }) {
   return (
     <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
       <input type="checkbox" checked={on} onChange={(e) => toggle(e.target.checked)} />
-      <span style={{ fontFamily: sans, fontSize: 12.5, color: colors.ink }}>{text}</span>
+      <span style={{ fontFamily: sans, fontSize: 13, color: colors.ink }}>{text}</span>
     </label>
   )
 }
@@ -191,7 +191,7 @@ function Part({ title, hint, children, last }) {
   return (
     <section style={{ paddingBottom: last ? 0 : 16, marginBottom: last ? 0 : 16, borderBottom: last ? 'none' : `1px solid ${colors.panelEdge}` }}>
       <h3 style={{ fontFamily: sans, fontSize: 14, fontWeight: 600, color: colors.ink, margin: 0 }}>{title}</h3>
-      <p style={{ fontFamily: sans, fontSize: 12.5, lineHeight: 1.5, color: colors.faint, margin: '4px 0 10px', maxWidth: 720 }}>{hint}</p>
+      <p style={{ fontFamily: sans, fontSize: 13, lineHeight: 1.5, color: colors.faint, margin: '4px 0 10px', maxWidth: 720 }}>{hint}</p>
       {children}
     </section>
   )
@@ -210,7 +210,7 @@ function Arrow() {
 }
 
 function Remove({ onClick }) {
-  return <button onClick={onClick} style={{ ...ghostButton, fontSize: 11, padding: '4px 8px' }}>remove</button>
+  return <button onClick={onClick} style={{ ...ghostButton, fontSize: 12, padding: '4px 8px' }}>remove</button>
 }
 
 const control = (width) => ({
@@ -257,20 +257,20 @@ function Crosswalk({ what, map, kind, onKind, onFile, onClear }) {
             aria-label={`what the crosswalk for ${what} holds`}
             value={kind ?? ''}
             onChange={(e) => onKind(e.target.value || undefined)}
-            style={{ background: colors.ground, border: `1px solid ${colors.panelEdge}`, borderRadius: 6, color: colors.ink, fontFamily: sans, fontSize: 11.5, padding: '4px 6px', cursor: 'pointer', maxWidth: 170 }}
+            style={{ background: colors.ground, border: `1px solid ${colors.panelEdge}`, borderRadius: 6, color: colors.ink, fontFamily: sans, fontSize: 12, padding: '4px 6px', cursor: 'pointer', maxWidth: 170 }}
           >
             <option value="">what is it? (not said)</option>
             {CROSSWALK_KINDS.map((k) => <option key={k.id} value={k.id} title={k.label}>{k.label.split(' — ')[0]}</option>)}
           </select>
-          <button onClick={() => input.current?.click()} style={{ ...ghostButton, fontSize: 11, padding: '4px 8px' }}>replace</button>
-          <button onClick={onClear} style={{ ...ghostButton, fontSize: 11, padding: '4px 8px' }}>clear</button>
+          <button onClick={() => input.current?.click()} style={{ ...ghostButton, fontSize: 12, padding: '4px 8px' }}>replace</button>
+          <button onClick={onClear} style={{ ...ghostButton, fontSize: 12, padding: '4px 8px' }}>clear</button>
         </>
       ) : (
         <>
-          <button onClick={() => input.current?.click()} style={{ ...ghostButton, fontSize: 11.5, padding: '5px 9px' }}>
+          <button onClick={() => input.current?.click()} style={{ ...ghostButton, fontSize: 12, padding: '5px 9px' }}>
             + crosswalk CSV
           </button>
-          <span style={{ fontFamily: sans, fontSize: 11, color: colors.faint }}>two columns: legacy value, new value</span>
+          <span style={{ fontFamily: sans, fontSize: 12, color: colors.faint }}>two columns: legacy value, new value</span>
         </>
       )}
     </span>

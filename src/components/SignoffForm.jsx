@@ -22,7 +22,7 @@ export default function SignoffForm({ object, files, readiness, recon, onChange 
   return (
     <div style={{ ...panel, padding: 14, marginTop: 10 }}>
       <div style={label}>Sign-off record</div>
-      <p style={{ fontFamily: sans, fontSize: 12.5, color: colors.mute, margin: '6px 0 0', lineHeight: 1.5, maxWidth: 760 }}>
+      <p style={{ fontFamily: sans, fontSize: 13, color: colors.mute, margin: '6px 0 0', lineHeight: 1.5, maxWidth: 760 }}>
         What the people who sign need on one record. Printed at the front of the evidence pack and saved with this object.
         It is a record the team signs, not a certificate: names are as typed, not verified identities.
       </p>
@@ -40,7 +40,7 @@ export default function SignoffForm({ object, files, readiness, recon, onChange 
           <div style={grid}>
             {roles.map((role) => (
               <div key={role}>
-                <div style={{ fontFamily: mono, fontSize: 11.5, color: colors.mute, marginBottom: 4 }}>{files[role].name}</div>
+                <div style={{ fontFamily: mono, fontSize: 12, color: colors.mute, marginBottom: 4 }}>{files[role].name}</div>
                 <div style={{ display: 'flex', gap: 6 }}>
                   <Text label={`exported by — ${role}`} placeholder="exported by" value={record.custody[role]?.exportedBy} onChange={(v) => setIn('custody', role, { ...record.custody[role], exportedBy: v })} />
                   <Text label={`exported when — ${role}`} placeholder="date, time" value={record.custody[role]?.exportedAt} onChange={(v) => setIn('custody', role, { ...record.custody[role], exportedAt: v })} />
@@ -53,7 +53,7 @@ export default function SignoffForm({ object, files, readiness, recon, onChange 
 
       <Group title={`Exceptions — ${exceptions.length ? `${exceptions.length} difference${exceptions.length === 1 ? '' : 's'} in the current results` : 'none in the current results'}`}>
         {exceptions.length === 0 && (
-          <p style={{ fontFamily: sans, fontSize: 12.5, color: colors.faint, margin: 0 }}>Run the checks; every difference they find appears here for a decision.</p>
+          <p style={{ fontFamily: sans, fontSize: 13, color: colors.faint, margin: 0 }}>Run the checks; every difference they find appears here for a decision.</p>
         )}
         {exceptions.map((e) => {
           const d = decisionFor(record, e)
@@ -61,7 +61,7 @@ export default function SignoffForm({ object, files, readiness, recon, onChange 
           return (
             <div key={e.id} style={{ borderTop: `1px solid ${colors.panelEdge}`, padding: '8px 0' }}>
               <div style={{ fontFamily: sans, fontSize: 13, color: colors.ink }}>
-                <span style={{ fontFamily: mono, fontSize: 11, color: colors.mute }}>{e.step} · </span>{e.what}
+                <span style={{ fontFamily: mono, fontSize: 12, color: colors.mute }}>{e.step} · </span>{e.what}
               </div>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 6 }}>
                 <select aria-label={`decision — ${e.what}`} value={d.disposition ?? ''} onChange={(ev) => set({ disposition: ev.target.value })} style={{ ...input, width: 230, cursor: 'pointer' }}>
@@ -126,7 +126,7 @@ const input = {
   minHeight: 28,
   boxSizing: 'border-box',
   background: colors.ground, border: `1px solid ${colors.panelEdge}`, borderRadius: 6, color: colors.ink,
-  fontFamily: sans, fontSize: 12.5, padding: '6px 8px',
+  fontFamily: sans, fontSize: 13, padding: '6px 8px',
 }
 
 function Group({ title, children }) {

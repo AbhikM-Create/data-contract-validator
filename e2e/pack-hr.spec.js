@@ -46,6 +46,8 @@ test('the HR pack’s employee master: ask for the cutover date, check, reconcil
   expect(pack).not.toContain('AQWPS5867K') // the PAN changed in flight, tagged as an identifier
   expect(pack).not.toContain('AQWPS5678K')
 
+  // From the top: a control scrolled half under the sticky bar reads to the checker as an undersized target.
+  await page.evaluate(() => window.scrollTo(0, 0))
   const { violations } = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag22aa']).analyze()
   expect(violations.filter((v) => v.impact === 'serious' || v.impact === 'critical').map((v) => v.id)).toEqual([])
   expect(errors).toEqual([])

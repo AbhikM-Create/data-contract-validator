@@ -31,7 +31,7 @@ export default function ContractSummary({ contract }) {
         <button onClick={() => setOpen(!open)} style={ghostButton}>{open ? 'hide columns' : `show ${contract.columns.length} columns`}</button>
       </div>
 
-      <div style={{ fontFamily: mono, fontSize: 11.5, color: colors.mute, marginTop: 8 }}>
+      <div style={{ fontFamily: mono, fontSize: 12, color: colors.mute, marginTop: 8 }}>
         {contract.rowCount.toLocaleString('en-US')} rows
         {contract.dateColumn
           ? ` · keyed on ${contract.dateColumn} · updates ${describeCadence(contract.cadenceMs)} · newest ${formatDate(contract.newest)}`
@@ -56,7 +56,7 @@ export default function ContractSummary({ contract }) {
             <tbody>
               {contract.columns.map((column) => (
                 <tr key={column.name}>
-                  <td style={{ fontFamily: mono, fontSize: 12.5, color: colors.accent, padding: '7px 10px 7px 0', borderBottom: `1px solid ${colors.panelEdge}`, whiteSpace: 'nowrap' }}>
+                  <td style={{ fontFamily: mono, fontSize: 13, color: colors.accent, padding: '7px 10px 7px 0', borderBottom: `1px solid ${colors.panelEdge}`, whiteSpace: 'nowrap' }}>
                     {column.name}
                   </td>
                   <td style={{ fontFamily: mono, fontSize: 12, color: colors.mute, padding: '7px 10px 7px 0', borderBottom: `1px solid ${colors.panelEdge}` }}>

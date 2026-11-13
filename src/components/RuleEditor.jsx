@@ -25,7 +25,7 @@ export default function RuleEditor({ contract, rules, columns: given, onAdd }) {
 
   if (columns.length === 0) {
     return (
-      <p style={{ fontFamily: sans, fontSize: 12.5, color: colors.faint, marginTop: 12 }}>
+      <p style={{ fontFamily: sans, fontSize: 13, color: colors.faint, marginTop: 12 }}>
         Load a CSV above and the column names appear here, ready to write rules against.
       </p>
     )
@@ -52,7 +52,7 @@ export default function RuleEditor({ contract, rules, columns: given, onAdd }) {
       {suggestions.length > 0 && (
         <div style={{ marginTop: 16 }}>
           <span style={label}>From the baseline — promote to a rule</span>
-          <p style={{ fontFamily: sans, fontSize: 12.5, color: colors.faint, marginTop: 5 }}>
+          <p style={{ fontFamily: sans, fontSize: 13, color: colors.faint, marginTop: 5 }}>
             Each one is a fact observed in the baseline. Promote the ones that are actually requirements —
             hover to see the evidence behind it.
           </p>
@@ -69,7 +69,7 @@ export default function RuleEditor({ contract, rules, columns: given, onAdd }) {
                   background: index % 2 === 0 ? colors.panel : colors.panelSunk,
                 }}
               >
-                <span style={{ fontFamily: mono, fontSize: 11.5, color: colors.accent, minWidth: 128 }}>{column}</span>
+                <span style={{ fontFamily: mono, fontSize: 12, color: colors.accent, minWidth: 128 }}>{column}</span>
                 <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', flex: 1 }}>
                   {items.map((suggestion) => (
                     <button
@@ -78,12 +78,12 @@ export default function RuleEditor({ contract, rules, columns: given, onAdd }) {
                       style={{
                         background: colors.panel, border: `1px solid ${colors.panelEdge}`,
                         borderRadius: 5, padding: '4px 9px', cursor: 'pointer',
-                        fontFamily: sans, fontSize: 12.5, color: colors.ink,
+                        fontFamily: sans, fontSize: 13, color: colors.ink,
                       }}
                     >
                       + {suggestion.label}
                       {/* The evidence travels with the proposal, visibly. */}
-                      <span style={{ display: 'block', fontSize: 11, color: colors.faint, marginTop: 2, textAlign: 'left' }}>{suggestion.evidence}</span>
+                      <span style={{ display: 'block', fontSize: 12, color: colors.faint, marginTop: 2, textAlign: 'left' }}>{suggestion.evidence}</span>
                     </button>
                   ))}
                 </div>

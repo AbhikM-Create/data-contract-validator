@@ -32,25 +32,25 @@ export default function RuleResults({ outcomes, onRemove }) {
               </span>
               {ruleSeverity(rule) === 'warn' && (
                 // Neutral on purpose: green and red belong to the verdict alone.
-                <span style={{ fontFamily: mono, fontSize: 10.5, letterSpacing: '0.06em', color: colors.mute }}>
+                <span style={{ fontFamily: mono, fontSize: 12, letterSpacing: '0.06em', color: colors.mute }}>
                   WARNING ONLY
                 </span>
               )}
               <span
                 style={{
-                  fontFamily: mono, fontSize: 10.5, letterSpacing: '0.08em', color: tone,
+                  fontFamily: mono, fontSize: 12, letterSpacing: '0.08em', color: tone,
                   border: `1px solid ${tone}66`, borderRadius: 5, padding: '2px 7px',
                 }}
               >
                 {status}
               </span>
               {onRemove && (
-                <button onClick={() => onRemove(rule)} style={{ ...ghostButton, fontSize: 11 }}>remove</button>
+                <button onClick={() => onRemove(rule)} style={{ ...ghostButton, fontSize: 12 }}>remove</button>
               )}
             </div>
 
             {status === 'PASS' && (
-              <p style={{ fontFamily: sans, fontSize: 12.5, color: colors.faint, marginTop: 6 }}>
+              <p style={{ fontFamily: sans, fontSize: 13, color: colors.faint, marginTop: 6 }}>
                 {applicable === 0
                   ? 'No rows met the condition, so nothing was tested against this rule.'
                   : `Held for all ${applicable.toLocaleString('en-US')} row${applicable === 1 ? '' : 's'} it applies to.`}
@@ -62,14 +62,14 @@ export default function RuleResults({ outcomes, onRemove }) {
                 <p style={{ fontFamily: sans, fontSize: 13, lineHeight: 1.55, color: colors.ink, marginTop: 8 }}>
                   {violation.message}
                 </p>
-                <div style={{ fontFamily: mono, fontSize: 11.5, color: colors.faint, marginTop: 6 }}>
+                <div style={{ fontFamily: mono, fontSize: 12, color: colors.faint, marginTop: 6 }}>
                   {violation.evidence}
                 </div>
               </>
             )}
 
             {status === 'FAIL' && failures.length > 0 && (
-              <div style={{ fontFamily: mono, fontSize: 11, color: colors.faint, marginTop: 4 }}>
+              <div style={{ fontFamily: mono, fontSize: 12, color: colors.faint, marginTop: 4 }}>
                 {failures.length.toLocaleString('en-US')} of {applicable.toLocaleString('en-US')} rows checked
               </div>
             )}
@@ -100,9 +100,9 @@ export function ResultTile({ title, subtitle, status, detail }) {
       }}
     >
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontFamily: sans, fontSize: 13.5, fontWeight: 600, color: colors.ink }}>{title}</div>
+        <div style={{ fontFamily: sans, fontSize: 14, fontWeight: 600, color: colors.ink }}>{title}</div>
         <div style={{ fontFamily: sans, fontSize: 13, color: colors.mute, marginTop: 4 }}>{detail}</div>
-        <div style={{ fontFamily: sans, fontSize: 11.5, color: colors.faint, marginTop: 2 }}>{subtitle}</div>
+        <div style={{ fontFamily: sans, fontSize: 12, color: colors.faint, marginTop: 2 }}>{subtitle}</div>
       </div>
       {/* The verdict is what a reader scans for, so it is sized to be found
           rather than tucked into a corner. */}

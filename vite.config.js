@@ -69,7 +69,8 @@ export default defineConfig(({ mode }) => {
         output: {
           entryFileNames: 'app.js',
           chunkFileNames: 'app-[name].js',
-          assetFileNames: 'app[extname]',
+          // The stylesheet keeps its fixed name; fonts and any other asset keep theirs.
+          assetFileNames: (asset) => (asset.names?.[0] ?? asset.name ?? '').endsWith('.css') ? 'app.css' : 'assets/[name][extname]',
         },
       },
     },

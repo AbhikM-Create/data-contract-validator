@@ -1,7 +1,8 @@
-// One palette, read by every component. Calm enterprise: a cool off-white
-// ground, white panels, deep slate text, and a single muted teal that carries
-// interaction. Green and red appear ONLY on a verdict — if they decorated
-// anything else they would stop meaning pass and fail.
+// The Plumbstep palette (brand guideline, 13 Nov 2026), read by every
+// component. Calm enterprise: a cool off-white ground, white panels, deep slate
+// text, and one muted teal — the plumb line of the logo — for every action.
+// Green and red appear ONLY on a verdict; if they decorated anything else they
+// would stop meaning pass and fail.
 
 export const colors = {
   ground: '#F4F6F8',
@@ -14,9 +15,13 @@ export const colors = {
   // ground they sit on (the lightest was 3.2:1); the hues are unchanged.
   faint: '#5F6C76',
   accent: '#1F6F8B',
-  pass: '#2A7353',
-  fail: '#B23A34',
-  warn: '#8A6414',
+  // Verdicts, tightened in the brand: each 5.9–6.5:1 on white.
+  pass: '#1B7347',
+  fail: '#B3261E',
+  warn: '#8A5300',
+  // The edge of a control a person must find: inputs, dropdowns (3.4:1 on
+  // white, the WCAG 1.4.11 minimum being 3:1). panelEdge stays decorative.
+  control: '#868C93',
 }
 
 export const statusColor = {
@@ -29,8 +34,10 @@ export const statusColor = {
   'NOT SET': colors.faint,
 }
 
-export const mono = "ui-monospace, 'SF Mono', 'JetBrains Mono', Consolas, Menlo, monospace"
-export const sans = "ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif"
+// Geist for words, Geist Mono for data — shipped with the app (src/fonts/,
+// SIL OFL), since the security policy allows fonts from this origin only.
+export const mono = "'Geist Mono', ui-monospace, 'SF Mono', Consolas, Menlo, monospace"
+export const sans = "'Geist', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif"
 
 // Border set as longhands, not the `border` shorthand: components tint one
 // side (a status stripe), and mixing shorthand with longhand makes React drop
@@ -45,7 +52,7 @@ export const panel = {
 
 export const label = {
   fontFamily: sans,
-  fontSize: 11,
+  fontSize: 12,
   fontWeight: 600,
   letterSpacing: '0.07em',
   color: colors.faint,
@@ -103,7 +110,7 @@ export function chip(status) {
   return {
     display: 'inline-block',
     fontFamily: sans,
-    fontSize: 10.5,
+    fontSize: 12,
     fontWeight: 700,
     letterSpacing: '0.07em',
     color: tone,

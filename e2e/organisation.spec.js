@@ -19,7 +19,7 @@ test('signed out, the Organisation screen explains itself, lists the roles and o
   await expect(page.getByLabel('email to invite')).toHaveCount(0)
   await expect(page.getByRole('button', { name: 'Create organisation' })).toHaveCount(0)
   // It is in the nav, like any screen.
-  await expect(page.getByRole('navigation').getByRole('button', { name: 'Organisation' })).toHaveAttribute('aria-current', 'page')
+  await expect(page.getByRole('navigation', { name: 'More' }).getByRole('button', { name: 'Organisation' })).toHaveAttribute('aria-current', 'page')
 
   const { violations } = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag22aa']).analyze()
   expect(violations.filter((v) => v.impact === 'serious' || v.impact === 'critical').map((v) => v.id)).toEqual([])

@@ -23,8 +23,8 @@ export default function OrganisationScreen(props) {
       <>
         <ScreenHead title="Organisation" blurb={BLURB} />
         <div style={{ ...panel, padding: '24px 22px', marginTop: 20, maxWidth: 560 }}>
-          <div style={{ fontFamily: sans, fontSize: 14.5, fontWeight: 600, color: colors.ink }}>Sign in to create or join an organisation</div>
-          <p style={{ fontFamily: sans, fontSize: 13.5, color: colors.mute, lineHeight: 1.6, marginTop: 8 }}>
+          <div style={{ fontFamily: sans, fontSize: 14, fontWeight: 600, color: colors.ink }}>Sign in to create or join an organisation</div>
+          <p style={{ fontFamily: sans, fontSize: 14, color: colors.mute, lineHeight: 1.6, marginTop: 8 }}>
             An organisation belongs to accounts. Signed out, everything else works: check, reconcile, sign off, and keep your work in this browser and in files.
           </p>
           <button onClick={() => go('signin')} style={{ ...secondaryButton, marginTop: 14 }}>Sign in</button>
@@ -61,7 +61,7 @@ export default function OrganisationScreen(props) {
       {loading && <p style={{ fontFamily: sans, fontSize: 13, color: colors.faint, marginTop: 14 }}>Loading…</p>}
 
       {!loading && organisations.length === 0 && (
-        <p style={{ fontFamily: sans, fontSize: 13.5, color: colors.mute, lineHeight: 1.6, marginTop: 14, maxWidth: 620 }}>
+        <p style={{ fontFamily: sans, fontSize: 14, color: colors.mute, lineHeight: 1.6, marginTop: 14, maxWidth: 620 }}>
           You are not in an organisation yet. Create one and invite the people who work on your objects — or wait for an invitation: it is accepted the moment you sign in with the invited email.
         </p>
       )}
@@ -73,7 +73,7 @@ export default function OrganisationScreen(props) {
               <div style={label}>Members</div>
               <div style={{ fontFamily: sans, fontSize: 16, fontWeight: 650, color: colors.ink, marginTop: 4 }}>{selected.name}</div>
             </div>
-            <span style={{ fontFamily: sans, fontSize: 12.5, color: colors.mute }}>You are {roleLabel(myRole).toLowerCase()}{admin ? '' : ' — only an admin can invite or change roles'}</span>
+            <span style={{ fontFamily: sans, fontSize: 13, color: colors.mute }}>You are {roleLabel(myRole).toLowerCase()}{admin ? '' : ' — only an admin can invite or change roles'}</span>
           </div>
 
           <ul style={{ listStyle: 'none', padding: 0, margin: '12px 0 0' }}>
@@ -81,7 +81,7 @@ export default function OrganisationScreen(props) {
               const me = m.userId === user?.id
               return (
                 <li key={m.userId} style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', borderTop: `1px solid ${colors.panelEdge}`, padding: '9px 0' }}>
-                  <span style={{ fontFamily: sans, fontSize: 13.5, color: colors.ink, flex: 1, minWidth: 200 }}>
+                  <span style={{ fontFamily: sans, fontSize: 14, color: colors.ink, flex: 1, minWidth: 200 }}>
                     {m.email ?? <span style={{ fontFamily: mono, fontSize: 12 }}>{m.userId.slice(0, 8)}…</span>}{me ? <span style={{ color: colors.mute }}> · you</span> : ''}
                   </span>
                   {admin ? (
@@ -89,7 +89,7 @@ export default function OrganisationScreen(props) {
                       {ROLES.map((r) => <option key={r.id} value={r.id}>{r.label}</option>)}
                     </select>
                   ) : (
-                    <span style={{ fontFamily: sans, fontSize: 12.5, color: colors.mute, width: 150 }}>{roleLabel(m.role)}</span>
+                    <span style={{ fontFamily: sans, fontSize: 13, color: colors.mute, width: 150 }}>{roleLabel(m.role)}</span>
                   )}
                   {(admin || me) && (
                     <ConfirmButton
@@ -163,7 +163,7 @@ function RolesTable() {
           ))}
         </tbody>
       </table>
-      <p style={{ fontFamily: sans, fontSize: 12.5, color: colors.faint, lineHeight: 1.5, margin: '10px 0 0' }}>
+      <p style={{ fontFamily: sans, fontSize: 13, color: colors.faint, lineHeight: 1.5, margin: '10px 0 0' }}>
         A role applies to the organisation’s objects, never to a member’s personal ones. To see the records behind a result, a member opens the same files on their own machine; the record says by fingerprint whether they are the ones.
       </p>
     </section>

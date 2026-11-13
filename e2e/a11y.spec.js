@@ -7,6 +7,8 @@ import { openStep, runReadiness, runReconcile, watchErrors } from './helpers.js'
 // critical violation fails the build.
 
 async function seriousViolations(page) {
+  // From the top: a control scrolled half under the sticky bar reads to the checker as an undersized target.
+  await page.evaluate(() => window.scrollTo(0, 0))
   const { violations } = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa']).analyze()
   // A contrast failure is reported as its colour pairs, so the failure message
   // names the token to change, not just a CSS path.

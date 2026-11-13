@@ -4,10 +4,13 @@ import { useEffect, useState } from 'react'
 // static files (an Artifact, a CDN, any static host), and a hash route needs no
 // server rewrites to survive a refresh or a shared link.
 
+// The bar (brand guideline, 13 Nov 2026): the two jobs people come for are
+// primary; the rest sit in a quieter row. Route ids are unchanged, so every
+// link still works. "Compare" joins the primary row when quick compare exists.
 export const ROUTES = [
-  { id: 'migrations', label: 'Migrations', blurb: 'Check a migration object, cycle by cycle' },
+  { id: 'migrations', label: 'Projects', primary: true, blurb: 'Check a migration object before and after each load, and sign it off' },
+  { id: 'validate', label: 'Monitor', primary: true, blurb: 'Check a feed against a file you trust, after go-live' },
   { id: 'contracts', label: 'Contracts', blurb: 'Author the rules a file must obey' },
-  { id: 'validate', label: 'Validate', blurb: 'Check a file and read the result' },
   { id: 'history', label: 'History', blurb: 'Runs you have saved' },
   { id: 'organisation', label: 'Organisation', blurb: 'The people who share your migration objects, and their roles' },
 ]

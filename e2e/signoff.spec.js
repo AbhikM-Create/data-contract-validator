@@ -42,6 +42,8 @@ test('the cutover sign-off record is filled in, printed in the pack and kept', a
   expect(fixes.columns.at(-1)).toBe('_owner')
   expect(new Set(fixes.rows.map((r) => r._owner))).toEqual(new Set(['Data owner of the source records']))
 
+  // From the top: a control scrolled half under the sticky bar reads to the checker as an undersized target.
+  await page.evaluate(() => window.scrollTo(0, 0))
   const { violations } = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag22aa']).analyze()
   expect(violations.filter((v) => v.impact === 'serious' || v.impact === 'critical').map((v) => v.id)).toEqual([])
 

@@ -33,16 +33,16 @@ export default function UploadCard({ step, title, tag, hint, file, accent, onFil
           style={{
             width: 20, height: 20, borderRadius: '50%', flexShrink: 0,
             background: loaded ? colors.pass : accent,
-            color: colors.ground, fontFamily: mono, fontSize: 11, fontWeight: 700,
+            color: colors.ground, fontFamily: mono, fontSize: 12, fontWeight: 700,
             display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
           }}
         >
           {loaded ? '✓' : step}
         </span>
-        <span style={{ fontFamily: sans, fontSize: 15, fontWeight: 600, color: colors.ink }}>{title}</span>
+        <span style={{ fontFamily: sans, fontSize: 14, fontWeight: 600, color: colors.ink }}>{title}</span>
         <span
           style={{
-            fontFamily: mono, fontSize: 10, color: colors.faint,
+            fontFamily: mono, fontSize: 12, color: colors.faint,
             border: `1px solid ${colors.panelEdge}`, borderRadius: 4, padding: '2px 6px',
           }}
           title={`The report calls this file the ${tag}.`}
@@ -57,7 +57,7 @@ export default function UploadCard({ step, title, tag, hint, file, accent, onFil
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
           <div style={{ flex: 1, minWidth: 160 }}>
             <div style={{ fontFamily: mono, fontSize: 13, color: colors.ink, wordBreak: 'break-all' }}>{file.name}</div>
-            <div style={{ fontFamily: mono, fontSize: 11.5, color: colors.faint, marginTop: 3 }}>
+            <div style={{ fontFamily: mono, fontSize: 12, color: colors.faint, marginTop: 3 }}>
               {file.rowCount.toLocaleString('en-US')} rows &middot; {file.columns.length} columns
               {file.kind === 'xlsx' && <> &middot; sheet “{file.sheet}”, header row {file.headerRow}</>}
             </div>
@@ -75,7 +75,7 @@ export default function UploadCard({ step, title, tag, hint, file, accent, onFil
               fontFamily: sans, fontSize: 14, fontWeight: 600, padding: '12px 16px', cursor: 'pointer',
             }}
           >
-            <span style={{ fontSize: 15 }}>&#8593;</span> Upload CSV or Excel file
+            <span style={{ fontSize: 14 }}>&#8593;</span> Upload CSV or Excel file
           </button>
           <p style={{ fontFamily: sans, fontSize: 12, color: colors.faint, textAlign: 'center', marginTop: 8 }}>
             or drag a .csv or .xlsx file onto this panel
@@ -93,7 +93,7 @@ export default function UploadCard({ step, title, tag, hint, file, accent, onFil
       />
 
       {failed && (
-        <p style={{ fontFamily: sans, fontSize: 12.5, color: colors.fail, lineHeight: 1.5, marginTop: 12 }}>
+        <p style={{ fontFamily: sans, fontSize: 13, color: colors.fail, lineHeight: 1.5, marginTop: 12 }}>
           {file.errors[0]}
         </p>
       )}
@@ -148,7 +148,7 @@ const secondaryButton = {
   border: `1px solid ${colors.panelEdge}`,
   color: colors.mute,
   fontFamily: sans,
-  fontSize: 12.5,
+  fontSize: 13,
   padding: '7px 12px',
   borderRadius: 6,
   cursor: 'pointer',
