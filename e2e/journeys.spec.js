@@ -57,6 +57,8 @@ test('a first-time visitor: what it is, the guided first run, one step on screen
   await expect(rail.getByRole('button', { name: /Set up/ })).toHaveAttribute('aria-current', 'step')
   await expect(page.getByLabel('pack object to start from')).toBeVisible()
 
+  // From the top: a control scrolled half under the sticky bar reads to the checker as an undersized target.
+  await page.evaluate(() => window.scrollTo(0, 0))
   const { violations } = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag22aa']).analyze()
   expect(violations.filter((v) => v.impact === 'serious' || v.impact === 'critical').map((v) => v.id)).toEqual([])
   expect(errors).toEqual([])
