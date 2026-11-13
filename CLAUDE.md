@@ -433,6 +433,17 @@ entry: page content only, stylesheet inlined. It is GENERATED from the build by
 files to publish beside it; CI fails if the committed wrapper differs. To
 republish: `npm run build`, `npm run publish:files`, then publish it with the
 printed files (`app.js` and `app-worker.js`) and the same URL.
+The marketing site (brand Phase B) is `npm run build:site`
+(`scripts/build-site.mjs`, styles in `site/site.css`): plain static pages —
+Home, For partners, For finance and HR, Packs, Security and privacy, Pricing —
+into `dist-site/`, with the built app copied under `app/`. No script on any
+page, nothing from another origin, a CSP meta. The Packs page is generated from
+`src/packs`, so it cannot drift; the masking table from `SENSITIVITIES`; the
+claim from `STATEMENT_OF_CLAIM`. Every sentence must be true of the code today:
+`scripts/site.test.js` checks titles, links, no script, the draft labels and
+the `NEVER_CLAIM` scan (a negated "never a certificate" still trips it — keep
+the word off the page); `e2e/site.spec.js` runs axe on every page at 1280 and
+375 px. Pricing reads "Free while in pilot"; contact goes to the GitHub issues.
 Steps, decisions and what was checked: `docs/release.md`.
 CLI: published to public npm as `data-contract-validator` (command `dcv`) by
 `.github/workflows/release.yml` on a `v*` tag matching package.json, with npm

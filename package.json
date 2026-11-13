@@ -64,6 +64,7 @@
     "audit:prod": "npm audit --omit=dev --audit-level=high",
     "verify:package": "node scripts/verify-package.mjs",
     "publish:files": "node scripts/publish-files.mjs",
+    "build:site": "node scripts/build-site.mjs",
     "test:e2e": "playwright test"
   },
   "dependencies": {

@@ -95,6 +95,9 @@ It should print the version and the commit of the tag.
 `npm run build`, then serve `dist/` from any static host. Set `frame-ancestors` as an
 HTTP header there (it cannot be set from a `<meta>` tag).
 
+For the site: `npm run build:site` after `npm run build` writes `dist-site/` — the
+marketing pages at the root and the app under `app/` — to serve as one static site.
+
 For the Artifact page: `npm run publish:files` rewrites `publish/artifact.html` from the
 build and prints the files to publish beside it — `app.js` and `app-worker.js`.
 
