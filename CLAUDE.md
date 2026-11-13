@@ -454,6 +454,15 @@ and must stay true. The command-line page says the npm release has not been
 made and shows running from a clone until it is. Legal pages are SHELLS marked
 "Not yet written": no binding term is written without a lawyer. A box that
 scrolls sideways (table, code) takes `tabindex="0"` (`focusable` in the layout).
+The site is hosted as a private Artifact, "Plumbstep Website"
+(https://claude.ai/artifact/A1MoBwDK6aCTWAgiYFZanv). The host wraps only the
+entry page, so `npm run publish:site` (`scripts/publish-site.mjs`) writes
+`dist-site/artifact-entry.html` — the home page's content with `site.css`
+inlined, no skeleton of its own — and prints every other file to publish beside
+it, the app under `app/` included. Pages link the app as `app/index.html`,
+never the folder: a host given a file list may not serve a folder's index. To
+republish: `npm run build`, `npm run build:site`, `npm run publish:site`, then
+publish the entry with the printed files to the SAME URL.
 Steps, decisions and what was checked: `docs/release.md`.
 CLI: published to public npm as `data-contract-validator` (command `dcv`) by
 `.github/workflows/release.yml` on a `v*` tag matching package.json, with npm

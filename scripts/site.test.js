@@ -8,6 +8,7 @@ import { describeRule } from '../src/lib/rules.js'
 import { USAGE as CHECK_USAGE } from '../cli/check.mjs'
 import { USAGE as RECONCILE_USAGE } from '../cli/reconcile.mjs'
 import { buildSite, PAGES } from './build-site.mjs'
+import { ARTIFACT_TITLE, ENTRY, publishSite } from './publish-site.mjs'
 
 // The marketing site (brand Phases B and C, the docs under docs/): every page builds, every link inside the
 // site lands on a file that exists, no page runs a script or reaches another
@@ -121,5 +122,29 @@ describe('the marketing site', () => {
     expect(page.match(/Not yet written/g)).toHaveLength(3)
     expect(page).toMatch(/nothing on this site is a binding term/)
     expect(page).not.toMatch(/(we|you) (shall|agree|warrant)/i)
+  })
+
+  it('the Artifact publish: an entry of page content only, and every other file at its own path', () => {
+    const site = mkdtempSync(join(tmpdir(), 'plumbstep-publish-'))
+    try {
+      buildSite({ out: site, app: join(process.cwd(), 'public') })
+      const { entry, files } = publishSite(site)
+      // The host supplies the document skeleton; the entry must not bring its own.
+      expect(entry).not.toMatch(/<!doctype|<(html|head|body)[\s>]|<\/(html|head|body)>/i)
+      expect(entry.startsWith(`<title>${ARTIFACT_TITLE}</title>`)).toBe(true)
+      expect(entry).toContain(readFileSync(join(site, 'site.css'), 'utf8').trim())
+      expect(entry).not.toContain('rel="stylesheet"')
+      expect(entry).toContain('<h1>')
+      // Every file but the home page (it IS the entry) is published, sources resolving to real files.
+      const built = PAGES.map((p) => p.file).filter((f) => f !== 'index.html')
+      for (const file of [...built, 'site.css', 'favicon.svg', 'assets/fonts/Geist.woff2', 'app/favicon.svg']) expect(Object.keys(files)).toContain(file)
+      expect(Object.keys(files)).not.toContain('index.html')
+      expect(Object.keys(files)).not.toContain(ENTRY)
+      expect(files['assets/fonts/Geist.woff2'].contentType).toBe('font/woff2')
+      // The workspace is linked by its page, which a host given a file list can serve.
+      for (const doc of Object.values(html)) expect(doc).not.toMatch(/href="(\.\.\/)*app\/"/)
+    } finally {
+      rmSync(site, { recursive: true, force: true })
+    }
   })
 })
