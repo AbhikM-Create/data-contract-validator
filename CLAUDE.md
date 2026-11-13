@@ -433,6 +433,27 @@ entry: page content only, stylesheet inlined. It is GENERATED from the build by
 files to publish beside it; CI fails if the committed wrapper differs. To
 republish: `npm run build`, `npm run publish:files`, then publish it with the
 printed files (`app.js` and `app-worker.js`) and the same URL.
+The marketing site (brand Phase B) is `npm run build:site`
+(`scripts/build-site.mjs`, styles in `site/site.css`): plain static pages —
+Home, For partners, For finance and HR, Packs, Security and privacy, Pricing —
+into `dist-site/`, with the built app copied under `app/`. No script on any
+page, nothing from another origin, a CSP meta. The Packs page is generated from
+`src/packs`, so it cannot drift; the masking table from `SENSITIVITIES`; the
+claim from `STATEMENT_OF_CLAIM`. Every sentence must be true of the code today:
+`scripts/site.test.js` checks titles, links, no script, the draft labels and
+the `NEVER_CLAIM` scan (a negated "never a certificate" still trips it — keep
+the word off the page); `e2e/site.spec.js` runs axe on every page at 1280 and
+375 px. Pricing reads "Free while in pilot"; contact goes to the GitHub issues.
+Docs and trust (Phase C, `scripts/site-docs.mjs`) are pages under `docs/`:
+help centre, command line, one reference page per pack, changelog, legal.
+Facts the code knows are read from it — rule sentences from `describeRule`,
+steps from `RECON_STEPS`, owners from `DEFAULT_OWNERS`, formats, identifiers,
+each command's `USAGE`, and every header, rule and crosswalk of a pack (a test
+holds the pack page to them). The changelog and glossary are written by hand
+and must stay true. The command-line page says the npm release has not been
+made and shows running from a clone until it is. Legal pages are SHELLS marked
+"Not yet written": no binding term is written without a lawyer. A box that
+scrolls sideways (table, code) takes `tabindex="0"` (`focusable` in the layout).
 Steps, decisions and what was checked: `docs/release.md`.
 CLI: published to public npm as `data-contract-validator` (command `dcv`) by
 `.github/workflows/release.yml` on a `v*` tag matching package.json, with npm

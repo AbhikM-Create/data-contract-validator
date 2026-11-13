@@ -4,8 +4,25 @@
     {
       "name": "data-contract-validator-dev",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev"],
+      "runtimeArgs": [
+        "run",
+        "dev"
+      ],
       "port": 5174
+    },
+    {
+      "name": "plumbstep-site",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": [
+        "vite",
+        "preview",
+        "--outDir",
+        "dist-site",
+        "--port",
+        "4181",
+        "--strictPort"
+      ],
+      "port": 4181
     }
   ]
 }

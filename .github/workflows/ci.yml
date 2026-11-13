@@ -34,6 +34,9 @@ jobs:
 
       - run: npm run build
 
+      # The marketing site, built over the app (site.test.js checks its pages).
+      - run: npm run build:site
+
       # The hosted wrapper is generated from the build. If it differs from what
       # is committed, someone changed the stylesheet or the build's files and
       # did not regenerate it.
