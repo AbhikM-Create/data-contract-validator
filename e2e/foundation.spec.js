@@ -23,13 +23,13 @@ test('F2: leaving a Validate report by either button works and loses nothing els
 
   await openValidateExample(page)
   await page.getByRole('button', { name: 'check another file' }).click()
-  await expect(page.getByRole('heading', { name: 'Validate a file' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Monitor a feed' })).toBeVisible()
   await expect(page.getByText('This screen stopped working')).toHaveCount(0)
 
   await openValidateExample(page)
   await page.getByRole('button', { name: 'start over' }).click()
   await page.getByRole('button', { name: 'Start over', exact: true }).click()
-  await expect(page.getByRole('heading', { name: 'Validate a file' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Monitor a feed' })).toBeVisible()
   await expect(page.getByText('This screen stopped working')).toHaveCount(0)
   expect(errors).toEqual([])
 })

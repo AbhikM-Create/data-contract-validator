@@ -14,14 +14,14 @@ export default function LayerCard({ layer, index, isLead }) {
       }}
     >
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap' }}>
-        <span style={{ fontFamily: mono, fontSize: 11, color: colors.faint }}>{index + 1}</span>
+        <span style={{ fontFamily: mono, fontSize: 12, color: colors.faint }}>{index + 1}</span>
         <h3 style={{ fontFamily: sans, fontSize: 16, fontWeight: 600, color: colors.ink, margin: 0 }}>{layer.label}</h3>
         <span style={{ fontFamily: sans, fontSize: 13, color: colors.faint, flex: 1, minWidth: 180 }}>
           {CHECK_COPY[layer.id]?.plain ?? layer.question}
         </span>
         <span
           style={{
-            marginLeft: 'auto', fontFamily: mono, fontSize: 11, letterSpacing: '0.08em',
+            marginLeft: 'auto', fontFamily: mono, fontSize: 12, letterSpacing: '0.08em',
             color: tone, border: `1px solid ${tone}66`, borderRadius: 5, padding: '3px 8px',
           }}
         >
@@ -30,11 +30,11 @@ export default function LayerCard({ layer, index, isLead }) {
       </div>
 
       {layer.note && (
-        <p style={{ fontFamily: sans, fontSize: 13.5, lineHeight: 1.5, color: colors.mute, marginTop: 10 }}>{layer.note}</p>
+        <p style={{ fontFamily: sans, fontSize: 14, lineHeight: 1.5, color: colors.mute, marginTop: 10 }}>{layer.note}</p>
       )}
 
       {layer.status === 'PASS' && (
-        <p style={{ fontFamily: sans, fontSize: 13.5, color: colors.mute, marginTop: 10 }}>
+        <p style={{ fontFamily: sans, fontSize: 14, color: colors.mute, marginTop: 10 }}>
           Nothing wrong here — on this check, the new file matches the one you trust.
         </p>
       )}
@@ -54,16 +54,16 @@ export default function LayerCard({ layer, index, isLead }) {
               }}
             >
               <div style={{ display: 'flex', gap: 8, alignItems: 'baseline', flexWrap: 'wrap' }}>
-                <span style={{ fontFamily: mono, fontSize: 11, color: tone }}>{violation.code}</span>
+                <span style={{ fontFamily: mono, fontSize: 12, color: tone }}>{violation.code}</span>
                 {violation.column && (
-                  <span style={{ fontFamily: mono, fontSize: 11, color: colors.accent }}>{violation.column}</span>
+                  <span style={{ fontFamily: mono, fontSize: 12, color: colors.accent }}>{violation.column}</span>
                 )}
               </div>
-              <p style={{ fontFamily: sans, fontSize: 13.5, lineHeight: 1.55, color: colors.ink, marginTop: 6 }}>
+              <p style={{ fontFamily: sans, fontSize: 14, lineHeight: 1.55, color: colors.ink, marginTop: 6 }}>
                 {violation.message}
               </p>
               {violation.evidence && (
-                <div style={{ fontFamily: mono, fontSize: 11.5, color: colors.faint, marginTop: 6 }}>{violation.evidence}</div>
+                <div style={{ fontFamily: mono, fontSize: 12, color: colors.faint, marginTop: 6 }}>{violation.evidence}</div>
               )}
             </li>
           ))}

@@ -39,7 +39,7 @@ export default function StepRail({ steps, current, onStep }) {
               {index + 1}
             </span>
             <span style={{ minWidth: 0 }}>
-              <span style={{ display: 'block', fontFamily: sans, fontSize: 13.5, fontWeight: 600, color: colors.ink }}>{step.label}</span>
+              <span style={{ display: 'block', fontFamily: sans, fontSize: 14, fontWeight: 600, color: colors.ink }}>{step.label}</span>
               <span style={{ display: 'block', fontFamily: sans, fontSize: 12, color: TONE[step.tone] ?? colors.mute, marginTop: 2 }}>{step.status}</span>
             </span>
           </button>

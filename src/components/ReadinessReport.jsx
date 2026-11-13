@@ -21,7 +21,7 @@ export default function ReadinessReport({ report, stale, onDownloadFixList, owne
   return (
     <div style={{ marginTop: 18 }}>
       <span style={chip(verdict.status)}>{verdict.text}</span>
-      <h3 style={{ fontFamily: sans, fontSize: 20, fontWeight: 650, color: colors.ink, margin: '8px 0 0' }}>{report.headline}</h3>
+      <h3 style={{ fontFamily: sans, fontSize: 22, fontWeight: 650, color: colors.ink, margin: '8px 0 0' }}>{report.headline}</h3>
       {owner && report.counts?.rejected > 0 && (
         <p style={{ fontFamily: sans, fontSize: 13, color: colors.mute, margin: '6px 0 0' }}>Whose fix: {owner}.</p>
       )}
@@ -34,7 +34,7 @@ export default function ReadinessReport({ report, stale, onDownloadFixList, owne
       {/* A check that could not run has no counts — it has its reasons. */}
       {!c && (
         <ul style={{ margin: '10px 0 0', paddingLeft: 18 }}>
-          {(report.issues ?? []).map((issue) => <li key={issue} style={{ fontFamily: sans, fontSize: 13.5, color: colors.warn, lineHeight: 1.5 }}>{issue}</li>)}
+          {(report.issues ?? []).map((issue) => <li key={issue} style={{ fontFamily: sans, fontSize: 14, color: colors.warn, lineHeight: 1.5 }}>{issue}</li>)}
         </ul>
       )}
       {c && <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 14, alignItems: 'stretch' }}>
@@ -59,8 +59,8 @@ export default function ReadinessReport({ report, stale, onDownloadFixList, owne
 function Figure({ title, value, tone }) {
   return (
     <div style={{ ...panel, padding: '9px 12px', minWidth: 128 }}>
-      <div style={{ fontFamily: sans, fontSize: 11.5, color: colors.faint }}>{title}</div>
-      <div style={{ fontFamily: mono, fontSize: 17, color: tone ?? colors.ink, marginTop: 3 }}>{value}</div>
+      <div style={{ fontFamily: sans, fontSize: 12, color: colors.faint }}>{title}</div>
+      <div style={{ fontFamily: mono, fontSize: 16, color: tone ?? colors.ink, marginTop: 3 }}>{value}</div>
     </div>
   )
 }
@@ -72,26 +72,26 @@ function Check({ check }) {
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap' }}>
         <span style={{ fontFamily: sans, fontSize: 14, color: colors.ink, flex: 1, minWidth: 220 }}>{check.description}</span>
         {/* Neutral on purpose: green and red belong to the verdict alone. */}
-        <span style={{ fontFamily: mono, fontSize: 10.5, letterSpacing: '0.06em', color: colors.mute }}>
+        <span style={{ fontFamily: mono, fontSize: 12, letterSpacing: '0.06em', color: colors.mute }}>
           {check.fileLevel ? (check.severity === 'warn' ? 'FILE TOTAL · WARNING ONLY' : 'FILE TOTAL') : check.severity === 'warn' ? 'WARNING ONLY' : 'REJECTS'}
         </span>
         <span style={chip(check.status)}>{check.status}</span>
       </div>
       {check.status === 'FAIL' && (
-        <div style={{ fontFamily: sans, fontSize: 12.5, color: colors.mute, marginTop: 4 }}>
+        <div style={{ fontFamily: sans, fontSize: 13, color: colors.mute, marginTop: 4 }}>
           {check.fileLevel
             ? `${check.applicable > 1 ? `${fmt(check.failing)} of ${fmt(check.applicable)} groups don’t tie` : 'The total doesn’t tie'} — no single record is rejected for it, but the file is not ready`
             : `${fmt(check.failing)} of ${fmt(check.applicable)} records`}
         </div>
       )}
       {check.groups?.length > 0 && (
-        <div style={{ fontFamily: mono, fontSize: 11.5, color: colors.faint, marginTop: 6 }}>
+        <div style={{ fontFamily: mono, fontSize: 12, color: colors.faint, marginTop: 6 }}>
           {check.groups.map((g) => g.value).join(' · ')}
         </div>
       )}
-      {check.reason && <div style={{ fontFamily: sans, fontSize: 12.5, color: colors.mute, marginTop: 4 }}>{check.reason}</div>}
+      {check.reason && <div style={{ fontFamily: sans, fontSize: 13, color: colors.mute, marginTop: 4 }}>{check.reason}</div>}
       {check.examples.length > 0 && (
-        <div style={{ fontFamily: mono, fontSize: 11.5, color: colors.faint, marginTop: 6 }}>
+        <div style={{ fontFamily: mono, fontSize: 12, color: colors.faint, marginTop: 6 }}>
           {check.examples.map((ex) => `${ex.record}${ex.record.startsWith('row ') ? '' : ` (row ${ex.row})`}: ${ex.value}`).join(' · ')}
         </div>
       )}

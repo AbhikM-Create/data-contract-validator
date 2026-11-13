@@ -1,6 +1,7 @@
 import { isConfigured, signOut } from '../lib/supabase.js'
 import { ROUTES, go } from '../routes.js'
 import { colors, ghostButton, mono, sans } from '../theme.js'
+import Logo from './Logo.jsx'
 
 // The frame every screen sits in: brand, the three destinations, the account,
 // and the trust line. The trust line is part of the chrome rather than one
@@ -16,6 +17,7 @@ export default function AppShell({ route, user, authLoading, busy, engineError, 
         Skip to the main content
       </a>
       <header
+        className="app-header"
         style={{
           background: colors.panel,
           borderBottom: `1px solid ${colors.panelEdge}`,
@@ -25,46 +27,37 @@ export default function AppShell({ route, user, authLoading, busy, engineError, 
         }}
       >
         <div
+          className="app-bar"
           style={{
             maxWidth: 1080, margin: '0 auto', padding: '0 24px',
-            display: 'flex', alignItems: 'center', gap: 24, minHeight: 58, flexWrap: 'wrap',
+            display: 'flex', alignItems: 'center', gap: 22, minHeight: 60, flexWrap: 'wrap',
           }}
         >
           <button
             onClick={() => go('home')}
+            aria-label="Plumbstep home"
             style={{
-              background: 'none', border: 'none', padding: 0, cursor: 'pointer',
-              display: 'flex', alignItems: 'center', gap: 9,
+              background: 'none', border: 'none', padding: '8px 0', cursor: 'pointer', minHeight: 44,
+              display: 'flex', alignItems: 'center', gap: 10,
             }}
           >
-            <span style={{ width: 9, height: 9, borderRadius: 2, background: colors.accent, transform: 'rotate(45deg)' }} />
-            <span style={{ fontFamily: sans, fontSize: 14.5, fontWeight: 650, color: colors.ink, letterSpacing: '-0.01em' }}>
-              Data Contract Validator
+            <Logo size={26} />
+            <span style={{ fontFamily: sans, fontSize: 16, fontWeight: 650, color: colors.ink, letterSpacing: '-0.02em' }}>
+              Plumbstep
             </span>
           </button>
 
-          <nav style={{ display: 'flex', gap: 2, marginLeft: 'auto' }}>
-            {ROUTES.map((item) => {
-              const active = item.id === route
-              return (
-                <button
-                  key={item.id}
-                  onClick={() => go(item.id)}
-                  aria-current={active ? 'page' : undefined}
-                  title={item.blurb}
-                  style={{
-                    background: active ? colors.panelSunk : 'transparent',
-                    border: '1px solid transparent',
-                    borderBottom: `2px solid ${active ? colors.accent : 'transparent'}`,
-                    color: active ? colors.ink : colors.mute,
-                    fontFamily: sans, fontSize: 13.5, fontWeight: active ? 600 : 500,
-                    padding: '9px 14px', borderRadius: '6px 6px 0 0', cursor: 'pointer',
-                  }}
-                >
-                  {item.label}
-                </button>
-              )
-            })}
+          {/* The two jobs people come for; the rest in a quieter row beside them. */}
+          <nav aria-label="Main" className="app-nav">
+            {ROUTES.filter((item) => item.primary).map((item) => (
+              <NavItem key={item.id} item={item} active={item.id === route} />
+            ))}
+          </nav>
+          <span style={{ flex: 1 }} />
+          <nav aria-label="More" className="app-nav">
+            {ROUTES.filter((item) => !item.primary).map((item) => (
+              <NavItem key={item.id} item={item} active={item.id === route} quiet />
+            ))}
           </nav>
 
           {/* Which state the person is in, said plainly: signed out, the work
@@ -80,13 +73,13 @@ export default function AppShell({ route, user, authLoading, busy, engineError, 
                   actually been restored — showing "Sign in" to someone who is
                   signed in reads as having been logged out. */}
               {authLoading ? (
-                <span style={{ fontFamily: sans, fontSize: 12.5, color: colors.faint }}>…</span>
+                <span style={{ fontFamily: sans, fontSize: 13, color: colors.faint }}>…</span>
               ) : user ? (
                 <>
                   <span
                     title={user.email}
                     style={{
-                      fontFamily: sans, fontSize: 12.5, color: colors.mute, maxWidth: 170,
+                      fontFamily: sans, fontSize: 13, color: colors.mute, maxWidth: 170,
                       overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                     }}
                   >
@@ -126,7 +119,7 @@ export default function AppShell({ route, user, authLoading, busy, engineError, 
         <div style={{ background: `${colors.accent}0F`, borderBottom: `1px solid ${colors.accent}33` }}>
           <div style={{ maxWidth: 1080, margin: '0 auto', padding: '8px 24px', display: 'flex', alignItems: 'center', gap: 9 }}>
             <span className="pulse" style={{ width: 7, height: 7, borderRadius: '50%', background: colors.accent }} />
-            <span style={{ fontFamily: sans, fontSize: 12.5, color: colors.accent }}>
+            <span style={{ fontFamily: sans, fontSize: 13, color: colors.accent }}>
               {busy} The page stays usable while this runs.
             </span>
           </div>
@@ -137,7 +130,7 @@ export default function AppShell({ route, user, authLoading, busy, engineError, 
       {(restored || autosaveProblem) && (
         <div style={{ background: colors.panel, borderBottom: `1px solid ${colors.panelEdge}` }}>
           <div role="status" style={{ maxWidth: 1080, margin: '0 auto', padding: '9px 24px', display: 'flex', alignItems: 'flex-start', gap: 12 }}>
-            <span style={{ fontFamily: sans, fontSize: 12.5, color: colors.ink, lineHeight: 1.55, flex: 1 }}>
+            <span style={{ fontFamily: sans, fontSize: 13, color: colors.ink, lineHeight: 1.55, flex: 1 }}>
               {restored && (
                 <>
                   Restored your work from {when(restored.savedAt)} — the migration object and the rules you had open.
@@ -155,7 +148,7 @@ export default function AppShell({ route, user, authLoading, busy, engineError, 
       {engineError && (
         <div role="alert" style={{ background: `${colors.fail}0D`, borderBottom: `1px solid ${colors.fail}33` }}>
           <div style={{ maxWidth: 1080, margin: '0 auto', padding: '11px 24px', display: 'flex', alignItems: 'flex-start', gap: 12 }}>
-            <span style={{ fontFamily: sans, fontSize: 12.5, color: colors.fail, lineHeight: 1.55, flex: 1 }}>
+            <span style={{ fontFamily: sans, fontSize: 13, color: colors.fail, lineHeight: 1.55, flex: 1 }}>
               {engineError}
             </span>
             <button onClick={onDismissError} style={{ ...ghostButton, color: colors.fail, borderColor: `${colors.fail}55` }}>
@@ -171,7 +164,7 @@ export default function AppShell({ route, user, authLoading, busy, engineError, 
 
       <footer style={{ borderTop: `1px solid ${colors.panelEdge}`, background: colors.panel }}>
         <div style={{ maxWidth: 1080, margin: '0 auto', padding: '16px 24px' }}>
-          <span style={{ fontFamily: mono, fontSize: 11, color: colors.faint }}>
+          <span style={{ fontFamily: mono, fontSize: 12, color: colors.faint }}>
             {isConfigured
               ? 'Parsing and checking happen in this page. Signed in, contracts and run counts are saved to your account; files and records never are.'
               : 'Parsing and checking happen in this page. No backend; your work is kept only in this browser.'}
@@ -179,6 +172,28 @@ export default function AppShell({ route, user, authLoading, busy, engineError, 
         </div>
       </footer>
     </div>
+  )
+}
+
+// One destination in the bar. The current one carries the teal underline: the
+// plumb line, the one colour of action.
+function NavItem({ item, active, quiet = false }) {
+  return (
+    <button
+      onClick={() => go(item.id)}
+      aria-current={active ? 'page' : undefined}
+      title={item.blurb}
+      style={{
+        background: 'transparent',
+        borderWidth: 0, borderStyle: 'solid', borderColor: 'transparent',
+        borderBottomWidth: 2, borderBottomColor: active ? colors.accent : 'transparent',
+        color: active ? colors.ink : colors.mute,
+        fontFamily: sans, fontSize: quiet ? 13 : 14, fontWeight: active ? 650 : 500,
+        padding: quiet ? '10px 9px' : '10px 12px', minHeight: 40, cursor: 'pointer',
+      }}
+    >
+      {item.label}
+    </button>
   )
 }
 

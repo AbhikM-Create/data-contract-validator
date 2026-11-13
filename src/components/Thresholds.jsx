@@ -17,7 +17,7 @@ export default function Thresholds({ values, onChange, onReset }) {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
         <div>
           <span style={label}>Sensitivity</span>
-          <p style={{ fontFamily: sans, fontSize: 12.5, color: colors.mute, marginTop: 5 }}>
+          <p style={{ fontFamily: sans, fontSize: 13, color: colors.mute, marginTop: 5 }}>
             {isDefault ? 'Using the default limits below.' : 'Using your adjusted limits below.'} A check only complains once a difference passes its limit.
           </p>
         </div>
@@ -38,7 +38,7 @@ export default function Thresholds({ values, onChange, onReset }) {
                 key={field.key}
                 title={field.help}
                 style={{
-                  fontFamily: mono, fontSize: 11, color: changed ? colors.accent : colors.mute,
+                  fontFamily: mono, fontSize: 12, color: changed ? colors.accent : colors.mute,
                   border: `1px solid ${changed ? colors.accent : colors.panelEdge}`,
                   borderRadius: 5, padding: '4px 8px', background: colors.panelSunk,
                 }}
@@ -57,8 +57,8 @@ export default function Thresholds({ values, onChange, onReset }) {
             return (
               <div key={field.key} style={{ background: colors.panelSunk, border: `1px solid ${colors.panelEdge}`, borderRadius: 6, padding: '10px 11px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 6 }}>
-                  <span style={{ fontFamily: sans, fontSize: 12.5, color: colors.ink }}>{field.label}</span>
-                  <span style={{ fontFamily: mono, fontSize: 10, color: colors.faint }}>{layerLabel(field.layer)}</span>
+                  <span style={{ fontFamily: sans, fontSize: 13, color: colors.ink }}>{field.label}</span>
+                  <span style={{ fontFamily: mono, fontSize: 12, color: colors.faint }}>{layerLabel(field.layer)}</span>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 8 }}>
                   <input
@@ -79,9 +79,9 @@ export default function Thresholds({ values, onChange, onReset }) {
                       color: changed ? colors.accent : colors.ink, fontFamily: mono, fontSize: 13, outline: 'none',
                     }}
                   />
-                  <span style={{ fontFamily: mono, fontSize: 11, color: colors.faint }}>{field.unit}</span>
+                  <span style={{ fontFamily: mono, fontSize: 12, color: colors.faint }}>{field.unit}</span>
                 </div>
-                <p style={{ fontFamily: sans, fontSize: 11.5, lineHeight: 1.4, color: colors.faint, marginTop: 8 }}>{field.help}</p>
+                <p style={{ fontFamily: sans, fontSize: 12, lineHeight: 1.4, color: colors.faint, marginTop: 8 }}>{field.help}</p>
               </div>
             )
           })}

@@ -101,7 +101,7 @@ export default function ContractsScreen({
                 }}
               >
                 <span>{item.label}</span>
-                <span style={{ fontFamily: mono, fontSize: 11, color: colors.faint }}>{count}</span>
+                <span style={{ fontFamily: mono, fontSize: 12, color: colors.faint }}>{count}</span>
               </button>
             )
           })}
@@ -136,7 +136,7 @@ export default function ContractsScreen({
 
           {rules.length === 0 ? (
             <div style={{ ...panel, padding: '22px 20px' }}>
-              <div style={{ fontFamily: sans, fontSize: 14.5, fontWeight: 600, color: colors.ink }}>No rules yet</div>
+              <div style={{ fontFamily: sans, fontSize: 14, fontWeight: 600, color: colors.ink }}>No rules yet</div>
               <p style={{ fontFamily: sans, fontSize: 13, color: colors.mute, lineHeight: 1.55, marginTop: 7, maxWidth: 560 }}>
                 Load a contract you saved earlier, or read a baseline CSV below — its columns and the values it
                 contains become suggestions you can promote into rules.
@@ -156,14 +156,14 @@ export default function ContractsScreen({
                     padding: '11px 13px', marginBottom: 7,
                   }}
                 >
-                  <span style={{ fontFamily: sans, fontSize: 13.5, color: colors.ink, flex: 1, minWidth: 240 }}>
+                  <span style={{ fontFamily: sans, fontSize: 14, color: colors.ink, flex: 1, minWidth: 240 }}>
                     {describeRule(rule)}
                   </span>
                   {/* a category, not a verdict — status styling here would
                       spend pass/fail colour on something that has neither */}
                   <span
                     style={{
-                      fontFamily: sans, fontSize: 11, color: colors.mute,
+                      fontFamily: sans, fontSize: 12, color: colors.mute,
                       background: colors.panelSunk, border: `1px solid ${colors.panelEdge}`,
                       borderRadius: 4, padding: '3px 8px', whiteSpace: 'nowrap',
                     }}

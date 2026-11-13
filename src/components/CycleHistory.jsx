@@ -14,7 +14,7 @@ export default function CycleHistory({ rows }) {
   if (rows.length === 0) {
     return (
       <div style={{ ...panel, padding: 16, marginTop: 10 }}>
-        <p style={{ fontFamily: sans, fontSize: 13.5, color: colors.mute, margin: 0 }}>
+        <p style={{ fontFamily: sans, fontSize: 14, color: colors.mute, margin: 0 }}>
           No checks yet. Each readiness check and reconciliation you run is added here with its wave and cycle, and saved in the object file.
         </p>
       </div>
@@ -39,7 +39,7 @@ export default function CycleHistory({ rows }) {
               <td style={cell}>{run.kind === 'reconcile' ? 'Reconciliation' : 'Load readiness'}</td>
               <td style={cell}><span style={chip(VERDICT[run.status] ?? 'SKIPPED')}>{WORDS[run.status] ?? run.status}</span></td>
               <td style={{ ...cell, fontFamily: mono }}>
-                {pct(value)} <span style={{ fontFamily: sans, fontSize: 11.5, color: colors.faint }}>{metric === 'completeness' ? 'arrived' : 'accepted'}</span>
+                {pct(value)} <span style={{ fontFamily: sans, fontSize: 12, color: colors.faint }}>{metric === 'completeness' ? 'arrived' : 'accepted'}</span>
               </td>
               <td style={{ ...cell, fontFamily: mono, color: colors.mute }} title={previousCycle ? `against ${previousCycle}` : undefined}>
                 {change === null ? '—' : `${change > 0 ? '+' : change < 0 ? '−' : '±'}${(Math.abs(change) * 100).toFixed(2)} pts`}

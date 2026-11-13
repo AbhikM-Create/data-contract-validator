@@ -12,8 +12,8 @@ export default function TourPanel({ items, onEnd }) {
   return (
     <aside aria-label="Your first cutover" style={{ ...panel, padding: 14, marginTop: 14 }}>
       <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8 }}>
-        <span style={{ fontFamily: sans, fontSize: 13.5, fontWeight: 650, color: colors.ink }}>Your first cutover</span>
-        <span style={{ fontFamily: mono, fontSize: 11.5, color: colors.mute }}>{done} of {items.length}</span>
+        <span style={{ fontFamily: sans, fontSize: 14, fontWeight: 650, color: colors.ink }}>Your first cutover</span>
+        <span style={{ fontFamily: mono, fontSize: 12, color: colors.mute }}>{done} of {items.length}</span>
       </div>
       <ol style={{ listStyle: 'none', padding: 0, margin: '10px 0 0' }}>
         {items.map((item) => {
@@ -31,9 +31,9 @@ export default function TourPanel({ items, onEnd }) {
               </div>
               {now && (
                 <div style={{ margin: '6px 0 4px 22px' }}>
-                  <p style={{ fontFamily: sans, fontSize: 12.5, lineHeight: 1.5, color: colors.mute, margin: 0 }}>{item.hint}</p>
+                  <p style={{ fontFamily: sans, fontSize: 13, lineHeight: 1.5, color: colors.mute, margin: 0 }}>{item.hint}</p>
                   {item.action && (
-                    <button onClick={item.action.run} style={{ ...primaryButton, fontSize: 12.5, padding: '7px 12px', marginTop: 8 }}>{item.action.label}</button>
+                    <button onClick={item.action.run} style={{ ...primaryButton, fontSize: 13, padding: '7px 12px', marginTop: 8 }}>{item.action.label}</button>
                   )}
                 </div>
               )}
@@ -42,7 +42,7 @@ export default function TourPanel({ items, onEnd }) {
         })}
       </ol>
       {!current && (
-        <p style={{ fontFamily: sans, fontSize: 12.5, lineHeight: 1.5, color: colors.ink, margin: '8px 0 0' }}>
+        <p style={{ fontFamily: sans, fontSize: 13, lineHeight: 1.5, color: colors.ink, margin: '8px 0 0' }}>
           That is the whole loop: check before the load, prove after it, sign.
         </p>
       )}

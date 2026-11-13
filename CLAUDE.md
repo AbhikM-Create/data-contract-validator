@@ -291,7 +291,8 @@ uniqueness and other engines' checks are listed in `notImported` with reasons
 (`schemas/vendor/`), and real examples from the standard are test fixtures.
 
 ## UI
-Screens: Migrations, Contracts, Validate, History (`routes.js`, hash routing —
+Screens: Projects (`migrations`), Monitor (`validate`), Contracts, History,
+Organisation (`routes.js`, hash routing —
 a static app needs no server rewrites). `components/AppShell.jsx` carries the
 nav and the trust line, which must stay true ("Files stay on this device.
 Nothing is uploaded: the records and fix lists you download go only to your
@@ -352,8 +353,21 @@ counts."). It carries no green dot: green is a verdict's colour.
   visible as chips — a verdict is only as meaningful as its line.
 - Vocabulary is fixed: "the file you trust" (`baseline`) and "the file to check"
   (`new file`); engine messages and `src/copy.js` say the same thing.
-- Visual direction: calm enterprise, light ground, one muted teal accent for
-  interaction (`theme.js`). Green and red appear ONLY on a verdict.
+- Brand (approved 13 Nov 2026): the product is **Plumbstep** on screen (tab
+  title, bar, favicon); the package, the `dcv` command and the tool name in
+  every record stay `data-contract-validator`. The mark (`Logo.jsx`,
+  `public/favicon.svg`) is a staircase in ink and a plumb line and bob in teal —
+  never green or red. Calm enterprise, light ground, one muted teal for every
+  action (`theme.js`). Green and red appear ONLY on a verdict; verdict colours
+  are pass `#1B7347`, fail `#B3261E`, not confirmed `#8A5300`. Inputs and
+  dropdowns take the `control` edge (`#868C93`, 3:1), set once in `index.css`.
+- Type: Geist and Geist Mono, latin, variable, shipped in `src/fonts/` (SIL OFL,
+  `OFL.txt`) — the CSP allows fonts from this origin only. Six sizes:
+  34 display, 22 title, 16 heading, 14 body, 13 small and mono data, 12 label.
+  A new size is a brand change, not a component's choice.
+- The bar: Projects and Monitor (the routes `migrations` and `validate`) are
+  primary; Contracts, History and Organisation sit in a quieter row. Route ids
+  are unchanged, so links hold. On a phone the bar scrolls away.
 - `DEFAULT_THRESHOLDS` / `THRESHOLD_FIELDS` drive the threshold UI, so a new
   threshold needs no UI change.
 

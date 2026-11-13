@@ -57,7 +57,7 @@ export default function ContractFileBar({ name, onName, rules, onLoad, onDownloa
         />
       </div>
 
-      <p style={{ fontFamily: sans, fontSize: 11.5, color: colors.faint, lineHeight: 1.5, marginTop: 8 }}>
+      <p style={{ fontFamily: sans, fontSize: 12, color: colors.faint, lineHeight: 1.5, marginTop: 8 }}>
         A saved contract holds your rules and nothing else — never the file it was written against. Values you
         typed or promoted into a rule are part of the rule, so they are saved with it.
       </p>
@@ -72,13 +72,13 @@ export default function ContractFileBar({ name, onName, rules, onLoad, onDownloa
           }}
         >
           {/* Green is a PASS verdict; a routine "saved" is the accent colour. */}
-          <div style={{ fontFamily: sans, fontSize: 12.5, color: notice.tone === 'bad' ? colors.fail : notice.tone === 'warn' ? colors.warn : colors.ink, lineHeight: 1.5 }}>
+          <div style={{ fontFamily: sans, fontSize: 13, color: notice.tone === 'bad' ? colors.fail : notice.tone === 'warn' ? colors.warn : colors.ink, lineHeight: 1.5 }}>
             {notice.text}
           </div>
           {notice.details?.length > 0 && (
             <ul style={{ margin: '6px 0 0', paddingLeft: 16 }}>
               {notice.details.map((detail) => (
-                <li key={detail} style={{ fontFamily: mono, fontSize: 11, color: colors.faint, lineHeight: 1.6 }}>{detail}</li>
+                <li key={detail} style={{ fontFamily: mono, fontSize: 12, color: colors.faint, lineHeight: 1.6 }}>{detail}</li>
               ))}
             </ul>
           )}

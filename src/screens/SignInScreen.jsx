@@ -90,7 +90,7 @@ export default function SignInScreen({ user }) {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 12, marginTop: 18, maxWidth: 860 }}>
         {ACCESS.map((group) => (
           <div key={group.title} style={{ ...panel, padding: '14px 16px' }}>
-            <div style={{ fontFamily: sans, fontSize: 13.5, fontWeight: 650, color: colors.ink }}>{group.title}</div>
+            <div style={{ fontFamily: sans, fontSize: 14, fontWeight: 650, color: colors.ink }}>{group.title}</div>
             <ul style={{ margin: '8px 0 0', paddingLeft: 18 }}>
               {group.items.map((item) => <li key={item} style={{ fontFamily: sans, fontSize: 13, lineHeight: 1.55, color: colors.mute }}>{item}</li>)}
             </ul>
@@ -117,7 +117,7 @@ export default function SignInScreen({ user }) {
         />
 
         {notice && (
-          <p style={{ fontFamily: sans, fontSize: 12.5, lineHeight: 1.5, marginTop: 14, color: notice.tone === 'bad' ? colors.fail : colors.pass }}>
+          <p style={{ fontFamily: sans, fontSize: 13, lineHeight: 1.5, marginTop: 14, color: notice.tone === 'bad' ? colors.fail : colors.pass }}>
             {notice.text}
           </p>
         )}
@@ -166,7 +166,7 @@ function Field({ label, type, value, onChange, autoComplete, hint }) {
           borderRadius: 6, color: colors.ink, fontFamily: sans, fontSize: 14, padding: '9px 11px', outline: 'none',
         }}
       />
-      {hint && <span style={{ display: 'block', fontFamily: sans, fontSize: 11.5, color: colors.faint, marginTop: 5 }}>{hint}</span>}
+      {hint && <span style={{ display: 'block', fontFamily: sans, fontSize: 12, color: colors.faint, marginTop: 5 }}>{hint}</span>}
     </label>
   )
 }
@@ -175,7 +175,7 @@ function Notice({ tone, children }) {
   const colour = tone === 'warn' ? colors.warn : colors.pass
   return (
     <div style={{ marginTop: 18, padding: '10px 12px', borderRadius: 6, border: `1px solid ${colour}55`, background: `${colour}10`, maxWidth: 560 }}>
-      <span style={{ fontFamily: sans, fontSize: 12.5, color: colour, lineHeight: 1.5 }}>{children}</span>
+      <span style={{ fontFamily: sans, fontSize: 13, color: colour, lineHeight: 1.5 }}>{children}</span>
     </div>
   )
 }

@@ -129,9 +129,9 @@ export default function MigrationsScreen(props) {
 
   return (
     <div>
-      <h1 style={{ fontFamily: sans, fontSize: 26, fontWeight: 650, color: colors.ink, margin: 0 }}>Migrations</h1>
+      <h1 style={{ fontFamily: sans, fontSize: 22, fontWeight: 650, color: colors.ink, margin: 0 }}>Projects</h1>
       {empty && (
-      <p style={{ fontFamily: sans, fontSize: 14.5, lineHeight: 1.55, color: colors.mute, margin: '8px 0 0', maxWidth: 760 }}>
+      <p style={{ fontFamily: sans, fontSize: 14, lineHeight: 1.55, color: colors.mute, margin: '8px 0 0', maxWidth: 760 }}>
         One migration object — employees, vendors, open items — checked the same way every cycle: before each load, whether
         the target will accept the file; after it, whether every record arrived and still says the same thing.
       </p>
@@ -189,7 +189,7 @@ export default function MigrationsScreen(props) {
         <SavedObjects objects={savedObjects} loading={objectsLoading} openId={cloudId} signedIn={signedIn} onOpen={onOpenFromAccount} onDelete={onDeleteFromAccount} />
         {empty && (
           <div style={{ marginTop: 12, padding: '12px 14px', background: colors.panelSunk, borderRadius: 7, display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
-            <span style={{ fontFamily: sans, fontSize: 13.5, color: colors.ink, flex: 1, minWidth: 240 }}>
+            <span style={{ fontFamily: sans, fontSize: 14, color: colors.ink, flex: 1, minWidth: 240 }}>
               New here? Open a worked example, with the files, rules and mapping already in place: an opening trial balance moving
               from Tally to Zoho Books, or an employee migration in its second mock.
             </span>
@@ -217,7 +217,7 @@ export default function MigrationsScreen(props) {
       <div style={{ ...panel, padding: 14, marginTop: 10, display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center' }}>
         <div style={{ flex: 1, minWidth: 240 }}>
           <div style={label}>Target rules</div>
-          <div style={{ fontFamily: sans, fontSize: 13.5, color: colors.ink, marginTop: 4 }}>
+          <div style={{ fontFamily: sans, fontSize: 14, color: colors.ink, marginTop: 4 }}>
             {rules.length > 0
               ? `${rules.length} rule${rules.length === 1 ? '' : 's'}${object.contract.name ? ` from “${object.contract.name}”` : ''}`
               : 'No rules yet — write them on Contracts, or load a contract file.'}
@@ -271,7 +271,7 @@ export default function MigrationsScreen(props) {
             require reading both extracts first. */}
         {spec.key.target.length <= 1 && files.load?.rowCount > 0 ? (
           <label style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-            <span style={{ fontFamily: sans, fontSize: 12.5, color: colors.mute }}>Each record is identified by</span>
+            <span style={{ fontFamily: sans, fontSize: 13, color: colors.mute }}>Each record is identified by</span>
             <select
               value={spec.key.target[0] ?? ''}
               onChange={(e) => onChange({ spec: { ...spec, key: { ...spec.key, target: [e.target.value] } } })}
@@ -286,7 +286,7 @@ export default function MigrationsScreen(props) {
             </span>
           </label>
         ) : (
-          <span style={{ fontFamily: sans, fontSize: 12.5, color: colors.faint }}>
+          <span style={{ fontFamily: sans, fontSize: 13, color: colors.faint }}>
             {targetKey.length > 0
               ? <>Records are named by <span style={{ fontFamily: mono }}>{targetKey.join(' + ')}</span>; blank and repeated keys are predicted rejections.</>
               : 'Read a load file, then choose the column that identifies each record.'}
@@ -309,7 +309,7 @@ export default function MigrationsScreen(props) {
           Check load readiness
         </button>
         {!(files.load?.rowCount > 0 && rules.length > 0) && (
-          <span style={{ fontFamily: sans, fontSize: 12.5, color: colors.faint }}>
+          <span style={{ fontFamily: sans, fontSize: 13, color: colors.faint }}>
             {rules.length === 0 && !(files.load?.rowCount > 0)
               ? 'Needs the target rules and a load file.'
               : rules.length === 0 ? 'Needs the target rules — write them on Contracts or load a contract file.' : 'Needs a load file.'}
@@ -322,7 +322,7 @@ export default function MigrationsScreen(props) {
       </>)}
 
       {step === 'setup' && (<>
-      <h3 style={{ fontFamily: sans, fontSize: 15, fontWeight: 650, color: colors.ink, margin: '26px 0 0' }}>The extracts to reconcile after the load</h3>
+      <h3 style={{ fontFamily: sans, fontSize: 14, fontWeight: 650, color: colors.ink, margin: '26px 0 0' }}>The extracts to reconcile after the load</h3>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 14, marginTop: 10 }}>
         <div>
@@ -373,7 +373,7 @@ export default function MigrationsScreen(props) {
             <div style={{ ...panel, padding: 14, marginTop: 10, display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center' }}>
               <div style={{ flex: 1, minWidth: 240 }}>
                 <div style={label}>Mapping</div>
-                <div style={{ fontFamily: sans, fontSize: 13.5, color: colors.ink, marginTop: 4 }}>
+                <div style={{ fontFamily: sans, fontSize: 14, color: colors.ink, marginTop: 4 }}>
                   Records matched on <span style={{ fontFamily: mono }}>{spec.key.source.filter(Boolean).join(' + ')} → {spec.key.target.filter(Boolean).join(' + ')}</span>
                   {` · ${spec.mapping.length} field${spec.mapping.length === 1 ? '' : 's'} compared · ${spec.totals.length} control total${spec.totals.length === 1 ? '' : 's'}`}
                   {spec.scope?.source?.column ? ' · some source records out of scope' : ''}
@@ -405,7 +405,7 @@ export default function MigrationsScreen(props) {
               Reconcile
             </button>
             {issues.length > 0 && (
-              <span style={{ fontFamily: sans, fontSize: 12.5, color: colors.faint, marginLeft: 12 }}>
+              <span style={{ fontFamily: sans, fontSize: 13, color: colors.faint, marginLeft: 12 }}>
                 Fix the {issues.length === 1 ? 'issue' : `${issues.length} issues`} in the mapping spec above first.
               </span>
             )}
@@ -458,7 +458,7 @@ export default function MigrationsScreen(props) {
           </label>
         )}
         {!evidenceReady && (
-          <span style={{ fontFamily: sans, fontSize: 12.5, color: colors.faint, marginLeft: 12 }}>
+          <span style={{ fontFamily: sans, fontSize: 13, color: colors.faint, marginLeft: 12 }}>
             {readiness || recon
               ? 'Every result has changed since it ran — run a check again to include it.'
               : 'Run a check first: only results that match the files on screen go in.'}
@@ -470,7 +470,7 @@ export default function MigrationsScreen(props) {
 
       {step === 'after' && (<>
       <NextStep onClick={() => setStep('signoff')}>Next: sign-off</NextStep>
-      <h3 style={{ fontFamily: sans, fontSize: 15, fontWeight: 650, color: colors.ink, margin: '30px 0 0' }}>Cycle by cycle</h3>
+      <h3 style={{ fontFamily: sans, fontSize: 14, fontWeight: 650, color: colors.ink, margin: '30px 0 0' }}>Cycle by cycle</h3>
       <p style={{ fontFamily: sans, fontSize: 13, color: colors.mute, margin: '4px 0 0' }}>Every check on this object, newest first, against the previous check of the same kind.</p>
       <CycleHistory rows={cycleHistory(object.runs)} />
       </>)}
@@ -526,13 +526,13 @@ function SensitiveFields({ tags, columns, onChange }) {
   return (
     <div style={{ ...panel, padding: 14, marginTop: 10 }}>
       <div style={label}>Sensitive fields</div>
-      <p style={{ fontFamily: sans, fontSize: 12.5, color: colors.mute, margin: '6px 0 10px', lineHeight: 1.5, maxWidth: 760 }}>
+      <p style={{ fontFamily: sans, fontSize: 13, color: colors.mute, margin: '6px 0 10px', lineHeight: 1.5, maxWidth: 760 }}>
         Tagged values are masked in the evidence pack, the fix list and exported findings. Tags are saved with the object — column
         names only, never a value. This supports the masking safeguard; it does not by itself make anyone DPDP compliant.
       </p>
       {proposals.length > 0 && (
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center', marginBottom: 10 }}>
-          <span style={{ fontFamily: sans, fontSize: 12.5, color: colors.ink }}>
+          <span style={{ fontFamily: sans, fontSize: 13, color: colors.ink }}>
             Suggested from the column names: {proposals.map((c) => `${c} (${suggestTag(c)})`).join(', ')}
           </span>
           <button onClick={() => onChange({ ...tags, ...Object.fromEntries(proposals.map((c) => [c, suggestTag(c)])) })} style={ghostButton}>
@@ -565,9 +565,9 @@ function Phase({ step, title, children }) {
     <div style={{ marginTop: 34 }}>
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}>
         <span style={{ fontFamily: mono, fontSize: 12, color: colors.accent }}>{step}</span>
-        <h2 style={{ fontFamily: sans, fontSize: 19, fontWeight: 650, color: colors.ink, margin: 0 }}>{title}</h2>
+        <h2 style={{ fontFamily: sans, fontSize: 16, fontWeight: 650, color: colors.ink, margin: 0 }}>{title}</h2>
       </div>
-      <p style={{ fontFamily: sans, fontSize: 13.5, lineHeight: 1.55, color: colors.mute, margin: '6px 0 0', maxWidth: 760 }}>{children}</p>
+      <p style={{ fontFamily: sans, fontSize: 14, lineHeight: 1.55, color: colors.mute, margin: '6px 0 0', maxWidth: 760 }}>{children}</p>
     </div>
   )
 }
@@ -595,7 +595,7 @@ function Notice({ notice }) {
       <div style={{ fontFamily: sans, fontSize: 13, color: colors.ink }}>{notice.text}</div>
       {notice.details?.length > 0 && (
         <ul style={{ margin: '6px 0 0', paddingLeft: 18 }}>
-          {notice.details.map((d) => <li key={d} style={{ fontFamily: sans, fontSize: 12.5, color: colors.mute }}>{d}</li>)}
+          {notice.details.map((d) => <li key={d} style={{ fontFamily: sans, fontSize: 13, color: colors.mute }}>{d}</li>)}
         </ul>
       )}
     </div>

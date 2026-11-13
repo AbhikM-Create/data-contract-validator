@@ -25,13 +25,13 @@ export default function Staircase({ layers, title = 'How far the file got', note
   return (
     <div style={{ ...panel, padding: '20px 22px 26px', marginTop: 16 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 12, flexWrap: 'wrap' }}>
-        <h2 style={{ fontFamily: sans, fontSize: 15, fontWeight: 600, color: colors.ink, margin: 0 }}>{title}</h2>
-        <span style={{ fontFamily: sans, fontSize: 12.5, color: colors.faint }}>
+        <h2 style={{ fontFamily: sans, fontSize: 14, fontWeight: 600, color: colors.ink, margin: 0 }}>{title}</h2>
+        <span style={{ fontFamily: sans, fontSize: 13, color: colors.faint }}>
           {note ?? 'Each check asks something the one before it cannot'}
         </span>
       </div>
 
-      <p style={{ fontFamily: sans, fontSize: 13.5, color: colors.mute, lineHeight: 1.55, margin: '8px 0 0', maxWidth: 700 }}>
+      <p style={{ fontFamily: sans, fontSize: 14, color: colors.mute, lineHeight: 1.55, margin: '8px 0 0', maxWidth: 700 }}>
         {caption(layers, firstFailure, passedAbove, subject)}
       </p>
 
@@ -79,7 +79,7 @@ function Step({ layer, index, isLead, isAboveFailure, drop }) {
         <div
           style={{
             position: 'absolute', top: -17, left: 0,
-            fontFamily: sans, fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', color: tone,
+            fontFamily: sans, fontSize: 12, fontWeight: 700, letterSpacing: '0.08em', color: tone,
           }}
         >
           CAUGHT HERE
@@ -102,15 +102,15 @@ function Step({ layer, index, isLead, isAboveFailure, drop }) {
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-          <span style={{ fontFamily: mono, fontSize: 10.5, color: colors.faint }}>{index + 1}</span>
-          <span style={{ fontFamily: sans, fontSize: 13.5, fontWeight: 600, color: colors.ink }}>{layer.label}</span>
+          <span style={{ fontFamily: mono, fontSize: 12, color: colors.faint }}>{index + 1}</span>
+          <span style={{ fontFamily: sans, fontSize: 14, fontWeight: 600, color: colors.ink }}>{layer.label}</span>
         </div>
 
         <div style={{ marginTop: 9 }}>
           <span style={chip(layer.status)}>{layer.status}</span>
         </div>
 
-        <p style={{ fontFamily: sans, fontSize: 11.5, lineHeight: 1.45, color: colors.faint, margin: 'auto 0 0' }}>
+        <p style={{ fontFamily: sans, fontSize: 12, lineHeight: 1.45, color: colors.faint, margin: 'auto 0 0' }}>
           {layer.status === 'FAIL'
             ? `${problems} problem${problems === 1 ? '' : 's'} found`
             : layer.status === 'SKIPPED'

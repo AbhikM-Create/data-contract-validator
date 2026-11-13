@@ -160,7 +160,7 @@ export default function RuleBuilder({ columns, onAdd, onCancel }) {
 
         {draft.kind === RULE_KINDS.UNIQUE && (
           <>
-            <span style={{ fontFamily: sans, fontSize: 12.5, color: colors.mute }}>together with</span>
+            <span style={{ fontFamily: sans, fontSize: 13, color: colors.mute }}>together with</span>
             <Select value={draft.extra1 ?? ''} onChange={(v) => set({ extra1: v, ...(v ? {} : { extra2: '' }) })} options={otherColumns.map((c) => ({ id: c, label: c }))} width={160} mono placeholder="(no other column)" label="second column" />
             {draft.extra1 && (
               <Select value={draft.extra2 ?? ''} onChange={(v) => set({ extra2: v })} options={otherColumns.filter((c) => c !== draft.extra1).map((c) => ({ id: c, label: c }))} width={160} mono placeholder="(no third column)" label="third column" />
@@ -179,7 +179,7 @@ export default function RuleBuilder({ columns, onAdd, onCancel }) {
       {draft.kind === RULE_KINDS.AGGREGATE && (
         <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8, marginTop: 10 }}>
           <Select value={draft.fn || 'sum'} onChange={(v) => set({ fn: v })} options={FN_OPTIONS} width={190} label="total" />
-          <span style={{ fontFamily: sans, fontSize: 12.5, color: colors.mute }}>must be</span>
+          <span style={{ fontFamily: sans, fontSize: 13, color: colors.mute }}>must be</span>
           <Select value={draft.op && draft.op !== 'in' ? draft.op : '='} onChange={(v) => set({ op: v })} options={COMPARISON_OPS} width={130} label="comparison" />
           <Select
             value={draft.targetIsColumn ? 'column' : 'number'}
@@ -192,7 +192,7 @@ export default function RuleBuilder({ columns, onAdd, onCancel }) {
             ? <Select value={draft.target} onChange={(v) => set({ target: v })} options={otherColumns.map((c) => ({ id: c, label: c }))} width={160} mono placeholder="pick a column" label="column to total against" />
             : <Field value={draft.target} onChange={(v) => set({ target: v })} placeholder="0" width={110} label="number" />}
           <Field value={draft.tolerance ?? ''} onChange={(v) => set({ tolerance: v })} placeholder="± 0" width={80} label="tolerance" />
-          <span style={{ fontFamily: sans, fontSize: 12.5, color: colors.mute }}>for</span>
+          <span style={{ fontFamily: sans, fontSize: 13, color: colors.mute }}>for</span>
           <Select value={draft.groupBy ?? ''} onChange={(v) => set({ groupBy: v })} options={otherColumns.map((c) => ({ id: c, label: `each ${c}` }))} width={170} mono placeholder="the whole file" label="group by" />
         </div>
       )}
@@ -206,7 +206,7 @@ export default function RuleBuilder({ columns, onAdd, onCancel }) {
 
       {draft.whenOn && (
         <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8, marginTop: 10, paddingLeft: 24 }}>
-          <span style={{ fontFamily: mono, fontSize: 11, color: colors.faint }}>WHEN</span>
+          <span style={{ fontFamily: mono, fontSize: 12, color: colors.faint }}>WHEN</span>
           <Select value={draft.when.column} onChange={(v) => setWhen({ column: v })} options={columns.map((c) => ({ id: c, label: c }))} width={172} mono label="condition column" />
           <Select
             value={draft.when.op}
@@ -227,8 +227,8 @@ export default function RuleBuilder({ columns, onAdd, onCancel }) {
       </div>
 
       <div style={{ marginTop: 14, padding: '10px 12px', background: colors.ground, border: `1px solid ${colors.panelEdge}`, borderRadius: 6 }}>
-        <div style={{ fontFamily: mono, fontSize: 10, color: colors.faint, letterSpacing: '0.06em' }}>THE RULE READS</div>
-        <div style={{ fontFamily: sans, fontSize: 13.5, color: issue ? colors.faint : colors.ink, marginTop: 6 }}>
+        <div style={{ fontFamily: mono, fontSize: 12, color: colors.faint, letterSpacing: '0.06em' }}>THE RULE READS</div>
+        <div style={{ fontFamily: sans, fontSize: 14, color: issue ? colors.faint : colors.ink, marginTop: 6 }}>
           {issue ? 'Not finished yet.' : describeRule(rule)}
         </div>
         {issue && <div style={{ fontFamily: sans, fontSize: 12, color: colors.warn, marginTop: 6 }}>{capitalise(issue)}.</div>}

@@ -33,7 +33,7 @@ export function publishFiles(dist = join(root, 'dist')) {
   const referenced = [...new Set(names.filter((name) => name.endsWith('.js'))
     .flatMap((name) => [...readFileSync(join(dist, name), 'utf8').matchAll(/["'`]((?:\.\/)?(?:assets\/)?app[\w.-]*\.js)["'`]/g)].map((m) => m[1].replace(/^\.\//, ''))))]
   const missing = referenced.filter((name) => !existsSync(join(dist, name)))
-  const html = `<title>Data Contract Validator</title>
+  const html = `<title>Plumbstep</title>
 
 <!--
   Publish wrapper for the Artifact host, which supplies its own

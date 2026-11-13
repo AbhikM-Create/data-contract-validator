@@ -42,7 +42,7 @@ export default function SavedContracts({ contracts, loading, openId, signedIn, e
       </div>
 
       {error && (
-        <p style={{ fontFamily: sans, fontSize: 12.5, color: colors.fail, lineHeight: 1.5, marginTop: 10 }}>{error}</p>
+        <p style={{ fontFamily: sans, fontSize: 13, color: colors.fail, lineHeight: 1.5, marginTop: 10 }}>{error}</p>
       )}
 
       {loading ? (
@@ -84,10 +84,10 @@ export default function SavedContracts({ contracts, loading, openId, signedIn, e
                   }}
                 >
                   <div style={{ flex: 1, minWidth: 180 }}>
-                    <div style={{ fontFamily: sans, fontSize: 13.5, fontWeight: open ? 650 : 500, color: colors.ink }}>
+                    <div style={{ fontFamily: sans, fontSize: 14, fontWeight: open ? 650 : 500, color: colors.ink }}>
                       {contract.name}
                     </div>
-                    <div style={{ fontFamily: sans, fontSize: 11.5, color: colors.faint, marginTop: 2 }}>
+                    <div style={{ fontFamily: sans, fontSize: 12, color: colors.faint, marginTop: 2 }}>
                       {contract.ruleCount} rule{contract.ruleCount === 1 ? '' : 's'} · saved {when(contract.updatedAt)}
                       {open ? ' · open' : ''}
                     </div>

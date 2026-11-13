@@ -24,8 +24,8 @@ export default function HistoryScreen({ runs = [], loading, error, signedIn, onR
           blurb="Every validation you run is recorded here — when it ran, which contract it used, which file it checked, and how each layer came out."
         />
         <div style={{ ...panel, padding: '24px 22px', marginTop: 20, maxWidth: 560 }}>
-          <div style={{ fontFamily: sans, fontSize: 14.5, fontWeight: 600, color: colors.ink }}>Sign in to keep a history</div>
-          <p style={{ fontFamily: sans, fontSize: 13.5, color: colors.mute, lineHeight: 1.6, marginTop: 8 }}>
+          <div style={{ fontFamily: sans, fontSize: 14, fontWeight: 600, color: colors.ink }}>Sign in to keep a history</div>
+          <p style={{ fontFamily: sans, fontSize: 14, color: colors.mute, lineHeight: 1.6, marginTop: 8 }}>
             Runs are saved to your account, so they need somewhere to belong. Signed out, checking a file still
             works — the result just lives as long as the page is open.
           </p>
@@ -56,11 +56,11 @@ export default function HistoryScreen({ runs = [], loading, error, signedIn, onR
         <p style={{ fontFamily: sans, fontSize: 13, color: colors.faint, marginTop: 18 }}>Loading your runs…</p>
       ) : runs.length === 0 ? (
         <div style={{ ...panel, padding: '24px 22px', marginTop: 20, maxWidth: 560 }}>
-          <div style={{ fontFamily: sans, fontSize: 14.5, fontWeight: 600, color: colors.ink }}>No runs yet</div>
-          <p style={{ fontFamily: sans, fontSize: 13.5, color: colors.mute, lineHeight: 1.6, marginTop: 8 }}>
+          <div style={{ fontFamily: sans, fontSize: 14, fontWeight: 600, color: colors.ink }}>No runs yet</div>
+          <p style={{ fontFamily: sans, fontSize: 14, color: colors.mute, lineHeight: 1.6, marginTop: 8 }}>
             Check a file and it appears here, with the verdict and the layer that caught it.
           </p>
-          <button onClick={() => go('validate')} style={{ ...secondaryButton, marginTop: 14 }}>Validate a file</button>
+          <button onClick={() => go('validate')} style={{ ...secondaryButton, marginTop: 14 }}>Monitor a feed</button>
         </div>
       ) : (
         <>
@@ -135,14 +135,14 @@ export default function HistoryScreen({ runs = [], loading, error, signedIn, onR
                       borderTop: index === 0 ? 'none' : `1px solid ${colors.panelEdge}`,
                     }}
                   >
-                    <span style={{ fontFamily: mono, fontSize: 11.5, color: colors.faint }}>{when(run.ran_at)}</span>
-                    <span style={{ fontFamily: mono, fontSize: 12.5, color: colors.ink, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    <span style={{ fontFamily: mono, fontSize: 12, color: colors.faint }}>{when(run.ran_at)}</span>
+                    <span style={{ fontFamily: mono, fontSize: 13, color: colors.ink, overflow: 'hidden', textOverflow: 'ellipsis' }}>
                       {run.candidate_name}
                     </span>
-                    <span style={{ fontFamily: sans, fontSize: 12.5, color: colors.mute, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    <span style={{ fontFamily: sans, fontSize: 13, color: colors.mute, overflow: 'hidden', textOverflow: 'ellipsis' }}>
                       {run.contract_name ?? '—'}
                     </span>
-                    <span style={{ fontFamily: sans, fontSize: 12.5, color: lead ? colors.ink : colors.faint }}>
+                    <span style={{ fontFamily: sans, fontSize: 13, color: lead ? colors.ink : colors.faint }}>
                       {lead ? layerLabel(lead) : '—'}
                     </span>
                     <span style={{ textAlign: 'right' }}>
@@ -194,7 +194,7 @@ function RunDetail({ run }) {
               <li
                 key={`${finding.code}-${finding.column}-${i}`}
                 style={{
-                  fontFamily: mono, fontSize: 11, color: colors.mute,
+                  fontFamily: mono, fontSize: 12, color: colors.mute,
                   background: colors.panel, border: `1px solid ${colors.panelEdge}`,
                   borderRadius: 4, padding: '4px 8px',
                 }}
@@ -205,7 +205,7 @@ function RunDetail({ run }) {
           </ul>
           {/* Said plainly, because someone will wonder why this is thinner than
               the live report was. */}
-          <p style={{ fontFamily: sans, fontSize: 11.5, color: colors.faint, lineHeight: 1.5, marginTop: 10, maxWidth: 620 }}>
+          <p style={{ fontFamily: sans, fontSize: 12, color: colors.faint, lineHeight: 1.5, marginTop: 10, maxWidth: 620 }}>
             A saved run records what was found and where — never the values themselves. The figures in the live
             report stayed in your browser. Check the file again to see them.
           </p>
@@ -227,7 +227,7 @@ function Tile({ name, value, detail, tone, small }) {
       >
         {value}
       </div>
-      <div style={{ fontFamily: sans, fontSize: 11.5, color: colors.faint, marginTop: 4 }}>{detail}</div>
+      <div style={{ fontFamily: sans, fontSize: 12, color: colors.faint, marginTop: 4 }}>{detail}</div>
     </div>
   )
 }

@@ -20,7 +20,7 @@ export default function ReconReport({ report, stale, onExport, owners }) {
   return (
     <div style={{ marginTop: 18 }}>
       <span style={chip(report.status)}>{report.status === 'PASS' ? 'RECONCILED' : 'PROBLEM FOUND'}</span>
-      <h3 style={{ fontFamily: sans, fontSize: 20, fontWeight: 650, color: colors.ink, margin: '8px 0 0' }}>{report.headline}</h3>
+      <h3 style={{ fontFamily: sans, fontSize: 22, fontWeight: 650, color: colors.ink, margin: '8px 0 0' }}>{report.headline}</h3>
       {stale && (
         <p style={{ fontFamily: sans, fontSize: 13, color: colors.warn, margin: '6px 0 0' }}>
           The spec or the files have changed since this ran — reconcile again to see the current answer.
@@ -52,9 +52,9 @@ export default function ReconReport({ report, stale, onExport, owners }) {
 function Figure({ label: title, value, note }) {
   return (
     <div style={{ ...panel, padding: '9px 12px', minWidth: 128 }}>
-      <div style={{ fontFamily: sans, fontSize: 11.5, color: colors.faint }}>{title}</div>
-      <div style={{ fontFamily: mono, fontSize: 17, color: colors.ink, marginTop: 3 }}>{value}</div>
-      {note && <div style={{ fontFamily: sans, fontSize: 11, color: colors.faint, marginTop: 2 }}>{note}</div>}
+      <div style={{ fontFamily: sans, fontSize: 12, color: colors.faint }}>{title}</div>
+      <div style={{ fontFamily: mono, fontSize: 16, color: colors.ink, marginTop: 3 }}>{value}</div>
+      {note && <div style={{ fontFamily: sans, fontSize: 12, color: colors.faint, marginTop: 2 }}>{note}</div>}
     </div>
   )
 }
@@ -64,16 +64,16 @@ function StepCard({ step, index, isLead, report, onExport, owner }) {
   return (
     <section style={{ ...panel, borderColor: isLead ? `${tone}88` : colors.panelEdge, padding: '14px 16px', marginTop: 10 }}>
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap' }}>
-        <span style={{ fontFamily: mono, fontSize: 11, color: colors.faint }}>{index + 1}</span>
+        <span style={{ fontFamily: mono, fontSize: 12, color: colors.faint }}>{index + 1}</span>
         <h4 style={{ fontFamily: sans, fontSize: 16, fontWeight: 600, color: colors.ink, margin: 0 }}>{step.label}</h4>
         <span style={{ fontFamily: sans, fontSize: 13, color: colors.faint, flex: 1, minWidth: 180 }}>{step.question}</span>
         <span style={chip(step.status)}>{step.status}</span>
       </div>
       {step.status === 'PASS' && (
-        <p style={{ fontFamily: sans, fontSize: 13.5, color: colors.mute, margin: '10px 0 0' }}>Nothing wrong here — on this step, the load matches its source.</p>
+        <p style={{ fontFamily: sans, fontSize: 14, color: colors.mute, margin: '10px 0 0' }}>Nothing wrong here — on this step, the load matches its source.</p>
       )}
       {step.status === 'SKIPPED' && step.reason && (
-        <p style={{ fontFamily: sans, fontSize: 13.5, color: colors.mute, margin: '10px 0 0' }}>{step.reason}</p>
+        <p style={{ fontFamily: sans, fontSize: 14, color: colors.mute, margin: '10px 0 0' }}>{step.reason}</p>
       )}
       {/* Which step caught it says whose fix it is (v3 §5.4). */}
       {step.status === 'FAIL' && owner && (
@@ -94,10 +94,10 @@ function Finding({ finding, tone, report, onExport }) {
   return (
     <div style={{ background: colors.panelSunk, border: `1px solid ${colors.panelEdge}`, borderLeft: `2px solid ${tone}`, borderRadius: 6, padding: '10px 12px', marginTop: 10 }}>
       <div style={{ display: 'flex', gap: 8, alignItems: 'baseline', flexWrap: 'wrap' }}>
-        <span style={{ fontFamily: mono, fontSize: 11, color: tone }}>{finding.code}</span>
-        {finding.column && <span style={{ fontFamily: mono, fontSize: 11, color: colors.accent }}>{finding.column}</span>}
+        <span style={{ fontFamily: mono, fontSize: 12, color: tone }}>{finding.code}</span>
+        {finding.column && <span style={{ fontFamily: mono, fontSize: 12, color: colors.accent }}>{finding.column}</span>}
       </div>
-      <p style={{ fontFamily: sans, fontSize: 13.5, lineHeight: 1.55, color: colors.ink, margin: '6px 0 0' }}>{finding.message}</p>
+      <p style={{ fontFamily: sans, fontSize: 14, lineHeight: 1.55, color: colors.ink, margin: '6px 0 0' }}>{finding.message}</p>
 
       {table && (
         <>
