@@ -30,9 +30,13 @@ Prepared 11 Nov 2026 (final-spec C8). **Nothing has been pushed or published.**
 
 ## Before hosting a build with accounts
 
-`supabase/schema.sql` gained the `migration_objects` table (12 Nov 2026). It is
+`supabase/schema.sql` gained the `migration_objects` table and, for
+organisations, `organisations`, `memberships`, `invitations`, the functions
+`role_in`, `accept_invitations` and two triggers (12 Nov 2026). It is
 idempotent: run the whole file again in the project's SQL editor. Until it has
-run, "Save to account" says the table does not exist yet.
+run, "Save to account" and the Organisation screen say the tables do not exist
+yet. Invitations are accepted on sign-in by email: the project's sign-up must
+confirm emails, or anyone could claim an invited address.
 
 ## Steps
 

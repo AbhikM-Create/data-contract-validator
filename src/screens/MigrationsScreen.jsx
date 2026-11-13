@@ -39,6 +39,7 @@ export default function MigrationsScreen(props) {
     onReconcile, onCheckReadiness, onDownloadFixList, onExportFinding,
     onUseSessionRules, onEditRules, onLoadContract, onDownloadEvidence, onFormat, onWorkbook, unmask, onUnmask, onColumnMap, onShare, tour, onTour,
     signedIn, savedObjects = [], objectsLoading, cloudId, onSaveToAccount, onOpenFromAccount, onDeleteFromAccount,
+    organisations = [], orgId, onOrgId,
   } = props
   // Column matching: what the definitions read from each file, and which of
   // the file's columns stands for it (columnMap.js).
@@ -155,9 +156,15 @@ export default function MigrationsScreen(props) {
           <input ref={openInput} type="file" accept=".json,application/json" style={{ display: 'none' }} onChange={(e) => { if (e.target.files?.[0]) onOpenFile(e.target.files[0]); e.target.value = '' }} />
           <button onClick={() => openInput.current?.click()} style={secondaryButton}>Open a file</button>
           <button onClick={onDownload} style={secondaryButton}>Download{dirty ? ' · unsaved changes' : ''}</button>
+          {signedIn && organisations.length > 0 && (
+            <select aria-label="save to" value={orgId ?? ''} onChange={(e) => onOrgId(e.target.value || null)} title="A personal object is yours alone; an organisation’s is shared with its members" style={{ ...field(200), cursor: 'pointer' }}>
+              <option value="">Just me</option>
+              {organisations.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
+            </select>
+          )}
           {signedIn && (
             <button onClick={onSaveToAccount} disabled={empty} title="Keeps this object’s rules, mapping and run counts in your account — never a record from your files" style={{ ...secondaryButton, opacity: empty ? 0.45 : 1, cursor: empty ? 'default' : 'pointer' }}>
-              {cloudId ? 'Save to account' : 'Save to account'}
+              Save to account
             </button>
           )}
           <button onClick={onShare} disabled={empty} title="A copy safe to send: definitions and counts, no file names, no key maps, no sign-off" style={{ ...secondaryButton, opacity: empty ? 0.45 : 1, cursor: empty ? 'default' : 'pointer' }}>Share definitions</button>

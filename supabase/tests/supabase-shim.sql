@@ -3,8 +3,8 @@
 --
 --   * roles `anon` and `authenticated` — every request runs as one of them
 --   * `auth.users` — the accounts a row's user_id refers to
---   * `auth.uid()` — the signed-in user, read from the request's JWT claims,
---     exactly as Supabase defines it
+--   * `auth.uid()` and `auth.email()` — the signed-in user, read from the
+--     request's JWT claims, as Supabase defines them
 --   * the default grants Supabase gives both roles on public tables, so that
 --     RLS, not a missing GRANT, is what the tests exercise
 --
@@ -18,7 +18,7 @@ create role authenticated nologin;
 create schema auth;
 grant usage on schema auth to anon, authenticated;
 
-create table auth.users (id uuid primary key);
+create table auth.users (id uuid primary key, email text);
 
 create function auth.uid() returns uuid
 language sql stable
@@ -28,6 +28,12 @@ as $$
              (current_setting('request.jwt.claims', true)::jsonb ->> 'sub')),
     ''
   )::uuid
+$$;
+
+create function auth.email() returns text
+language sql stable
+as $$
+  select nullif(current_setting('request.jwt.claim.email', true), '')
 $$;
 
 grant usage on schema public to anon, authenticated;
