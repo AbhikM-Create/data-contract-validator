@@ -1,12 +1,15 @@
 import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join, normalize } from 'node:path'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { PACKS } from '../src/packs/index.js'
 import { NEVER_CLAIM } from '../src/lib/signoff.js'
+import { describeRule } from '../src/lib/rules.js'
+import { USAGE as CHECK_USAGE } from '../cli/check.mjs'
+import { USAGE as RECONCILE_USAGE } from '../cli/reconcile.mjs'
 import { buildSite, PAGES } from './build-site.mjs'
 
-// The marketing site (brand Phase B): every page builds, every link inside the
+// The marketing site (brand Phases B and C, the docs under docs/): every page builds, every link inside the
 // site lands on a file that exists, no page runs a script or reaches another
 // origin, and no page claims what the sign-off record may never claim.
 
@@ -49,8 +52,11 @@ describe('the marketing site', () => {
           expect(doc, `${file} → ${href}`).toContain(`id="${href.slice(1)}"`)
           continue
         }
-        if (href.startsWith('app/')) continue // the app, copied in by the real build
-        expect(existsSync(join(out, href.split('#')[0])), `${file} → ${href}`).toBe(true)
+        const target = normalize(join(dirname(file), href.split('#')[0]))
+        if (target.split(/[\\/]/)[0] === 'app') continue // the app, copied in by the real build
+        expect(existsSync(join(out, target)), `${file} → ${href}`).toBe(true)
+        const anchor = href.split('#')[1]
+        if (anchor) expect(readFileSync(join(out, target), 'utf8'), `${file} → ${href}`).toContain(`id="${anchor}"`)
       }
     }
     for (const font of ['Geist.woff2', 'GeistMono.woff2', 'OFL.txt']) expect(existsSync(join(out, 'assets', 'fonts', font))).toBe(true)
@@ -82,5 +88,38 @@ describe('the marketing site', () => {
     } finally {
       rmSync(site, { recursive: true, force: true })
     }
+  })
+
+  it('the pack reference states every rule, header and crosswalk entry the pack holds, in the engine’s words', () => {
+    for (const pack of PACKS) {
+      const page = text(html[`docs/pack-${pack.id}.html`])
+      expect(page).toContain(pack.status === 'draft' ? 'Draft — not yet run on real exports' : 'Verified')
+      for (const object of pack.objects) {
+        for (const rule of object.contract?.rules ?? []) {
+          // A rule whose target is a parameter reads as the parameter's name.
+          const sentence = describeRule(rule).replace(/\{\{\w+\}\}.*$/, '')
+          expect(page, `${pack.id}/${object.id}`).toContain(text(sentence.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c])).trim())
+        }
+        for (const header of Object.values(object.columns ?? {}).flat()) expect(page).toContain(text(header.replace(/&/g, '&amp;').replace(/'/g, '&#39;')))
+        for (const field of object.spec?.mapping ?? []) for (const [from, to] of Object.entries(field.map ?? {})) {
+          expect(page).toContain(text(from.replace(/&/g, '&amp;').replace(/'/g, '&#39;')))
+          expect(page).toContain(text(to.replace(/&/g, '&amp;').replace(/'/g, '&#39;')))
+        }
+      }
+      expect(page).not.toContain('{{')
+    }
+  })
+
+  it('the command-line page prints each command’s own usage line, and says the npm release is not out yet', () => {
+    const page = html['docs/cli.html']
+    for (const usage of [CHECK_USAGE, RECONCILE_USAGE]) expect(page).toContain(usage.replace(/</g, '&lt;').replace(/>/g, '&gt;'))
+    expect(text(page)).toMatch(/first release to the public npm registry has not been made yet/)
+  })
+
+  it('the legal pages are shells that say so, and promise nothing', () => {
+    const page = text(html['docs/legal.html'])
+    expect(page.match(/Not yet written/g)).toHaveLength(3)
+    expect(page).toMatch(/nothing on this site is a binding term/)
+    expect(page).not.toMatch(/(we|you) (shall|agree|warrant)/i)
   })
 })

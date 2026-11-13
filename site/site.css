@@ -187,3 +187,33 @@ ul.plain.spaced { margin-top: 16px; }
   .nav { order: 3; width: 100%; flex-wrap: nowrap; overflow-x: auto; margin-left: -10px; }
   .nav a { white-space: nowrap; }
 }
+
+/* Docs (Phase C) */
+.subnav { background: var(--panel); border-bottom: 1px solid var(--edge); }
+.subnav .wrap { display: flex; gap: 2px; overflow-x: auto; }
+.subnav a { color: var(--mute); text-decoration: none; font-size: 14px; font-weight: 500; padding: 12px 10px; white-space: nowrap; border-bottom: 2px solid transparent; }
+.subnav a:hover { color: var(--ink); }
+.subnav a[aria-current='page'] { color: var(--ink); border-bottom-color: var(--teal); font-weight: 650; }
+.docs-hero { padding-block: 48px 40px !important; }
+.table-title { margin-top: 32px; }
+.table-title + .table-wrap { margin-top: 12px; }
+td.mono-cell { font-family: var(--mono); font-size: 13px; }
+pre.code { background: var(--night); color: var(--night-text); border-radius: 10px; padding: 16px 18px; overflow-x: auto; margin: 16px 0 0; font-size: 13px; line-height: 1.7; }
+pre.code code { font-size: 13px; white-space: pre; }
+.command + .command { margin-top: 32px; }
+.command h3 { margin-top: 24px; }
+.command p { color: var(--mute); margin-top: 8px; max-width: 70ch; }
+dl.glossary { display: grid; grid-template-columns: minmax(160px, 240px) 1fr; gap: 12px 24px; margin: 24px 0 0; }
+dl.glossary dt { font-weight: 650; }
+dl.glossary dd { margin: 0; color: var(--mute); max-width: 70ch; }
+dl.glossary.guide { margin-top: 16px; }
+.toc ul { list-style: none; padding: 0; margin: 16px 0 0; display: flex; flex-wrap: wrap; gap: 8px; }
+.toc a { display: inline-block; padding: 6px 12px; border: 1px solid var(--edge); border-radius: 999px; background: var(--panel); text-decoration: none; font-size: 14px; }
+.toc a:hover { border-color: var(--teal); }
+.pack h2 + .intro { margin-top: 8px; }
+.change + .change { margin-top: 32px; }
+.change h2 { font-size: 22px; margin-bottom: 10px; }
+@media (max-width: 760px) {
+  dl.glossary { grid-template-columns: minmax(0, 1fr); gap: 4px; }
+  dl.glossary dd { margin-bottom: 10px; }
+}

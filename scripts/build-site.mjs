@@ -15,6 +15,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url'
 import { PACKS } from '../src/packs/index.js'
 import { SENSITIVITIES } from '../src/lib/masking.js'
 import { DEFAULT_OWNERS, STATEMENT_OF_CLAIM } from '../src/lib/signoff.js'
+import { docsBody, DOCS_PAGES, packReferenceFile } from './site-docs.mjs'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const pkg = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'))
@@ -30,9 +31,11 @@ export const PAGES = [
   { file: 'packs.html', nav: 'Packs', title: 'Packs — Plumbstep', description: 'Ready-made checks for a source → target path: Tally to Zoho Books, and mid-year payroll to Zoho Payroll.' },
   { file: 'security.html', nav: 'Security and privacy', title: 'Security and privacy — Plumbstep', description: 'What Plumbstep reads, what it keeps, and what never leaves your computer.' },
   { file: 'pricing.html', nav: 'Pricing', title: 'Pricing — Plumbstep', description: 'Free while in pilot.' },
-]
+  { file: 'docs/index.html', nav: 'Docs', navFor: 'docs/' },
+  ...DOCS_PAGES.filter((p) => p.file !== 'docs/index.html'),
+].map((page) => ({ ...DOCS_PAGES.find((d) => d.file === page.file), ...page }))
 
-const APP = 'app/'
+const APP = 'app/' // from a page at the root
 const MARK = (inverse = false) => {
   const ink = inverse ? '#F4F6F8' : '#16222B'
   const plumb = inverse ? '#5AAECB' : '#1F6F8B'
@@ -42,8 +45,17 @@ const MARK = (inverse = false) => {
 // Scripts none; styles and fonts from this origin; images only the inline mark.
 const CSP = "default-src 'none'; style-src 'self'; font-src 'self'; img-src 'self'; base-uri 'none'; form-action 'none'"
 
+// A box that can scroll sideways (a wide table, a long command) must take
+// keyboard focus, or a keyboard user cannot scroll it (WCAG 2.1.1).
+const focusable = (body) => body.replaceAll('<div class="table-wrap">', '<div class="table-wrap" tabindex="0">').replaceAll('<pre class="code">', '<pre class="code" tabindex="0">')
+
 function layout(page, body) {
-  const nav = PAGES.filter((p) => p.nav).map((p) => `<a href="${p.file}"${p.file === page.file ? ' aria-current="page"' : ''}>${h(p.nav)}</a>`).join('')
+  // Pages under docs/ reach the root through ../ — every link stays relative,
+  // so the site works from any folder or path prefix.
+  const up = '../'.repeat(page.file.split('/').length - 1)
+  const current = (p) => p.file === page.file || (p.navFor && page.file.startsWith(p.navFor))
+  const nav = PAGES.filter((p) => p.nav).map((p) => `<a href="${up}${p.file}"${current(p) ? ' aria-current="page"' : ''}>${h(p.nav)}</a>`).join('')
+  const APP = `${up}app/`
   return `<!doctype html>
 <html lang="en-IN">
 <head>
@@ -54,29 +66,30 @@ function layout(page, body) {
 <title>${h(page.title)}</title>
 <meta name="description" content="${h(page.description)}">
 <meta name="theme-color" content="#16222B">
-<link rel="icon" href="favicon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="site.css">
+<link rel="icon" href="${up}favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="${up}site.css">
 </head>
 <body>
 <a class="skip" href="#main">Skip to the content</a>
 <header class="bar"><div class="wrap">
-<a class="brand" href="index.html" aria-label="Plumbstep home">${MARK()}<span>Plumbstep</span></a>
+<a class="brand" href="${up}index.html" aria-label="Plumbstep home">${MARK()}<span>Plumbstep</span></a>
 <nav class="nav" aria-label="Site">${nav}</nav>
 <span class="spacer"></span>
 <a class="btn primary small" href="${APP}">Open the workspace</a>
 </div></header>
 <main id="main">
-${body}
+${focusable(body)}
 </main>
 <footer><div class="wrap">
 <div>
-<a class="brand" href="index.html" aria-label="Plumbstep home">${MARK()}<span>Plumbstep</span></a>
-<p class="fine">Files stay on your device. Plumbstep proves a load; it never performs one. The open-source engine and the <code>dcv</code> command are published as <code>data-contract-validator</code>.</p>
+<a class="brand" href="${up}index.html" aria-label="Plumbstep home">${MARK()}<span>Plumbstep</span></a>
+<p class="fine">Files stay on your device. Plumbstep proves a load; it never performs one. The engine, the app and the <code>dcv</code> command are open source under Apache-2.0, as <code>data-contract-validator</code>.</p>
 </div>
 <div class="cols">
-<div><h3>Product</h3><ul><li><a href="${APP}">Open the workspace</a></li><li><a href="packs.html">Packs</a></li><li><a href="pricing.html">Pricing</a></li></ul></div>
-<div><h3>Who it is for</h3><ul><li><a href="partners.html">Implementation partners</a></li><li><a href="teams.html">Finance and HR teams</a></li></ul></div>
-<div><h3>Trust</h3><ul><li><a href="security.html">Security and privacy</a></li><li><a href="${REPO}">Source code</a></li><li><a href="${ISSUES}">Report a problem</a></li></ul></div>
+<div><h3>Product</h3><ul><li><a href="${APP}">Open the workspace</a></li><li><a href="${up}packs.html">Packs</a></li><li><a href="${up}pricing.html">Pricing</a></li></ul></div>
+<div><h3>Docs</h3><ul><li><a href="${up}docs/index.html">Help centre</a></li><li><a href="${up}docs/cli.html">Command line</a></li><li><a href="${up}docs/changelog.html">Changelog</a></li></ul></div>
+<div><h3>Who it is for</h3><ul><li><a href="${up}partners.html">Implementation partners</a></li><li><a href="${up}teams.html">Finance and HR teams</a></li></ul></div>
+<div><h3>Trust</h3><ul><li><a href="${up}security.html">Security and privacy</a></li><li><a href="${up}docs/legal.html">Legal</a></li><li><a href="${REPO}">Source code</a></li><li><a href="${ISSUES}">Report a problem</a></li></ul></div>
 </div>
 </div></footer>
 </body>
@@ -184,6 +197,7 @@ function packsPage() {
 <div class="pack-head"><div><h2>${h(pack.name)}</h2><p class="path">${h(pack.path.source)} → ${h(pack.path.target)} · <code>${h(pack.id)}</code> v${h(pack.version)}</p></div>
 <span class="chip ${draft ? 'draft' : 'pass'}">${draft ? 'Draft — not yet run on real exports' : `Verified ${h(pack.verified?.date ?? '')}`}</span></div>
 <div class="objects">${objects}</div>
+<p class="note"><a href="${packReferenceFile(pack)}">Every column, rule and mapping in this pack</a></p>
 ${pack.toConfirm?.length ? `<details><summary>To confirm with the first pilot (${pack.toConfirm.length})</summary><ul class="plain">${pack.toConfirm.map((t) => `<li>${h(t)}</li>`).join('')}</ul></details>` : ''}
 ${pack.sources?.length ? `<details><summary>Where the target’s values come from (${pack.sources.length})</summary><ul class="plain">${pack.sources.map((s) => `<li><a href="${h(s.url)}">${h(s.what)}</a>, read ${h(s.read)}</li>`).join('')}</ul></details>` : ''}
 </article>`
@@ -264,7 +278,8 @@ const BODIES = { 'index.html': home, 'partners.html': partners, 'teams.html': te
 export function buildSite({ out, app = null }) {
   rmSync(out, { recursive: true, force: true })
   mkdirSync(join(out, 'assets', 'fonts'), { recursive: true })
-  for (const page of PAGES) writeFileSync(join(out, page.file), layout(page, BODIES[page.file]()))
+  mkdirSync(join(out, 'docs'), { recursive: true })
+  for (const page of PAGES) writeFileSync(join(out, page.file), layout(page, BODIES[page.file] ? BODIES[page.file]() : docsBody(page, { ISSUES, REPO })))
   cpSync(join(root, 'site', 'site.css'), join(out, 'site.css'))
   cpSync(join(root, 'public', 'favicon.svg'), join(out, 'favicon.svg'))
   for (const font of ['Geist.woff2', 'GeistMono.woff2', 'OFL.txt']) cpSync(join(root, 'src', 'fonts', font), join(out, 'assets', 'fonts', font))
