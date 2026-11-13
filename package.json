@@ -65,6 +65,7 @@
     "verify:package": "node scripts/verify-package.mjs",
     "publish:files": "node scripts/publish-files.mjs",
     "build:site": "node scripts/build-site.mjs",
+    "publish:site": "node scripts/publish-site.mjs",
     "test:e2e": "playwright test"
   },
   "dependencies": {

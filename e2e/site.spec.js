@@ -53,5 +53,5 @@ test('the bar marks the page you are on, and the home link goes home', async ({ 
   await expect(page.getByRole('navigation', { name: 'Site' }).getByRole('link', { name: 'Packs' })).toHaveAttribute('aria-current', 'page')
   await page.getByRole('banner').getByRole('link', { name: 'Plumbstep home' }).click()
   await expect(page).toHaveURL(`${ORIGIN}/index.html`)
-  await expect(page.getByRole('link', { name: 'Open the workspace' }).first()).toHaveAttribute('href', 'app/')
+  await expect(page.getByRole('link', { name: 'Open the workspace' }).first()).toHaveAttribute('href', 'app/index.html')
 })

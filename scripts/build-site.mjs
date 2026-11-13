@@ -35,7 +35,9 @@ export const PAGES = [
   ...DOCS_PAGES.filter((p) => p.file !== 'docs/index.html'),
 ].map((page) => ({ ...DOCS_PAGES.find((d) => d.file === page.file), ...page }))
 
-const APP = 'app/' // from a page at the root
+// The app's page by name: a host given a file list (the Artifact host) may not
+// serve a folder's index.
+const APP = 'app/index.html' // from a page at the root
 const MARK = (inverse = false) => {
   const ink = inverse ? '#F4F6F8' : '#16222B'
   const plumb = inverse ? '#5AAECB' : '#1F6F8B'
@@ -55,7 +57,7 @@ function layout(page, body) {
   const up = '../'.repeat(page.file.split('/').length - 1)
   const current = (p) => p.file === page.file || (p.navFor && page.file.startsWith(p.navFor))
   const nav = PAGES.filter((p) => p.nav).map((p) => `<a href="${up}${p.file}"${current(p) ? ' aria-current="page"' : ''}>${h(p.nav)}</a>`).join('')
-  const APP = `${up}app/`
+  const APP = `${up}app/index.html`
   return `<!doctype html>
 <html lang="en-IN">
 <head>

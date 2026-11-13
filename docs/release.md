@@ -97,7 +97,9 @@ HTTP header there (it cannot be set from a `<meta>` tag).
 
 For the site: `npm run build:site` after `npm run build` writes `dist-site/` — the
 marketing pages at the root, the docs and trust pages under `docs/`, and the app under
-`app/` — to serve as one static site.
+`app/` — to serve as one static site. On the Artifact host: `npm run publish:site` writes
+`dist-site/artifact-entry.html` and prints the files to publish beside it; publish them to
+the site's existing artifact URL (CLAUDE.md names it).
 
 For the Artifact page: `npm run publish:files` rewrites `publish/artifact.html` from the
 build and prints the files to publish beside it — `app.js` and `app-worker.js`.

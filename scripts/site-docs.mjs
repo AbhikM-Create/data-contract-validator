@@ -91,7 +91,7 @@ function helpCentre() {
 <div class="card"><span class="num">Step 3 · After the load</span><h3>Did every record arrive?</h3><p>Open the target extract and reconcile. Each run is kept with its counts, so mock 2 can be set beside mock 1.</p></div>
 <div class="card"><span class="num">Step 4 · Sign-off</span><h3>Decide, and keep the record</h3><p>Record a decision and an owner for every difference, state what was out of scope, type the signers’ names, and download the evidence pack.</p></div>
 </div>
-<p class="note">Try it on invented files first: the workspace’s home page opens a finance example, Tally to Zoho Books, with a checklist beside it. <a href="../app/">Open the workspace</a>.</p>
+<p class="note">Try it on invented files first: the workspace’s home page opens a finance example, Tally to Zoho Books, with a checklist beside it. <a href="../app/index.html">Open the workspace</a>.</p>
 </div></section>
 <section><div class="wrap">
 <h2 id="reading-a-report">Reading a report: the staircase</h2>
