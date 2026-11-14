@@ -137,6 +137,39 @@ not an extension of it.
 - `normalizeSpec` is idempotent (a crosswalk Map normalised twice once emptied).
 - A crosswalk mapping one legacy value two ways is refused whole.
 
+## Change contracts — was this change allowed? (engine only, from 14 Nov 2026)
+`changeContract.js`. A CHANGE CONTRACT declares, before a bulk change, what
+may change; a CHANGE CHECK reads a before and an after file, matches records by
+key, and sorts every difference. Design and decisions:
+`docs/strategy/11-change-contracts-design.md` (local, not in git).
+- A column the contract does not name is PRESERVED (`others: 'preserve'`, the
+  default): forgetting a column can never let it change silently. Columns in
+  one file only are listed in `notChecked`, never passed.
+- Policies per field: `preserve`, `free`, `oneOf` (values or a reference),
+  `map` (crosswalk), `bounded` (direction, absolute and % limits), `asApproved`;
+  qualifiers `onlyFor: 'approved'` and `when` (judged on the BEFORE record;
+  where it does not hold, the field is preserved). `added`/`removed` default to
+  `none`; `any` and `listed` (the approved file) are declared.
+- Six steps as a descent — keys, coverage, permitted fields, limits,
+  approvals, totals — each naming whose fix (`CHANGE_OWNERS`). Statuses:
+  ALLOWED, NOT_ALLOWED, UNVERIFIED, INVALID. A missing approved file, change
+  log or reference makes its checks UNCHECKED and the result UNVERIFIED —
+  never passed. An unreadable or blank value under `bounded` is `unverified`,
+  never within limits. One fault, one finding: a missed approval reported at
+  the field is not reported again for the record.
+- Same three-part form as `createReconciliation` (observe, joinPartition,
+  finish), so streaming can follow without a rewrite. It reuses
+  reconciliation's `keyOf`, `valuesAgree`, `translate` and `keepFirst`
+  (exported for it; behaviour unchanged).
+- A reconciliation IS a change contract (`toChangeContract`: mapped fields
+  preserved or mapped, nothing added or removed, `others: 'ignore'`).
+  `changeContract.test.js` holds both engines to equal field and join counts on
+  the employee and trial-balance samples, and was seen to fail when the
+  crosswalk was dropped. Reconciliation may become a view over change checks
+  only on that proof.
+- Not yet built: streaming, `dcv change`, the workspace, custody labels
+  (self-checked), the evidence-pack section, grouped totals.
+
 ## Load readiness — will the target accept the file?
 A view over `createRuleChecker`, never a second evaluator. Counts RECORDS: a
 record broken by three rules is one rejection with three reasons. With a key,
