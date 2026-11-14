@@ -1,5 +1,5 @@
 import { DISPOSITIONS, IDENTITY_FIELDS, OWNER_STEPS, SIGNATORIES, decisionFor, emptySignoff, exceptionsFor, ownersOf } from '../lib/signoff.js'
-import { colors, label, mono, panel, sans } from '../theme.js'
+import { colors, label, mono, panel, sans, tint } from '../theme.js'
 
 // The cutover sign-off record (v3 §5.3), filled in where the checks are. What
 // is typed here is saved with the object — names, dates, decisions, reasons —
@@ -25,7 +25,7 @@ export default function SignoffForm({ object, files, readiness, recon, onChange 
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
         <div style={label}>Sign-off record</div>
         {exceptions.length > 0 && (
-          <span style={{ fontFamily: sans, fontSize: 12, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', borderRadius: 6, padding: '3px 8px', color: decided === exceptions.length ? colors.ink : colors.warn, background: decided === exceptions.length ? 'rgba(22,34,43,0.06)' : `${colors.warn}17` }}>
+          <span style={{ fontFamily: sans, fontSize: 12, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', borderRadius: 6, padding: '3px 8px', color: decided === exceptions.length ? colors.ink : colors.warn, background: decided === exceptions.length ? 'var(--hairline)' : `${tint(colors.warn, '17')}` }}>
             {decided} of {exceptions.length} decided
           </span>
         )}
@@ -67,7 +67,7 @@ export default function SignoffForm({ object, files, readiness, recon, onChange 
           const d = decisionFor(record, e)
           const set = (patch) => setIn('exceptions', e.id, { ...d, ...patch })
           return (
-            <div key={e.id} style={{ background: colors.panel, borderRadius: 12, padding: '12px 14px', marginBottom: 8, borderWidth: 1, borderStyle: 'solid', borderColor: d.disposition ? 'rgba(220,227,232,0.9)' : `${colors.warn}66`, boxShadow: '0 1px 2px rgba(22,34,43,0.05)' }}>
+            <div key={e.id} style={{ background: colors.panel, borderRadius: 12, padding: '12px 14px', marginBottom: 8, borderWidth: 1, borderStyle: 'solid', borderColor: d.disposition ? 'var(--card-edge)' : `${tint(colors.warn, '66')}`, boxShadow: 'var(--hairline-shadow)' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap', alignItems: 'baseline' }}>
                 <div style={{ fontFamily: sans, fontSize: 14, color: colors.ink, minWidth: 0 }}>
                   <span style={{ fontFamily: mono, fontSize: 12, color: colors.mute }}>{e.step} · </span>{e.what}

@@ -1,5 +1,5 @@
 import { CHECK_COPY } from '../copy.js'
-import { colors, mono, panel, sans, statusColor } from '../theme.js'
+import { colors, mono, panel, sans, statusColor, tint } from '../theme.js'
 
 export default function LayerCard({ layer, index, isLead }) {
   const tone = statusColor[layer.status] ?? colors.faint
@@ -8,7 +8,7 @@ export default function LayerCard({ layer, index, isLead }) {
     <section
       style={{
         ...panel,
-        borderColor: isLead ? `${tone}88` : colors.panelEdge,
+        borderColor: isLead ? `${tint(tone, '88')}` : colors.panelEdge,
         padding: '14px 16px',
         marginTop: 10,
       }}
@@ -22,7 +22,7 @@ export default function LayerCard({ layer, index, isLead }) {
         <span
           style={{
             marginLeft: 'auto', fontFamily: mono, fontSize: 12, letterSpacing: '0.08em',
-            color: tone, border: `1px solid ${tone}66`, borderRadius: 5, padding: '3px 8px',
+            color: tone, border: `1px solid ${tint(tone, '66')}`, borderRadius: 5, padding: '3px 8px',
           }}
         >
           {layer.status}

@@ -1,5 +1,5 @@
 import { useRef } from 'react'
-import { colors, mono, primaryButton, sans } from '../theme.js'
+import { colors, mono, primaryButton, sans, tint } from '../theme.js'
 
 // Naming, downloading and loading a contract. A contract that only exists in
 // one browser tab is not a contract, so this is what lets it outlive the
@@ -67,8 +67,8 @@ export default function ContractFileBar({ name, onName, rules, onLoad, onDownloa
           role={notice.tone === 'bad' ? 'alert' : 'status'}
           style={{
             marginTop: 10, padding: '9px 11px', borderRadius: 6,
-            border: `1px solid ${notice.tone === 'bad' ? colors.fail : notice.tone === 'warn' ? colors.warn : colors.accent}55`,
-            background: `${notice.tone === 'bad' ? colors.fail : notice.tone === 'warn' ? colors.warn : colors.accent}10`,
+            border: `1px solid ${tint(notice.tone === 'bad' ? colors.fail : notice.tone === 'warn' ? colors.warn : colors.accent, '55')}`,
+            background: `${tint(notice.tone === 'bad' ? colors.fail : notice.tone === 'warn' ? colors.warn : colors.accent, '10')}`,
           }}
         >
           {/* Green is a PASS verdict; a routine "saved" is the accent colour. */}

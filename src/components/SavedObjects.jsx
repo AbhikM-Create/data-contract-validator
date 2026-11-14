@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { go } from '../routes.js'
-import { colors, ghostButton, label, panel, sans, secondaryButton } from '../theme.js'
+import { colors, ghostButton, label, panel, sans, secondaryButton, tint } from '../theme.js'
 import { when } from './when.js'
 
 // The migration objects in this account (user state 4). Saving one keeps its
@@ -57,7 +57,7 @@ export default function SavedObjects({ objects, loading, openId, signedIn, onOpe
                 {confirming === item.id ? (
                   <>
                     <span style={{ fontFamily: sans, fontSize: 12, color: colors.fail }}>Delete from your account?</span>
-                    <button onClick={() => { onDelete(item.id); setConfirming(null) }} style={{ ...ghostButton, color: colors.fail, borderColor: `${colors.fail}66` }}>Delete</button>
+                    <button onClick={() => { onDelete(item.id); setConfirming(null) }} style={{ ...ghostButton, color: colors.fail, borderColor: `${tint(colors.fail, '66')}` }}>Delete</button>
                     <button onClick={() => setConfirming(null)} style={ghostButton}>Keep</button>
                   </>
                 ) : (

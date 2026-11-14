@@ -1,5 +1,5 @@
 import { CHECK_COPY } from '../copy.js'
-import { chip, colors, mono, panel, sans, statusColor } from '../theme.js'
+import { chip, colors, mono, panel, sans, statusColor, tint } from '../theme.js'
 import { isoStair } from './isoStair.js'
 
 // The signature view: the checks drawn as an isometric staircase, with the
@@ -17,13 +17,16 @@ import { isoStair } from './isoStair.js'
 // Face tints per verdict: top, front, right. The step that caught the file is
 // the strongest; other failures stay quieter so the eye lands on the first.
 const FACES = {
-  lead: ['#FDECEA', '#F0CDC8', '#E2B5AE'],
-  FAIL: ['#FBF2F0', '#ECDCD9', '#DCC6C2'],
-  PASS: ['#EEF7F1', '#D6E6DD', '#BDD2C6'],
-  warn: ['#FBF1DE', '#F0DCB4', '#E2C893'],
-  idle: ['#FFFFFF', '#E3EAEE', '#CDD8DE'],
+  lead: faces('lead'),
+  FAIL: faces('fail'),
+  PASS: faces('pass'),
+  warn: faces('warn'),
+  idle: faces('idle'),
 }
 const WARN = new Set(['INSUFFICIENT', 'UNCHECKED'])
+function faces(kind) {
+  return ['top', 'front', 'right'].map((side) => `var(--face-${kind}-${side})`)
+}
 
 export default function Staircase({ layers, title = 'How far the file got', note, subject = 'file' }) {
   const firstFailure = layers.findIndex((layer) => layer.status === 'FAIL')
@@ -65,9 +68,9 @@ function Step({ layer, index, isLead, isAboveFailure }) {
       style={{
         display: 'grid', gridTemplateColumns: '26px minmax(0, 1fr) auto', gap: 12, alignItems: 'center',
         padding: '11px 12px', borderRadius: 12,
-        background: isLead ? `${tone}0F` : 'transparent',
-        borderWidth: 1, borderStyle: 'solid', borderColor: isLead ? `${tone}55` : 'transparent',
-        borderTopColor: isLead ? `${tone}55` : index > 0 ? 'rgba(22,34,43,0.07)' : 'transparent',
+        background: isLead ? `${tint(tone, '0F')}` : 'transparent',
+        borderWidth: 1, borderStyle: 'solid', borderColor: isLead ? `${tint(tone, '55')}` : 'transparent',
+        borderTopColor: isLead ? `${tint(tone, '55')}` : index > 0 ? 'var(--hairline)' : 'transparent',
       }}
     >
       <span style={{ fontFamily: mono, fontSize: 13, fontWeight: 600, color: isLead ? tone : colors.faint }}>
@@ -92,7 +95,7 @@ function Step({ layer, index, isLead, isAboveFailure }) {
                 : shortQuestion(layer)}
         </span>
       </span>
-      <span style={isLead ? { ...chip(layer.status), background: tone, color: '#FFFFFF', borderColor: tone } : chip(layer.status)}>{layer.status}</span>
+      <span style={isLead ? { ...chip(layer.status), background: tone, color: colors.onSolid, borderColor: tone } : chip(layer.status)}>{layer.status}</span>
     </li>
   )
 }
@@ -105,32 +108,34 @@ function Drawing({ layers, lead }) {
   const bobTone = colors.accent
   return (
     <svg viewBox={`0 0 ${stair.width} ${stair.height}`} aria-hidden="true" focusable="false">
-      <ellipse cx={stair.width / 2} cy={stair.height - 14} rx={stair.width * 0.42} ry={12} fill="rgba(22,34,43,0.08)" />
-      <g stroke="rgba(22,34,43,0.14)" strokeWidth="1" strokeLinejoin="round">
+      <ellipse cx={stair.width / 2} cy={stair.height - 14} rx={stair.width * 0.42} ry={12} style={{ fill: 'var(--floor-shadow)' }} />
+      <g strokeWidth="1" strokeLinejoin="round" style={{ stroke: 'var(--face-edge)' }}>
         {stair.steps.map((step, i) => {
           const layer = layers[i]
           const faces = i === lead ? FACES.lead : layer.status === 'FAIL' ? FACES.FAIL : layer.status === 'PASS' ? FACES.PASS : WARN.has(layer.status) ? FACES.warn : FACES.idle
           return (
             <g key={layer.id}>
-              <polygon points={step.right} fill={faces[2]} />
-              <polygon points={step.front} fill={faces[1]} />
-              <polygon points={step.top} fill={faces[0]} stroke={i === lead ? colors.fail : undefined} strokeWidth={i === lead ? 2 : undefined} />
+              <polygon points={step.right} style={{ fill: faces[2] }} />
+              <polygon points={step.front} style={{ fill: faces[1] }} />
+              <polygon points={step.top} style={{ fill: faces[0], stroke: i === lead ? colors.fail : undefined }} strokeWidth={i === lead ? 2 : undefined} />
             </g>
           )
         })}
       </g>
       <g fontFamily={mono} fontSize="13" fontWeight="600" textAnchor="middle">
         {stair.steps.map((step, i) => (
-          <text key={layers[i].id} x={step.label[0]} y={step.label[1] + 4} fill={i === lead ? colors.fail : statusColor[layers[i].status] ?? colors.faint}>
+          <text key={layers[i].id} x={step.label[0]} y={step.label[1] + 4} style={{ fill: i === lead ? colors.fail : statusColor[layers[i].status] ?? colors.faint }}>
             {String(i + 1).padStart(2, '0')}
           </text>
         ))}
       </g>
       {/* the plumb line and its bob, resting on the step that caught it */}
-      <line x1={bx - 34} y1={stair.beamY} x2={bx + 34} y2={stair.beamY} stroke={colors.ink} strokeWidth="3" strokeLinecap="round" />
-      <line x1={bx} y1={stair.beamY} x2={bx} y2={by - 19} stroke={bobTone} strokeWidth="2" />
-      <ellipse cx={bx} cy={by + 1} rx="15" ry="5" fill={lead >= 0 ? 'rgba(179,38,30,0.22)' : 'rgba(31,111,139,0.2)'} />
-      <polygon points={`${bx - 9},${by - 19} ${bx + 9},${by - 19} ${bx},${by - 1}`} fill={bobTone} />
+      <line x1={bx - 34} y1={stair.beamY} x2={bx + 34} y2={stair.beamY} strokeWidth="3" strokeLinecap="round" style={{ stroke: colors.ink }} />
+      <g className="plumb">
+        <line x1={bx} y1={stair.beamY} x2={bx} y2={by - 19} strokeWidth="2" style={{ stroke: bobTone }} />
+        <ellipse cx={bx} cy={by + 1} rx="15" ry="5" style={{ fill: tint(lead >= 0 ? colors.fail : colors.accent, '38') }} />
+        <polygon points={`${bx - 9},${by - 19} ${bx + 9},${by - 19} ${bx},${by - 1}`} style={{ fill: bobTone }} />
+      </g>
     </svg>
   )
 }

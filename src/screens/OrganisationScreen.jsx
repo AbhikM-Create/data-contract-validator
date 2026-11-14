@@ -2,7 +2,7 @@ import { useState } from 'react'
 import ConfirmButton from '../components/ConfirmButton.jsx'
 import { can, ROLES, roleLabel } from '../lib/roles.js'
 import { go } from '../routes.js'
-import { colors, ghostButton, label, mono, panel, primaryButton, sans, secondaryButton } from '../theme.js'
+import { colors, ghostButton, label, mono, panel, primaryButton, sans, secondaryButton, tint } from '../theme.js'
 import { ScreenHead } from './ValidateScreen.jsx'
 
 // An organisation: the people who share a set of migration objects, each with
@@ -134,7 +134,7 @@ export default function OrganisationScreen(props) {
                   question={`Delete ${selected.name}? Its members lose access; its objects stay with whoever saved them, as personal objects.`}
                   confirmLabel="Delete organisation"
                   onConfirm={onDelete}
-                  style={{ ...ghostButton, color: colors.fail, borderColor: `${colors.fail}66` }}
+                  style={{ ...ghostButton, color: colors.fail, borderColor: `${tint(colors.fail, '66')}` }}
                 >
                   Delete organisation
                 </ConfirmButton>

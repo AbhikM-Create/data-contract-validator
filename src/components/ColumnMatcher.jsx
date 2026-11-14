@@ -1,5 +1,5 @@
 import { columnMapIssues, proposeMatches } from '../lib/columnMap.js'
-import { colors, ghostButton, label, mono, panel, sans } from '../theme.js'
+import { colors, ghostButton, label, mono, panel, sans, tint } from '../theme.js'
 
 const field = (width) => ({
   width,
@@ -65,7 +65,7 @@ export default function ColumnMatcher({ what, expected, file, map = {}, onChange
               {fileColumns.filter((c) => !taken.has(c)).map((c) => <option key={c} value={c}>{c}</option>)}
             </select>
             {proposal && (
-              <button onClick={() => set(column, proposal)} style={{ ...ghostButton, color: colors.accent, borderColor: `${colors.accent}55` }}>
+              <button onClick={() => set(column, proposal)} style={{ ...ghostButton, color: colors.accent, borderColor: `${tint(colors.accent, '55')}` }}>
                 Use “{proposal}” — the same name apart from case and punctuation
               </button>
             )}

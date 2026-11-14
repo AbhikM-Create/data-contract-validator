@@ -22,8 +22,8 @@ export default function StepRail({ steps, current, onStep }) {
             style={{
               display: 'flex', gap: 11, alignItems: 'center', textAlign: 'left', width: '100%', minWidth: 0,
               background: active ? colors.panel : 'transparent',
-              borderWidth: 1, borderStyle: 'solid', borderColor: active ? 'rgba(220,227,232,0.9)' : 'transparent',
-              boxShadow: active ? '0 1px 2px rgba(22,34,43,0.06), 0 8px 20px -12px rgba(22,34,43,0.3)' : 'none',
+              borderWidth: 1, borderStyle: 'solid', borderColor: active ? 'var(--card-edge)' : 'transparent',
+              boxShadow: active ? 'var(--elevation-chip)' : 'none',
               borderRadius: 12, padding: '10px 12px', cursor: 'pointer', minHeight: 56,
             }}
           >
@@ -33,9 +33,9 @@ export default function StepRail({ steps, current, onStep }) {
                 width: 26, height: 26, borderRadius: '50%', flexShrink: 0,
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                 fontFamily: mono, fontSize: 12, fontWeight: 600,
-                background: active ? colors.accent : 'rgba(255,255,255,0.7)',
-                color: active ? '#FFFFFF' : colors.mute,
-                border: `1px solid ${active ? colors.accent : 'rgba(95,108,118,0.45)'}`,
+                background: active ? colors.accent : 'var(--disc)',
+                color: active ? colors.onSolid : colors.mute,
+                border: `1px solid ${active ? colors.accent : 'var(--disc-edge)'}`,
               }}
             >
               {index + 1}

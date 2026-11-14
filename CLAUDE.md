@@ -434,7 +434,21 @@ counts."). It carries no green dot: green is a verdict's colour.
   (`.step-rail`, a 4/2/1-column grid). The home page leads with the isometric
   staircase as its hero (`HeroStair` in `LandingScreen.jsx`). Shadows are part
   of the look now; `backdrop-filter` is used ONLY on the bar — on long tables
-  it would cost real time on modest laptops. Green and red appear ONLY on a verdict; verdict colours
+  it would cost real time on modest laptops.
+- Themes (approved 14 Nov 2026): light is Direction C; DARK is Direction A,
+  "Blueprint" — a teal-ruled grid ground, teal card edges, dark staircase faces
+  edged in teal, and a glow on the plumb line (`.plumb`) and primary button.
+  Every colour is a CSS variable (`index.css`): `theme.js` exports
+  `colors.x = 'var(--x)'`, so a component never names a hex. A tint is
+  `tint(colour, 'NN')` (color-mix), never a hex alpha appended to a colour —
+  that stops working on a variable. Text on a solid accent or verdict fill is
+  `colors.onSolid` (white in light, dark ink in dark). SVG fills take colours
+  through `style`, since a presentation attribute cannot read a variable.
+  Dark follows the system setting; the bar's "Colour theme" picker (System,
+  Light, Dark — `themeChoice.js`) overrides it, kept in this browser only and
+  applied before first paint (`main.jsx`). The evidence pack stays light: it is
+  printed and signed. `e2e/a11y.spec.js` sweeps every screen in both themes;
+  `e2e/theme.spec.js` proves dark is really applied and the choice holds. Green and red appear ONLY on a verdict; verdict colours
   are pass `#1B7347`, fail `#B3261E`, not confirmed `#8A5300`. Inputs and
   dropdowns take the `control` edge (`#868C93`, 3:1), set once in `index.css`.
 - Type: Geist and Geist Mono, latin, variable, shipped in `src/fonts/` (SIL OFL,
