@@ -1,5 +1,7 @@
 import { CHECK_COPY } from '../copy.js'
 import { chip, colors, mono, panel, sans, statusColor, tint } from '../theme.js'
+import { useRef } from 'react'
+import { useDescent } from './descent.js'
 import { isoStair } from './isoStair.js'
 
 // The signature view: the checks drawn as an isometric staircase, with the
@@ -52,7 +54,7 @@ export default function Staircase({ layers, title = 'How far the file got', note
           ))}
         </ol>
         <div className="iso-drawing">
-          <Drawing layers={layers} lead={firstFailure} />
+          <Drawing layers={layers} lead={firstFailure} title={title} />
         </div>
       </div>
     </div>
@@ -101,20 +103,24 @@ function Step({ layer, index, isLead, isAboveFailure }) {
 }
 
 // The drawing. Decorative: the legend says everything it shows.
-function Drawing({ layers, lead }) {
+function Drawing({ layers, lead, title }) {
   const stair = isoStair(layers.length)
   const restOn = lead >= 0 ? lead : layers.length - 1
   const [bx, by] = stair.steps[restOn].rest
   const bobTone = colors.accent
+  // The descent replays this result once (descent.js): a new result, a new
+  // descent; the same result seen again stays still.
+  const svg = useRef(null)
+  useDescent(svg, { rests: stair.steps.map((s) => s.rest), stopAt: restOn, beamY: stair.beamY, key: `${title}|${layers.map((l) => `${l.id}:${l.status}`).join(',')}` })
   return (
-    <svg viewBox={`0 0 ${stair.width} ${stair.height}`} aria-hidden="true" focusable="false">
+    <svg ref={svg} viewBox={`0 0 ${stair.width} ${stair.height}`} aria-hidden="true" focusable="false">
       <ellipse cx={stair.width / 2} cy={stair.height - 14} rx={stair.width * 0.42} ry={12} style={{ fill: 'var(--floor-shadow)' }} />
       <g strokeWidth="1" strokeLinejoin="round" style={{ stroke: 'var(--face-edge)' }}>
         {stair.steps.map((step, i) => {
           const layer = layers[i]
           const faces = i === lead ? FACES.lead : layer.status === 'FAIL' ? FACES.FAIL : layer.status === 'PASS' ? FACES.PASS : WARN.has(layer.status) ? FACES.warn : FACES.idle
           return (
-            <g key={layer.id}>
+            <g key={layer.id} data-descent-step={i}>
               <polygon points={step.right} style={{ fill: faces[2] }} />
               <polygon points={step.front} style={{ fill: faces[1] }} />
               <polygon points={step.top} style={{ fill: faces[0], stroke: i === lead ? colors.fail : undefined }} strokeWidth={i === lead ? 2 : undefined} />
@@ -124,17 +130,21 @@ function Drawing({ layers, lead }) {
       </g>
       <g fontFamily={mono} fontSize="13" fontWeight="600" textAnchor="middle">
         {stair.steps.map((step, i) => (
-          <text key={layers[i].id} x={step.label[0]} y={step.label[1] + 4} style={{ fill: i === lead ? colors.fail : statusColor[layers[i].status] ?? colors.faint }}>
+          <text key={layers[i].id} data-descent-label={i} x={step.label[0]} y={step.label[1] + 4} style={{ fill: i === lead ? colors.fail : statusColor[layers[i].status] ?? colors.faint }}>
             {String(i + 1).padStart(2, '0')}
           </text>
         ))}
       </g>
       {/* the plumb line and its bob, resting on the step that caught it */}
-      <line x1={bx - 34} y1={stair.beamY} x2={bx + 34} y2={stair.beamY} strokeWidth="3" strokeLinecap="round" style={{ stroke: colors.ink }} />
-      <g className="plumb">
-        <line x1={bx} y1={stair.beamY} x2={bx} y2={by - 19} strokeWidth="2" style={{ stroke: bobTone }} />
-        <ellipse cx={bx} cy={by + 1} rx="15" ry="5" style={{ fill: tint(lead >= 0 ? colors.fail : colors.accent, '38') }} />
-        <polygon points={`${bx - 9},${by - 19} ${bx + 9},${by - 19} ${bx},${by - 1}`} style={{ fill: bobTone }} />
+      <g data-descent="carriage">
+        <line x1={bx - 34} y1={stair.beamY} x2={bx + 34} y2={stair.beamY} strokeWidth="3" strokeLinecap="round" style={{ stroke: colors.ink }} />
+        <g className="plumb">
+          <line data-descent="string" x1={bx} y1={stair.beamY} x2={bx} y2={by - 19} strokeWidth="2" style={{ stroke: bobTone, transformBox: 'fill-box', transformOrigin: 'top' }} />
+          <g data-descent="bob">
+            <ellipse cx={bx} cy={by + 1} rx="15" ry="5" style={{ fill: tint(lead >= 0 ? colors.fail : colors.accent, '38') }} />
+            <polygon points={`${bx - 9},${by - 19} ${bx + 9},${by - 19} ${bx},${by - 1}`} style={{ fill: bobTone }} />
+          </g>
+        </g>
       </g>
     </svg>
   )
