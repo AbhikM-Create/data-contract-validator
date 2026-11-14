@@ -75,7 +75,7 @@ export default {
   ],
   toConfirm: [
     'Column headers of each Tally export (List of Accounts, Trial Balance, Ledger list, Bills Outstanding) as the client’s TallyPrime release writes them.',
-    'Whether Tally writes amounts as one signed column, Dr/Cr suffixes, or separate Debit and Credit columns.',
+    'Whether Tally writes amounts as one signed column, Dr/Cr suffixes (read when the file’s format declares Dr/Cr — in Excel Tally may show the side only through the number format), or separate Debit and Credit columns; and whether group heading rows with subtotals sit among the ledgers, which would be read as ledgers.',
     'Tally’s date style in text exports (e.g. 1-Apr-2026, which has no declared format yet); Excel exports carry typed dates.',
     'Column headers of Zoho Books’ import sample files and of its Trial Balance, Contacts and Aged Receivables/Payables exports.',
     'The Zoho Books India account-type list against the global list used here.',

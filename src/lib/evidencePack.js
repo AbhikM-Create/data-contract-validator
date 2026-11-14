@@ -86,6 +86,7 @@ function describeFormat(format) {
     format.encoding && format.encoding !== 'utf-8' ? format.encoding : 'UTF-8',
     format.decimal === ',' ? '1.234,56' : format.grouping === 'indian' ? '12,34,567.89 (Indian grouping)' : '1,234.56',
     format.date ? `dates ${format.date}` : 'ISO dates',
+    ...(format.side === 'drcr' ? ['Dr read as plus, Cr as minus'] : []),
   ].join(', ')
 }
 

@@ -12,7 +12,7 @@ import { USAGE as ODCS_USAGE } from '../cli/odcs.mjs'
 import { USAGE as PACK_USAGE } from '../cli/pack.mjs'
 import { USAGE as RECONCILE_USAGE } from '../cli/reconcile.mjs'
 import { USAGE as SHARE_USAGE } from '../cli/share.mjs'
-import { DATE_FORMATS, DECIMALS, ENCODINGS, GROUPINGS } from '../src/lib/formats.js'
+import { DATE_FORMATS, DECIMALS, ENCODINGS, GROUPINGS, SIDES } from '../src/lib/formats.js'
 import { IDENTIFIERS } from '../src/lib/identifiers.js'
 import { SENSITIVITIES } from '../src/lib/masking.js'
 import { RECON_STEPS } from '../src/lib/reconcile.js'
@@ -111,7 +111,7 @@ function helpCentre() {
 <p class="intro">Each file’s format is declared once. Where a value could be read two ways and nothing is declared, it is not read as a number or a date at all, so a disagreement shows instead of a guess. A file that is not valid UTF-8 is refused with the likely cause, never repaired.</p>
 <div class="grid">
 <div class="card"><h3>Encoding</h3><ul class="plain">${list(ENCODINGS)}</ul></div>
-<div class="card"><h3>Decimal mark and grouping</h3><ul class="plain">${list(DECIMALS)}${list(GROUPINGS)}</ul></div>
+<div class="card"><h3>Decimal mark, grouping and side</h3><ul class="plain">${list(DECIMALS)}${list(GROUPINGS)}${list(SIDES)}</ul></div>
 <div class="card"><h3>Dates</h3><ul class="plain">${list(DATE_FORMATS)}</ul></div>
 </div>
 <p class="note">Keys can also declare “ignore leading zeros” (all-digit keys only) and “ignore case”.</p>
@@ -193,6 +193,7 @@ function describeFormat(format = {}) {
   if (format.decimal) parts.push(label(DECIMALS, format.decimal))
   if (format.grouping) parts.push(label(GROUPINGS, format.grouping))
   if (format.date) parts.push(`dates ${label(DATE_FORMATS, format.date)}`)
+  if (format.side) parts.push(label(SIDES, format.side))
   return parts.length ? parts.join(' · ') : 'Nothing declared: UTF-8, and only numbers and dates that cannot be read two ways'
 }
 
@@ -248,7 +249,7 @@ ${objects}
 // Written by hand from the merged pull requests. Dates are merge dates.
 
 const CHANGES = [
-  { when: 'Not yet released', items: ['The product is named Plumbstep on screen, with its logo, the Geist typefaces, a six-size type scale and a two-row bar.', 'This website: the marketing pages, the help centre, the command-line docs, the pack reference, this changelog and the legal shells.'] },
+  { when: 'Not yet released', items: ['The product is named Plumbstep on screen, with its logo, the Geist typefaces, a six-size type scale and a two-row bar.', 'This website: the marketing pages, the help centre, the command-line docs, the pack reference, this changelog and the legal shells.', 'Tally balances whose side shows only as Dr or Cr are no longer read as the bare amount: the side is kept, and read as plus or minus when the file’s format declares Dr/Cr. A merged title above the header row no longer stops a workbook being read.'] },
   { when: '13 Nov 2026', items: ['Organisations: members, invitations and four roles — admin, editor, approver and viewer.', 'Migration objects saved to your account, and opened again on any device.'] },
   { when: '12 Nov 2026', items: ['The workspace in four steps, one on screen at a time, with a rail that shows each step’s status.', 'A first-visit home page, a guided tour beside the finance example, and a sign-in screen that lists what an account keeps and never keeps.'] },
   { when: '11 Nov 2026', items: ['The home page leads with the cutover job; the finance example, Tally to Zoho Books, comes first.', 'New rule kinds: identifiers (PAN, GSTIN, IFSC, UAN, PIN), uniqueness, totals and reference files.', 'The sign-off record: decisions, owners, scope and typed signatures in the evidence pack.', 'Packs: Finance (Tally to Zoho Books) and HR (mid-year payroll to Zoho Payroll), both drafts.', 'Column matching, sensitivity tags and masking, Excel workbooks in the browser, Indian digit grouping, and safe sharing of definitions.'] },

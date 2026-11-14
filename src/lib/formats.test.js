@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { cleanFormat, createReader, decodeBytes, formatIssue, readNumberFully } from './formats.js'
+import { cleanFormat, createReader, decodeBytes, DEFAULT_READER, formatIssue, readNumberFully } from './formats.js'
 import { checkReadiness } from './readiness.js'
 import { reconcile } from './reconcile.js'
 import { checkRules } from './rules.js'
@@ -296,5 +296,57 @@ describe('readers — Indian digit grouping (declared)', () => {
       if (!Object.is(fast, full) && mismatches.length < 10) mismatches.push({ input: text, fast, full })
     }
     expect(mismatches).toEqual([])
+  })
+})
+
+// Tally writes a balance with its side after it: 25,000.00 Dr, 25,000.00 Cr.
+// Declared, never assumed — in Indian notation "Cr" also means crore — and
+// undeclared a sided value is not a number at all.
+describe('readers — Dr/Cr side (declared)', () => {
+  const sided = createReader({ side: 'drcr' })
+  const sidedIndian = createReader({ side: 'drcr', grouping: 'indian' })
+  const undeclared = createReader({})
+
+  it.each([
+    ['25,000.00 Dr', 25000], ['25,000.00 Cr', -25000], ['25000Cr', -25000], ['25000 cr.', -25000], ['25000 DR', 25000],
+    ['-500 Cr', 500], ['(1,200.00) Cr', 1200], ['500', 500], ['-500', -500], ['₹ 1,250.50 Dr', 1250.5],
+  ])('declared Dr/Cr reads %s as %d', (input, want) => {
+    expect(sided.number(input)).toBe(want)
+  })
+
+  it('with Indian grouping declared too', () => {
+    expect(sidedIndian.number('1,25,000.00 Cr')).toBe(-125000)
+    expect(sided.number('1,25,000.00 Cr')).toBeNull() // western grouping: not a number, as before
+  })
+
+  it.each(['Dr 500', 'Cr', 'Dr', '500 Dr Cr', '500 Credit', 'Cr 25,000'])('declared Dr/Cr refuses %s rather than guess', (input) => {
+    expect(sided.number(input)).toBeNull()
+  })
+
+  it('undeclared, a sided value is not read as a number — by a declared or the default reader', () => {
+    for (const value of ['25,000.00 Dr', '25,000.00 Cr', '25000 Cr']) {
+      expect(undeclared.number(value)).toBeNull()
+      expect(DEFAULT_READER.number(value)).toBeNull()
+    }
+  })
+
+  it('is a known format part, saved and fingerprinted', () => {
+    expect(formatIssue({ side: 'drcr' })).toBeNull()
+    expect(formatIssue({ side: 'credit' })).toMatch(/"credit" is not a known side/)
+    expect(cleanFormat({ side: 'drcr', grouping: 'indian' })).toEqual({ grouping: 'indian', side: 'drcr' })
+    expect(cleanFormat({ side: 'nonsense' })).toBeUndefined()
+  })
+
+  it('a balance loaded on the wrong side is caught — read without its side it would agree', () => {
+    const spec = { key: { source: ['ledger'], target: ['ledger'] }, mapping: [{ source: 'balance', target: 'balance' }] }
+    const tally = [{ ledger: 'Cash', balance: '25,000.00 Dr' }, { ledger: 'Capital', balance: '25,000.00 Cr' }]
+    // The target carries Capital as a debit: loaded on the wrong side.
+    const target = [{ ledger: 'Cash', balance: '25000' }, { ledger: 'Capital', balance: '25000' }]
+    const declared = reconcile({ ...spec, formats: { source: { side: 'drcr' } } }, tally, target)
+    expect(declared.fields[0].agreed).toBe(1)
+    expect(declared.fields[0].mismatched).toBe(1)
+    // Undeclared, neither sided value is read as a number, so neither is called agreed.
+    const plain = reconcile(spec, tally, target)
+    expect(plain.fields[0].agreed).toBe(0)
   })
 })

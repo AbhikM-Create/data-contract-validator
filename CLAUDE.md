@@ -27,7 +27,9 @@ it is. Product spec and history: `docs/v2-spec.md`.
   stale and has known advisories) as a devDependency, bundled into the worker
   only, and left out of the npm package. A number cell is written in the file's
   declared decimal mark and a date cell as ISO, so the engine and its readers
-  are unchanged; merged cells, multi-row headers and .xls are refused. The page
+  are unchanged; a number whose format shows Dr/Cr keeps the side as text.
+  Merged cells in the header or data, multi-row headers and .xls are refused;
+  a title merged wholly above the chosen header row is left out with a note. The page
   recognises a workbook by its bytes through `fileKind.js`, never importing it.
 - `scripts/lib/` is the Node layer (streaming, partitions on disk, hashing);
   `cli/` is the `dcv` commands; `bin/dcv.mjs` dispatches. The browser runs the
@@ -216,6 +218,13 @@ disagreement surfaces instead of a guess.
 - Indian digit grouping (`1,23,456.78`) is a declared part, `grouping: 'indian'`,
   decimal point only. Undeclared it stays unreadable; the undeclared and western
   readers are unchanged (v3 F6, `formats.test.js`).
+- Dr/Cr after an amount (`25,000.00 Cr`, as Tally writes) is a declared part,
+  `side: 'drcr'`: Dr reads plus, Cr minus, a negative credit is a debit.
+  Undeclared a sided value is unreadable — never assumed, since "Cr" is also
+  crore. In a workbook Tally may show the side ONLY through the number format
+  (stored value positive); `parseXlsx` keeps it as `25000 Cr` with a note, so
+  dropping the format can never read a credit as a debit (a silent wrong
+  answer, pinned in `parseXlsx.test.js` and `formats.test.js`).
 - UTF-8 is decoded strictly and refused with the likely cause, never repaired
   (`decodeBytes`, and a strict streaming decoder in `csvStream.mjs`).
 - `parseNumber`: a comma must be a well-formed thousands separator; "1,5" is
@@ -613,6 +622,10 @@ workflow has not run yet (its first run is the first version tag; `docs/release.
 browser only; the CLI refuses .xlsx with the fix (save as CSV). The 25 MB
 workbook limit in `App.jsx` is conservative and not yet measured. Dependabot
 does not track the SheetJS tarball: check cdn.sheetjs.com for releases.
+Tally exports: the Dr/Cr and title-row handling follows Tally's documented
+behaviour and invented workbooks, not yet a real export. Group heading rows
+with subtotals among the ledgers (a Tally trial balance) are read as records;
+telling them apart waits on a real export, so it is not guessed.
 
 ## Conventions
 - Plain JS + React, function components, hooks. No state library.
