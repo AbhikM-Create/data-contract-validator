@@ -88,6 +88,8 @@ function Step({ layer, index, isLead, isAboveFailure }) {
             ? `${problems} problem${problems === 1 ? '' : 's'} found`
             : layer.status === 'SKIPPED'
               ? 'Not judged on this file'
+              : layer.status === 'UNCHECKED'
+                ? 'Could not be checked'
               : isAboveFailure
                 ? 'Passed — and let it through'
                 : shortQuestion(layer)}
@@ -147,7 +149,9 @@ const COUNT_WORDS = ['no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven'
 
 function caption(layers, firstFailure, passedAbove, subject) {
   if (firstFailure < 0) {
-    const skipped = layers.filter((layer) => layer.status === 'SKIPPED')
+    // SKIPPED (not set up) and UNCHECKED (an input was missing) both mean the
+    // step did not judge: never "came down all the steps".
+    const skipped = layers.filter((layer) => layer.status === 'SKIPPED' || layer.status === 'UNCHECKED')
     return skipped.length === 0
       ? `The ${subject} came down all ${COUNT_WORDS[layers.length] ?? layers.length} steps without catching on any of them.`
       : `No check objected. ${skipped.map((s) => s.label).join(' and ')} could not be judged on this ${subject}.`

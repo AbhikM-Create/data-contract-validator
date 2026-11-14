@@ -264,7 +264,7 @@ export function buildEvidencePack(input) {
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src data:; form-action 'none'; base-uri 'none'">
 <meta name="generator" content="data-contract-validator ${h(VERSION)} — evidence pack format ${EVIDENCE_FORMAT_VERSION}">
 <title>Cutover sign-off record — ${h(title)}</title>
-<style>${STYLES}</style>
+<style>${EVIDENCE_STYLES}</style>
 </head>
 <body>
 <header class="page">
@@ -361,7 +361,7 @@ export async function evidenceReference({ fingerprints, files, statuses, generat
   return `EV-${digest.slice(0, 4)}-${digest.slice(4, 8)}-${digest.slice(8, 12)}`.toUpperCase()
 }
 
-const STYLES = `
+export const EVIDENCE_STYLES = `
 :root { --ink:#16222B; --mute:#4E5D68; --faint:#5F6C76; --edge:#DCE3E8; --sunk:#EFF3F5; --accent:#1F6F8B; --pass:#2A7353; --fail:#B23A34; --warn:#8A6414; }
 * { box-sizing: border-box; }
 body { margin: 0; background: #F4F6F8; color: var(--ink); font: 14px/1.5 ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; }

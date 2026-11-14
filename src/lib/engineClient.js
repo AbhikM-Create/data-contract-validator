@@ -83,6 +83,12 @@ export function reconcileInWorker(spec, columnMap = {}) {
   return send({ type: 'reconcile', spec, columnMap })
 }
 
+// The change check over the before/after files the worker holds, with the
+// approved list and change log when they were opened.
+export function changeInWorker(contract) {
+  return send({ type: 'change', contract })
+}
+
 export function readinessInWorker({ contract, key, columnMap = {} }) {
   return send({ type: 'readiness', contract, key, columnMap })
 }

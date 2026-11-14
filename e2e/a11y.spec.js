@@ -29,6 +29,7 @@ const SCREENS = [
   ['sign in', '/#/signin'],
   ['organisation', '/#/organisation'],
   ['migrations (empty)', '/#/migrations'],
+  ['change checks (empty)', '/#/change'],
 ]
 
 // Every screen and both reports, in each theme: light (Direction C) and dark
