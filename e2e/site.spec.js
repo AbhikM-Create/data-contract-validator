@@ -3,6 +3,7 @@ import { extname, join } from 'node:path'
 import AxeBuilder from '@axe-core/playwright'
 import { expect, test } from '@playwright/test'
 import { buildSite, PAGES } from '../scripts/build-site.mjs'
+import { buildSamples } from '../scripts/site-samples.mjs'
 import { watchErrors } from './helpers.js'
 
 // The marketing site in a browser: every page passes the accessibility sweep at
@@ -11,12 +12,13 @@ import { watchErrors } from './helpers.js'
 // served from a fresh build through a route, on an origin of their own.
 
 const ORIGIN = 'http://plumbstep.test'
-const TYPES = { '.html': 'text/html', '.css': 'text/css', '.svg': 'image/svg+xml', '.woff2': 'font/woff2', '.txt': 'text/plain' }
+const TYPES = { '.html': 'text/html', '.csv': 'text/csv', '.json': 'application/json', '.css': 'text/css', '.svg': 'image/svg+xml', '.woff2': 'font/woff2', '.txt': 'text/plain' }
 
 let out
-test.beforeAll(() => {
+test.beforeAll(async () => {
   out = test.info().outputPath('site')
   buildSite({ out })
+  await buildSamples(out)
 })
 
 async function serve(page) {

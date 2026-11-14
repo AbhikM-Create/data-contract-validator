@@ -18,6 +18,8 @@ import { STATEMENT_OF_CLAIM } from '../src/lib/signoff.js'
 import { CHANGE_OWNERS, CHANGE_STEPS } from '../src/lib/changeContract.js'
 import { isoStair } from '../src/components/isoStair.js'
 import { docsBody, DOCS_PAGES, packReferenceFile } from './site-docs.mjs'
+import { buildSamples, SAMPLES } from './site-samples.mjs'
+import { RECON_STEPS } from '../src/lib/reconcile.js'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const pkg = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'))
@@ -28,6 +30,7 @@ const h = (value) => String(value ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&am
 
 export const PAGES = [
   { file: 'index.html', nav: null, title: 'Plumbstep — the independent check on business records', description: 'Whoever changed your records shouldn’t be the one who checks them. Plumbstep shows what changed, whether it was allowed, and whose fix each difference is — and your records stay on your computer.' },
+  { file: 'how.html', nav: 'How it works', title: 'How it works — Plumbstep', description: 'Two files in; an answer, a fix list and a record out. The checks, the change contract, real sample records and common questions.' },
   { file: 'teams.html', nav: 'Finance and HR', title: 'For finance and HR teams — Plumbstep', description: 'Before you sign for a migration, a salary revision or an AI run, check it yourself: what changed, what was allowed, and what does not add up.' },
   { file: 'auditors.html', nav: 'CAs and auditors', title: 'For CAs and auditors — Plumbstep', description: 'A record of a data change you can re-check yourself: the files by SHA-256, the rules in full, who did what, and what was not checked.' },
   { file: 'partners.html', nav: 'Partners', title: 'For implementation partners and bureaus — Plumbstep', description: 'Make your work independently checkable: the client’s rules, the client’s check, the same record for every object and every client.' },
@@ -133,14 +136,127 @@ const staircase = () => {
 </figure>`
 }
 
+// The facts band under the home hero. Every figure is true of the code today:
+// the benchmark is scripts/benchmark-migration.mjs (5M rows under a 512 MB
+// heap, reconcile about 2 minutes, on the command line).
+const facts = () => `<section class="facts-band" aria-label="At a glance"><div class="wrap"><div class="facts">
+<div class="fact"><b>0</b><span>records sent anywhere: your files are read on your own machine</span></div>
+<div class="fact"><b>Same answer</b><span>from the same files and rules, every time — no AI decides</span></div>
+<div class="fact"><b>5 million rows</b><span>reconciled in about 2 minutes on the command line, in 512 MB</span></div>
+<div class="fact"><b>Free</b><span>while in pilot — the workspace, the records and <code>dcv</code></span></div>
+</div></div></section>`
+
+const sampleCards = () => SAMPLES.map((s) => `<article class="card sample" id="sample-${h(s.id)}">
+<h3>${h(s.title)}</h3>
+<p>${h(s.blurb)}</p>
+<div class="actions"><a class="btn primary small" href="${h(s.record)}">Open the record</a>${s.extra ? `<a class="btn small" href="${h(s.extra)}">The fix list (CSV)</a>` : ''}</div>
+<p class="small-print">The files it was made from: ${s.inputs.map((f) => `<a href="${h(f)}">${h(f.split('/').pop())}</a>`).join(', ')}</p>
+</article>`).join('')
+
+const POLICY_ROWS = [
+  ['Must stay the same', 'The default for every column you do not name. Forgetting a column can never let it change silently.'],
+  ['May change freely', 'Any new value is allowed — for example, a category an AI run may set.'],
+  ['May change, only to one of a list', 'The new value must be one you listed, or one found in a reference file.'],
+  ['May change, within limits', 'Up, down or either, by at most an amount and a percentage — a pay rise capped at 20%.'],
+  ['Must change to its approved value', 'The new value must equal the one on the signer’s approved list.'],
+  ['Through a crosswalk', 'Each old value must become the new value a mapping table gives — a migration’s codes.'],
+]
+
+const FAQ = [
+  ['Do my files leave my computer?', 'No. The workspace reads them in your browser, and the dcv command reads them from your disk. There is no server that receives them. An account, if you use one, keeps rules, names and counts — never a record.'],
+  ['Is it AI?', 'No. Every check is a rule you can read, and the same files and rules give the same answer every time. That is what lets someone else re-check the record.'],
+  ['Does it replace my audit, or my CA?', 'No. It gives no opinion. It shows what changed, whether that was allowed under the rules you set, and whose fix each difference is. People decide; the record says who decided what.'],
+  ['What if I do not have an approved list or a change log?', 'Run without them. Any part of the contract that depends on them is reported as not confirmed — never as allowed — so the gap is visible.'],
+  ['How large a file can it check?', 'In the browser, a CSV up to 90 MB and an Excel workbook up to 25 MB. On the command line, files of any size: they are streamed from disk, and 5 million rows reconcile in about 2 minutes in 512 MB.'],
+  ['What does it cost?', 'Nothing while in pilot. The engine, the app and the dcv command are open source under Apache-2.0.'],
+]
+
+const how = () => `<section class="hero"><div class="wrap">
+<span class="eyebrow">How it works</span>
+<h1>Two files in. An answer, a fix list and a record out.</h1>
+<p class="lead">Open the records as they were and as they are now. Plumbstep takes them down a staircase of checks, stops on the step where something is wrong, says whose fix it is, and writes a record anyone can re-check.</p>
+<div class="actions"><a class="btn primary" href="${APP}">Open the workspace</a><a class="btn" href="#samples">See a sample record</a></div>
+</div></section>
+
+<section><div class="wrap">
+<span class="eyebrow">Three steps</span>
+<h2>From two exports to a record you can sign.</h2>
+<div class="grid">
+<div class="card"><span class="num">1 · Open the files</span><h3>Before and after</h3><p>Export the records from before the change and after it — or the load file, or the old and new systems’ extracts. Open them in the workspace, or point <code>dcv</code> at them. Nothing is sent anywhere.</p></div>
+<div class="card"><span class="num">2 · The descent</span><h3>Checks in order, stopping where it is wrong</h3><p>Each check asks something the one before it cannot. The step where the first problem shows says what kind of problem it is, and the steps above it that passed say what it is not.</p></div>
+<div class="card"><span class="num">3 · The record</span><h3>Evidence that stands on its own</h3><p>The files by the SHA-256 of their bytes, the rules in full, who did what, every difference with whose fix it is, what was not checked, and the command that runs it again.</p></div>
+</div>
+<p class="note"><a href="docs/index.html">How to read a report, step by step →</a></p>
+</div></section>
+
+<section><div class="wrap">
+<span class="eyebrow">The change contract</span>
+<h2>Say what may change. Everything else must stay.</h2>
+<p class="intro">A change contract is written before the change, from dropdowns — no formulas. You choose the key that identifies a record, whether records may be added or removed, and each column that may change, and how:</p>
+<div class="table-wrap"><table>
+<thead><tr><th scope="col">A column…</th><th scope="col">What it means</th></tr></thead>
+<tbody>${POLICY_ROWS.map(([a, b]) => `<tr><td>${h(a)}</td><td>${h(b)}</td></tr>`).join('')}</tbody>
+</table></div>
+<p class="note">Add an approved list and the change log if you have them, and totals that must not move, or may move only within limits. Records added or removed are reported unless the contract allows them.</p>
+</div></section>
+
+<section><div class="wrap">
+<span class="eyebrow">Four checks, one engine</span>
+<h2>The staircase each question walks down.</h2>
+<div class="table-wrap"><table>
+<thead><tr><th scope="col">The question</th><th scope="col">When</th><th scope="col">The steps</th></tr></thead>
+<tbody>
+<tr><td>Was this change allowed?</td><td>After any bulk change</td><td>${h(CHANGE_STEPS.map((s) => s.label).join(' → '))}</td></tr>
+<tr><td>Will the target accept this file?</td><td>Before a load</td><td>Every rule, record by record, then the file’s totals</td></tr>
+<tr><td>Did every record arrive, correctly?</td><td>After a load</td><td>${h(RECON_STEPS.map((s) => s.label).join(' → '))}</td></tr>
+<tr><td>Has this feed drifted?</td><td>Every new file, after go-live</td><td>Schema → Semantics → Freshness → Distribution</td></tr>
+</tbody></table></div>
+</div></section>
+
+<section id="samples"><div class="wrap">
+<span class="eyebrow">Samples</span>
+<h2>See it on real output.</h2>
+<p class="intro">These records were made by Plumbstep itself when this site was built, from invented files. Each is published with the files it was made from, so you can check it the way an auditor would.</p>
+<div class="grid two">${sampleCards()}</div>
+<h3 class="table-title">Re-check a sample yourself</h3>
+<p class="intro">Download the salary revision’s files into one folder, fingerprint them and compare with the record, then run the check again (from a copy of the repository until the first npm release):</p>
+<pre class="code"><code>sha256sum payroll_before_revision.csv payroll_after_revision.csv approved_revisions.csv
+dcv change salary-revision.change.json payroll_before_revision.csv payroll_after_revision.csv \\
+    --approved approved_revisions.csv --tags salary-revision.tags.json</code></pre>
+</div></section>
+
+<section><div class="wrap">
+<span class="eyebrow">What it does not do</span>
+<h2>Plumbstep checks. People decide.</h2>
+<ul class="plain spaced">
+<li>It never changes or loads your data: it reads the files you give it and reports.</li>
+<li>No AI makes a call. Every check is a rule you can read in the record.</li>
+<li>It gives no audit opinion. The record says exactly what it claims, and nothing more.</li>
+<li>Its independence is only as good as who wrote the rules and who ran the check — and the record names both.</li>
+</ul>
+</div></section>
+
+<section><div class="wrap">
+<span class="eyebrow">Questions</span>
+<h2>Common questions</h2>
+<div class="faq">${FAQ.map(([q, a]) => `<details><summary>${h(q)}</summary><p>${h(a)}</p></details>`).join('')}</div>
+</div></section>
+
+<section class="band"><div class="wrap">
+<h2>Try it on the examples first.</h2>
+<p class="intro">The workspace opens worked examples with their files already in place. No account, no files of yours.</p>
+<div class="actions spaced"><a class="btn primary" href="${APP}">Open the workspace</a><a class="btn" href="pricing.html">Pilot terms</a></div>
+</div></section>`
+
 const home = () => `<section class="hero"><div class="wrap">
 <span class="eyebrow">Record assurance</span>
 <h1>Whoever changed your records shouldn’t be the one who checks them.</h1>
 <p class="lead">Plumbstep is the independent check on business records as they change hands — a migration, a salary revision, an AI run, a bureau’s clean-up. It shows what changed, whether that was allowed, and whose fix each difference is. It runs on your computer: the records never leave it.</p>
-<div class="actions"><a class="btn primary" href="${APP}">Open the workspace</a><a class="btn" href="auditors.html">For CAs and auditors</a></div>
+<div class="actions"><a class="btn primary" href="${APP}">Open the workspace</a><a class="btn" href="how.html#samples">See a sample record</a></div>
 <p class="trust">No account needed. Open a file from your computer; your files are not sent anywhere.</p>
 ${staircase()}
 </div></section>
+${facts()}
 
 <section><div class="wrap">
 <span class="eyebrow">The gap</span>
@@ -337,7 +453,7 @@ const pricing = () => `<section class="hero"><div class="wrap">
 <p class="note">A pilot means a project uses it on real exports and tells us what broke. That is also how a draft pack becomes verified.</p>
 </div></section>`
 
-const BODIES = { 'index.html': home, 'auditors.html': auditors, 'partners.html': partners, 'teams.html': teams, 'packs.html': packsPage, 'security.html': security, 'pricing.html': pricing }
+const BODIES = { 'index.html': home, 'how.html': how, 'auditors.html': auditors, 'partners.html': partners, 'teams.html': teams, 'packs.html': packsPage, 'security.html': security, 'pricing.html': pricing }
 
 // Builds into `out`. `app` is the built app (dist/) to copy under app/, or null.
 export function buildSite({ out, app = null }) {
@@ -357,6 +473,7 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
   const app = join(root, 'dist')
   const hasApp = existsSync(join(app, 'index.html'))
   const files = buildSite({ out, app: hasApp ? app : null })
-  console.log(`Built ${files.length} pages into dist-site/${hasApp ? ', with the app under app/' : ''}.`)
+  await buildSamples(out)
+  console.log(`Built ${files.length} pages and ${SAMPLES.length} samples into dist-site/${hasApp ? ', with the app under app/' : ''}.`)
   if (!hasApp) console.log('No dist/ found: run `npm run build` first to include the app under app/.')
 }
