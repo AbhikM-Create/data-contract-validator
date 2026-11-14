@@ -15,6 +15,7 @@ import { USAGE as SHARE_USAGE } from '../cli/share.mjs'
 import { DATE_FORMATS, DECIMALS, ENCODINGS, GROUPINGS, SIDES } from '../src/lib/formats.js'
 import { IDENTIFIERS } from '../src/lib/identifiers.js'
 import { SENSITIVITIES } from '../src/lib/masking.js'
+import { CHANGE_OWNERS, CHANGE_STEPS } from '../src/lib/changeContract.js'
 import { RECON_STEPS } from '../src/lib/reconcile.js'
 import { describeRule, ruleSeverity } from '../src/lib/rules.js'
 import { DEFAULT_OWNERS } from '../src/lib/signoff.js'
@@ -28,8 +29,8 @@ const LINKS = { issues: '', repo: '' }
 const packFile = (pack) => `docs/pack-${pack.id}.html`
 
 export const DOCS_PAGES = [
-  { file: 'docs/index.html', docs: 'Help centre', title: 'Help centre — Plumbstep', description: 'Your first cutover in Plumbstep, how to read a report, the formats and identifiers it reads, and a glossary.' },
-  { file: 'docs/cli.html', docs: 'Command line', title: 'Command line (dcv) — Plumbstep', description: 'The dcv command: check, reconcile, pack, share and ODCS, with exit codes for pipelines.' },
+  { file: 'docs/index.html', docs: 'Help centre', title: 'Help centre — Plumbstep', description: 'Your first change check and your first cutover in Plumbstep, how to read a report, the formats and identifiers it reads, and a glossary.' },
+  { file: 'docs/cli.html', docs: 'Command line', title: 'Command line (dcv) — Plumbstep', description: 'The dcv command: change, check, reconcile, pack, share and ODCS, with exit codes for pipelines.' },
   ...PACKS.map((pack) => ({ file: packFile(pack), docs: `Pack: ${pack.name.split(' — ')[0]}`, title: `${pack.name} — pack reference — Plumbstep`, description: `Every expected column, rule, mapping and control total in the ${pack.name} pack, read from the pack itself.`, pack })),
   { file: 'docs/changelog.html', docs: 'Changelog', title: 'Changelog — Plumbstep', description: 'What changed, and when.' },
   { file: 'docs/legal.html', docs: 'Legal', title: 'Legal — Plumbstep', description: 'Terms, privacy notice and data processing agreement: what exists today and what does not.' },
@@ -63,6 +64,12 @@ const READINESS = [
 ]
 
 const GLOSSARY = [
+  ['Change contract', 'What a bulk change may do: which columns may change and how, whether records may be added or removed, and the totals it must keep. Every column it does not name must stay as it was. Saved as a .change.json file.'],
+  ['Change check', 'A change contract run on a file from before the change and a file from after it, records matched by key.'],
+  ['Approved list', 'The records the signer approved for a change, keyed like the records, with their approved values where the contract asks for them.'],
+  ['Change log', 'The list kept by whoever made the change of the records they touched. Every change must be in it, and every logged record must have changed.'],
+  ['Self-checked', 'A change check whose contract, exports or run came from whoever made the change. The record says so on its first page.'],
+  ['Change record', 'The document a change check writes: the answer, who did what, the files by their SHA-256, the contract in full, and what was not checked.'],
   ['Migration object', 'One kind of record being moved — employees, the chart of accounts, open payables — with its rules, mapping, formats and every run’s counts. Saved as a .migration.json file, or to your account.'],
   ['Load file', 'The file you are about to load into the new system. Checked before the load.'],
   ['Source extract and target extract', 'The same records exported from the old system and from the new one after the load. Reconciled against each other.'],
@@ -83,7 +90,21 @@ function helpCentre() {
   const layers = VALIDATE_LAYERS.map(([name, text], i) => `<tr><td>${i + 1}. ${h(name)}</td><td>${h(text)}</td></tr>`).join('')
   const statuses = READINESS.map(([name, tone, text]) => `<tr><td><span class="chip ${tone}">${h(name)}</span></td><td>${h(text)}</td></tr>`).join('')
   const list = (items) => items.map((i) => `<li>${h(i.label)}</li>`).join('')
-  return `${hero('Help centre', 'Your first cutover, step by step.', 'The workspace has four steps, one on screen at a time. Here is what each asks of you, how to read what comes back, and what the words mean.')}
+  const changeSteps = CHANGE_STEPS.map((s, i) => `<tr><td>${i + 1}. ${h(s.label)}</td><td>${h(s.question)}</td><td>${h(CHANGE_OWNERS[s.id] ?? '')}</td></tr>`).join('')
+  return `${hero('Help centre', 'Check a change, or a whole cutover.', 'Two ways in: a change check for any bulk change to records, and the four-step workspace for a migration. Here is what each asks of you, how to read what comes back, and what the words mean.')}
+<section><div class="wrap">
+<h2 id="first-change-check">Your first change check</h2>
+<p class="intro">For a salary revision, an AI categorisation run, a bureau’s clean-up — any time someone changed a set of records and you are asked to accept it. Open <a href="../app/index.html">the workspace</a> and choose Change checks.</p>
+<div class="grid">
+<div class="card"><span class="num">1 · The records</span><h3>Before and after</h3><p>Open the file from before the change and the file from after it, exported the same way. Add the approved list and the change log if you have them.</p></div>
+<div class="card"><span class="num">2 · The contract</span><h3>Say what may change</h3><p>Choose the key, whether records may be added or removed, and each column that may change: freely, to one of a list, within limits, or to its approved value. Every column you do not list must stay exactly as it was.</p></div>
+<div class="card"><span class="num">3 · The answer</span><h3>Allowed, not allowed, or not confirmed</h3><p>Check the change. A contract that needs the approved list or the change log, run without it, is not confirmed — never allowed.</p></div>
+<div class="card"><span class="num">4 · The record</span><h3>Who did what</h3><p>State who made the change and who exported each file, and download the change record. If any of it came from whoever made the change, the record says self-checked.</p></div>
+</div>
+<h3 class="table-title">Reading a change check</h3>
+<div class="table-wrap"><table><thead><tr><th scope="col">Step</th><th scope="col">The question</th><th scope="col">Whose fix, by default</th></tr></thead><tbody>${changeSteps}</tbody></table></div>
+<p class="note">The same check runs from the command line as <code>dcv change</code>, on files of any size. The contract you save in the workspace is the file it reads.</p>
+</div></section>
 <section><div class="wrap">
 <h2 id="first-cutover">Your first cutover</h2>
 <div class="grid">
@@ -249,7 +270,8 @@ ${objects}
 // Written by hand from the merged pull requests. Dates are merge dates.
 
 const CHANGES = [
-  { when: 'Not yet released', items: ['The product is named Plumbstep on screen, with its logo, the Geist typefaces, a six-size type scale and a two-row bar.', 'This website: the marketing pages, the help centre, the command-line docs, the pack reference, this changelog and the legal shells.', 'Tally balances whose side shows only as Dr or Cr are no longer read as the bare amount: the side is kept, and read as plus or minus when the file’s format declares Dr/Cr. A merged title above the header row no longer stops a workbook being read.'] },
+  { when: 'Not yet released', items: ['The product is named Plumbstep on screen, with its logo, the Geist typefaces, a six-size type scale and a two-row bar.', 'This website: the marketing pages, the help centre, the command-line docs, the pack reference, this changelog and the legal shells.'] },
+  { when: '14 Nov 2026', items: ['Change checks: say what a bulk change may do, and check a file from before it against a file from after it — in the workspace, or with dcv change on files of any size. Every column the contract does not name must stay as it was.', 'The change record: the answer, who made the change, who exported each file and when, the files by their SHA-256 and the contract in full. A check whose inputs came from whoever made the change is labelled self-checked.', 'A new look: an isometric staircase leads every report, on raised cards over a soft ground. A dark theme, Blueprint, follows your system setting, or choose it in the bar.', 'Tally balances whose side shows only as Dr or Cr are no longer read as the bare amount: the side is kept, and read as plus or minus when the file’s format declares Dr/Cr. A merged title above the header row no longer stops a workbook being read.'] },
   { when: '13 Nov 2026', items: ['Organisations: members, invitations and four roles — admin, editor, approver and viewer.', 'Migration objects saved to your account, and opened again on any device.'] },
   { when: '12 Nov 2026', items: ['The workspace in four steps, one on screen at a time, with a rail that shows each step’s status.', 'A first-visit home page, a guided tour beside the finance example, and a sign-in screen that lists what an account keeps and never keeps.'] },
   { when: '11 Nov 2026', items: ['The home page leads with the cutover job; the finance example, Tally to Zoho Books, comes first.', 'New rule kinds: identifiers (PAN, GSTIN, IFSC, UAN, PIN), uniqueness, totals and reference files.', 'The sign-off record: decisions, owners, scope and typed signatures in the evidence pack.', 'Packs: Finance (Tally to Zoho Books) and HR (mid-year payroll to Zoho Payroll), both drafts.', 'Column matching, sensitivity tags and masking, Excel workbooks in the browser, Indian digit grouping, and safe sharing of definitions.'] },
