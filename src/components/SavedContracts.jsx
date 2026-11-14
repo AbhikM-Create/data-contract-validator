@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import ConfirmButton from './ConfirmButton.jsx'
 import { go } from '../routes.js'
-import { colors, ghostButton, label, panel, sans, secondaryButton } from '../theme.js'
+import { colors, ghostButton, label, panel, sans, secondaryButton, tint } from '../theme.js'
 import { when } from './when.js'
 
 // The contracts in this account. A contract is worth writing only if it
@@ -98,7 +98,7 @@ export default function SavedContracts({ contracts, loading, openId, signedIn, e
                       <span style={{ fontFamily: sans, fontSize: 12, color: colors.fail }}>Delete for good?</span>
                       <button
                         onClick={() => { onDelete(contract.id); setConfirming(null) }}
-                        style={{ ...ghostButton, color: colors.fail, borderColor: `${colors.fail}66` }}
+                        style={{ ...ghostButton, color: colors.fail, borderColor: `${tint(colors.fail, '66')}` }}
                       >
                         Delete
                       </button>

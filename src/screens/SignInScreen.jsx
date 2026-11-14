@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { isConfigured, signIn, signUp } from '../lib/supabase.js'
 import { go } from '../routes.js'
-import { colors, panel, primaryButton, sans } from '../theme.js'
+import { colors, panel, primaryButton, sans, tint } from '../theme.js'
 import { ScreenHead } from './ValidateScreen.jsx'
 
 // Signing in buys you saved contracts and saved runs. It buys nothing else —
@@ -174,7 +174,7 @@ function Field({ label, type, value, onChange, autoComplete, hint }) {
 function Notice({ tone, children }) {
   const colour = tone === 'warn' ? colors.warn : colors.pass
   return (
-    <div style={{ marginTop: 18, padding: '10px 12px', borderRadius: 6, border: `1px solid ${colour}55`, background: `${colour}10`, maxWidth: 560 }}>
+    <div style={{ marginTop: 18, padding: '10px 12px', borderRadius: 6, border: `1px solid ${tint(colour, '55')}`, background: `${tint(colour, '10')}`, maxWidth: 560 }}>
       <span style={{ fontFamily: sans, fontSize: 13, color: colour, lineHeight: 1.5 }}>{children}</span>
     </div>
   )

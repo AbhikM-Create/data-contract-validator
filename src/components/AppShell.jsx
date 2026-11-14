@@ -1,7 +1,9 @@
 import { isConfigured, signOut } from '../lib/supabase.js'
 import { ROUTES, go } from '../routes.js'
-import { colors, ghostButton, mono, sans } from '../theme.js'
+import { colors, ghostButton, mono, sans, tint } from '../theme.js'
 import Logo from './Logo.jsx'
+import { useState } from 'react'
+import { THEME_CHOICES, applyThemeChoice, readThemeChoice } from './themeChoice.js'
 
 // The frame every screen sits in: brand, the three destinations, the account,
 // and the trust line. The trust line is part of the chrome rather than one
@@ -19,7 +21,7 @@ export default function AppShell({ route, user, authLoading, busy, engineError, 
       <header
         className="app-header"
         style={{
-          borderBottom: '1px solid rgba(220,227,232,0.7)',
+          borderBottom: '1px solid var(--card-edge)',
           position: 'sticky',
           top: 0,
           zIndex: 10,
@@ -58,6 +60,8 @@ export default function AppShell({ route, user, authLoading, busy, engineError, 
               <NavItem key={item.id} item={item} active={item.id === route} quiet />
             ))}
           </nav>
+
+          <ThemePicker />
 
           {/* Which state the person is in, said plainly: signed out, the work
               lives on this device and nowhere else. */}
@@ -119,7 +123,7 @@ export default function AppShell({ route, user, authLoading, busy, engineError, 
           is always present so its first message is read. */}
       <div role="status" aria-live="polite">
       {busy && (
-        <div style={{ background: `${colors.accent}0F`, borderBottom: `1px solid ${colors.accent}33` }}>
+        <div style={{ background: `${tint(colors.accent, '0F')}`, borderBottom: `1px solid ${tint(colors.accent, '33')}` }}>
           <div style={{ maxWidth: 1080, margin: '0 auto', padding: '8px 24px', display: 'flex', alignItems: 'center', gap: 9 }}>
             <span className="pulse" style={{ width: 7, height: 7, borderRadius: '50%', background: colors.accent }} />
             <span style={{ fontFamily: sans, fontSize: 13, color: colors.accent }}>
@@ -149,12 +153,12 @@ export default function AppShell({ route, user, authLoading, busy, engineError, 
       )}
 
       {engineError && (
-        <div role="alert" style={{ background: `${colors.fail}0D`, borderBottom: `1px solid ${colors.fail}33` }}>
+        <div role="alert" style={{ background: `${tint(colors.fail, '0D')}`, borderBottom: `1px solid ${tint(colors.fail, '33')}` }}>
           <div style={{ maxWidth: 1080, margin: '0 auto', padding: '11px 24px', display: 'flex', alignItems: 'flex-start', gap: 12 }}>
             <span style={{ fontFamily: sans, fontSize: 13, color: colors.fail, lineHeight: 1.55, flex: 1 }}>
               {engineError}
             </span>
-            <button onClick={onDismissError} style={{ ...ghostButton, color: colors.fail, borderColor: `${colors.fail}55` }}>
+            <button onClick={onDismissError} style={{ ...ghostButton, color: colors.fail, borderColor: `${tint(colors.fail, '55')}` }}>
               Dismiss
             </button>
           </div>
@@ -165,7 +169,7 @@ export default function AppShell({ route, user, authLoading, busy, engineError, 
         {children}
       </main>
 
-      <footer style={{ borderTop: '1px solid rgba(220,227,232,0.7)' }}>
+      <footer style={{ borderTop: '1px solid var(--card-edge)' }}>
         <div style={{ maxWidth: 1080, margin: '0 auto', padding: '16px 24px' }}>
           <span style={{ fontFamily: mono, fontSize: 12, color: colors.faint }}>
             {isConfigured
@@ -205,4 +209,19 @@ function when(iso) {
   const date = iso ? new Date(iso) : null
   if (!date || Number.isNaN(date.getTime())) return 'earlier'
   return date.toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
+}
+
+// Light, dark ("Blueprint") or the system's choice — kept on this device.
+function ThemePicker() {
+  const [choice, setChoice] = useState(readThemeChoice)
+  return (
+    <select
+      aria-label="Colour theme"
+      value={choice}
+      onChange={(e) => { setChoice(e.target.value); applyThemeChoice(e.target.value) }}
+      style={{ fontFamily: sans, fontSize: 13, color: colors.mute, background: colors.panel, borderWidth: 1, borderStyle: 'solid', borderRadius: 9, padding: '6px 8px', minHeight: 32, cursor: 'pointer' }}
+    >
+      {THEME_CHOICES.map((c) => <option key={c.id} value={c.id}>{c.id === 'system' ? 'Theme: system' : `Theme: ${c.label.toLowerCase()}`}</option>)}
+    </select>
+  )
 }

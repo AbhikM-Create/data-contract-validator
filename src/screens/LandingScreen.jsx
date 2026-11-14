@@ -6,7 +6,7 @@ import { CHECK_COPY, HOW_IT_WORKS } from '../copy.js'
 import { MIGRATION_EXAMPLES } from '../samples/migrationExamples.js'
 import { SAMPLE_PAIRS } from '../samples/samples.js'
 import { go } from '../routes.js'
-import { colors, mono, panel, primaryButton, sans, secondaryButton } from '../theme.js'
+import { colors, mono, panel, primaryButton, sans, secondaryButton, tint } from '../theme.js'
 
 // The first look. A visitor can read what the tool does and run a ready-made
 // example without an account — the checks all happen in their browser, so there
@@ -36,7 +36,7 @@ export default function LandingScreen({ onLoadSample, onMigrationExample, onTour
     <>
       <section className="hero" style={{ paddingTop: 18 }}>
         <div style={{ minWidth: 0 }}>
-          <span style={{ display: 'inline-block', fontFamily: sans, fontSize: 12, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: colors.accent, background: `${colors.accent}1A`, borderRadius: 6, padding: '4px 10px' }}>
+          <span style={{ display: 'inline-block', fontFamily: sans, fontSize: 12, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: colors.accent, background: `${tint(colors.accent, '1A')}`, borderRadius: 6, padding: '4px 10px' }}>
             For ERP, HCM and finance cutovers
           </span>
           <h1 className="hero-title" style={{ fontFamily: sans, fontWeight: 700, letterSpacing: '-0.045em', color: colors.ink, margin: '16px 0 0', lineHeight: 1.02 }}>
@@ -213,20 +213,22 @@ function HeroStair() {
   return (
     <div className="hero-art" aria-hidden="true" style={{ position: 'relative' }}>
       <svg viewBox={`0 0 ${stair.width} ${stair.height}`} style={{ width: '100%', height: 'auto', display: 'block' }}>
-        <ellipse cx={stair.width / 2} cy={stair.height - 14} rx={stair.width * 0.42} ry={12} fill="rgba(22,34,43,0.09)" />
-        <g stroke="rgba(22,34,43,0.12)" strokeWidth="1" strokeLinejoin="round">
+        <ellipse cx={stair.width / 2} cy={stair.height - 14} rx={stair.width * 0.42} ry={12} style={{ fill: 'var(--floor-shadow)' }} />
+        <g strokeWidth="1" strokeLinejoin="round" style={{ stroke: 'var(--face-edge)' }}>
           {stair.steps.map((step, i) => (
             <g key={i}>
-              <polygon points={step.right} fill={i === 0 ? '#B7D3DD' : '#CAD6DE'} />
-              <polygon points={step.front} fill={i === 0 ? '#CFE2E9' : '#E1E9EE'} />
-              <polygon points={step.top} fill={i === 0 ? '#EEF6F9' : '#FFFFFF'} />
+              <polygon points={step.right} style={{ fill: i === 0 ? 'var(--face-first-right)' : 'var(--face-idle-right)' }} />
+              <polygon points={step.front} style={{ fill: i === 0 ? 'var(--face-first-front)' : 'var(--face-idle-front)' }} />
+              <polygon points={step.top} style={{ fill: i === 0 ? 'var(--face-first-top)' : 'var(--face-idle-top)' }} />
             </g>
           ))}
         </g>
-        <line x1={bx - 34} y1={stair.beamY} x2={bx + 34} y2={stair.beamY} stroke={colors.ink} strokeWidth="3" strokeLinecap="round" />
-        <line x1={bx} y1={stair.beamY} x2={bx} y2={by - 19} stroke={colors.accent} strokeWidth="2" />
-        <ellipse cx={bx} cy={by + 1} rx="15" ry="5" fill="rgba(31,111,139,0.22)" />
-        <polygon points={`${bx - 9},${by - 19} ${bx + 9},${by - 19} ${bx},${by - 1}`} fill={colors.accent} />
+        <line x1={bx - 34} y1={stair.beamY} x2={bx + 34} y2={stair.beamY} strokeWidth="3" strokeLinecap="round" style={{ stroke: colors.ink }} />
+        <g className="plumb">
+          <line x1={bx} y1={stair.beamY} x2={bx} y2={by - 19} strokeWidth="2" style={{ stroke: colors.accent }} />
+          <ellipse cx={bx} cy={by + 1} rx="15" ry="5" style={{ fill: tint(colors.accent, '38') }} />
+          <polygon points={`${bx - 9},${by - 19} ${bx + 9},${by - 19} ${bx},${by - 1}`} style={{ fill: colors.accent }} />
+        </g>
       </svg>
       {stair.steps.map((step, i) => (
         <span
@@ -237,8 +239,8 @@ function HeroStair() {
             top: `${((step.label[1] - 12) / stair.height) * 100}%`,
             display: 'inline-flex', gap: 6, alignItems: 'center', whiteSpace: 'nowrap',
             fontFamily: sans, fontSize: 12, fontWeight: 600, color: colors.ink,
-            background: 'rgba(255,255,255,0.92)', borderRadius: 999, padding: '4px 10px',
-            boxShadow: '0 6px 16px -6px rgba(22,34,43,0.28)',
+            background: 'var(--tag-bg)', borderRadius: 999, padding: '4px 10px',
+            boxShadow: 'var(--tag-shadow)',
           }}
         >
           <span style={{ fontFamily: mono, color: colors.accent }}>{String(i + 1).padStart(2, '0')}</span>

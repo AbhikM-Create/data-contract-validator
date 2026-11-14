@@ -31,30 +31,38 @@ const SCREENS = [
   ['migrations (empty)', '/#/migrations'],
 ]
 
-for (const [name, url] of SCREENS) {
-  test(`F8: no serious accessibility violation — ${name}`, async ({ page }) => {
-    await page.goto(url)
-    await expect(page.locator('main')).toBeVisible()
-    expect(await seriousViolations(page)).toEqual([])
+// Every screen and both reports, in each theme: light (Direction C) and dark
+// (Direction A, "Blueprint"), which follows the system setting by default.
+for (const scheme of ['light', 'dark']) {
+  test.describe(scheme, () => {
+    test.use({ colorScheme: scheme })
+
+    for (const [name, url] of SCREENS) {
+      test(`F8: no serious accessibility violation — ${name}, ${scheme}`, async ({ page }) => {
+        await page.goto(url)
+        await expect(page.locator('main')).toBeVisible()
+        expect(await seriousViolations(page)).toEqual([])
+      })
+    }
+
+    test(`F8: no serious accessibility violation — the migration example, checked and reconciled, ${scheme}`, async ({ page }) => {
+      await page.goto('/#/migrations')
+      await page.getByRole('button', { name: 'Try the example migration' }).click()
+      await runReadiness(page)
+      await expect(page.getByText('NOT READY', { exact: true }).first()).toBeVisible()
+      await runReconcile(page)
+      await expect(page.getByText(/^Stopped at Mapping\./).first()).toBeVisible()
+      expect(await seriousViolations(page)).toEqual([])
+    })
+
+    test(`F8: no serious accessibility violation — a Validate report, ${scheme}`, async ({ page }) => {
+      await page.goto('/')
+      await page.getByRole('button', { name: 'Run this example' }).first().click()
+      await expect(page.getByText('How far the file got')).toBeVisible()
+      expect(await seriousViolations(page)).toEqual([])
+    })
   })
 }
-
-test('F8: no serious accessibility violation — the migration example, checked and reconciled', async ({ page }) => {
-  await page.goto('/#/migrations')
-  await page.getByRole('button', { name: 'Try the example migration' }).click()
-  await runReadiness(page)
-  await expect(page.getByText('NOT READY', { exact: true }).first()).toBeVisible()
-  await runReconcile(page)
-  await expect(page.getByText(/^Stopped at Mapping\./).first()).toBeVisible()
-  expect(await seriousViolations(page)).toEqual([])
-})
-
-test('F8: no serious accessibility violation — a Validate report', async ({ page }) => {
-  await page.goto('/')
-  await page.getByRole('button', { name: 'Run this example' }).first().click()
-  await expect(page.getByText('How far the file got')).toBeVisible()
-  expect(await seriousViolations(page)).toEqual([])
-})
 
 test('F8: the first Tab reaches a skip link that moves focus to the screen', async ({ page }) => {
   const errors = watchErrors(page)

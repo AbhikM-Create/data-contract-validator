@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { findingTable } from '../lib/findingTable.js'
-import { chip, colors, ghostButton, label, mono, panel, sans, statusColor } from '../theme.js'
+import { chip, colors, ghostButton, label, mono, panel, sans, statusColor, tint } from '../theme.js'
 import Staircase from './Staircase.jsx'
 
 // The reconciliation report. The staircase leads, as it does on Validate: the
@@ -62,7 +62,7 @@ function Figure({ label: title, value, note }) {
 function StepCard({ step, index, isLead, report, onExport, owner }) {
   const tone = statusColor[step.status] ?? colors.faint
   return (
-    <section style={{ ...panel, borderColor: isLead ? `${tone}88` : colors.panelEdge, padding: '14px 16px', marginTop: 10 }}>
+    <section style={{ ...panel, borderColor: isLead ? `${tint(tone, '88')}` : colors.panelEdge, padding: '14px 16px', marginTop: 10 }}>
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap' }}>
         <span style={{ fontFamily: mono, fontSize: 12, color: colors.faint }}>{index + 1}</span>
         <h4 style={{ fontFamily: sans, fontSize: 16, fontWeight: 600, color: colors.ink, margin: 0 }}>{step.label}</h4>

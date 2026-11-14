@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react'
-import { colors, mono, panel, sans } from '../theme.js'
+import { colors, mono, panel, sans, tint } from '../theme.js'
 
 // One numbered step with an unmistakable upload button. Drag-and-drop still
 // works on the whole card, but it is the fallback, not the only way in —
@@ -23,7 +23,7 @@ export default function UploadCard({ step, title, tag, hint, file, accent, onFil
       onDrop={(e) => { e.preventDefault(); setDragging(false); take(e.dataTransfer.files) }}
       style={{
         ...panel,
-        borderColor: dragging ? accent : failed ? colors.fail : loaded ? `${colors.pass}55` : colors.panelEdge,
+        borderColor: dragging ? accent : failed ? colors.fail : loaded ? `${tint(colors.pass, '55')}` : colors.panelEdge,
         padding: 16,
         transition: 'border-color 120ms ease',
       }}

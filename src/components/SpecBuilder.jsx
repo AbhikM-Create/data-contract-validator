@@ -1,6 +1,6 @@
 import { useRef } from 'react'
 import { CROSSWALK_KINDS } from '../lib/shareDefinitions.js'
-import { colors, ghostButton, label, mono, panel, sans } from '../theme.js'
+import { colors, ghostButton, label, mono, panel, sans, tint } from '../theme.js'
 
 // Building a reconciliation spec from dropdowns — never typed logic, the same
 // principle as the rule builder: every choice is a column the files actually
@@ -104,7 +104,7 @@ export default function SpecBuilder({ spec, sourceColumns, targetColumns, sugges
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 6 }}>
           <button onClick={addField} style={ghostButton}>+ Map a field</button>
           {suggestions.length > 0 && (
-            <button onClick={acceptSuggestions} style={{ ...ghostButton, color: colors.accent, borderColor: `${colors.accent}55` }}>
+            <button onClick={acceptSuggestions} style={{ ...ghostButton, color: colors.accent, borderColor: `${tint(colors.accent, '55')}` }}>
               Pair {suggestions.length} column{suggestions.length === 1 ? '' : 's'} with the same name
             </button>
           )}

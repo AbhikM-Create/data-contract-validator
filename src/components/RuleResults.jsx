@@ -1,5 +1,5 @@
 import { describeRule, ruleKey, ruleSeverity } from '../lib/rules.js'
-import { colors, ghostButton, mono, panel, sans, statusColor } from '../theme.js'
+import { colors, ghostButton, mono, panel, sans, statusColor, tint } from '../theme.js'
 
 // Results for the rules a human authored, reported RULE BY RULE rather than by
 // layer — an author thinks in the requirements they wrote, not in the engine's
@@ -19,7 +19,7 @@ export default function RuleResults({ outcomes, onRemove }) {
               ...panel,
               // Longhand only: setting `border` (from panel) and `borderLeft`
               // together makes React drop one of them on re-render.
-              borderColor: status === 'FAIL' ? `${tone}88` : colors.panelEdge,
+              borderColor: status === 'FAIL' ? `${tint(tone, '88')}` : colors.panelEdge,
               borderLeftWidth: 3,
               borderLeftColor: tone,
               padding: '12px 14px',
@@ -39,7 +39,7 @@ export default function RuleResults({ outcomes, onRemove }) {
               <span
                 style={{
                   fontFamily: mono, fontSize: 12, letterSpacing: '0.08em', color: tone,
-                  border: `1px solid ${tone}66`, borderRadius: 5, padding: '2px 7px',
+                  border: `1px solid ${tint(tone, '66')}`, borderRadius: 5, padding: '2px 7px',
                 }}
               >
                 {status}
