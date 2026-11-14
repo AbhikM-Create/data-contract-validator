@@ -27,9 +27,14 @@
   -moz-osx-font-smoothing: grayscale;
 }
 
+/* Direction C: a cool gradient ground the cards float on. Fixed, so a long
+   page scrolls over one calm field instead of a repeating band. */
 body {
   margin: 0;
-  background: #f4f6f8;
+  background-color: #eef3f6;
+  background-image: linear-gradient(160deg, #e3edf2 0%, #f6f9fb 55%, #e9edf6 100%);
+  background-attachment: fixed;
+  min-height: 100vh;
 }
 
 * {
@@ -85,12 +90,19 @@ p {
 /* The two layouts that must change shape on a narrow screen. Everything else
    is auto-fit grids that reflow on their own. */
 
-.staircase-grid {
+/* The isometric staircase (Staircase.jsx): the drawing beside the legend of
+   steps; stacked on a narrow screen, drawing first. */
+.iso-stair {
   display: grid;
-  /* --steps is set by Staircase: four drift layers, five reconciliation steps */
-  grid-template-columns: repeat(var(--steps, 4), minmax(0, 1fr));
-  gap: 10px;
+  grid-template-columns: minmax(0, 1fr) minmax(260px, 400px);
+  gap: 24px;
   align-items: start;
+}
+
+.iso-stair svg {
+  width: 100%;
+  height: auto;
+  display: block;
 }
 
 .contracts-layout {
@@ -101,24 +113,15 @@ p {
 }
 
 @media (max-width: 760px) {
-  /* A descent across four columns becomes four unreadable slivers on a phone,
-     so the steps stack and the indent carries the descent instead. */
-  .staircase-grid {
-    grid-template-columns: 1fr;
+  .iso-stair {
+    grid-template-columns: minmax(0, 1fr);
   }
 
-  .staircase-step {
-    margin-top: 0 !important;
+  .iso-stair .iso-drawing {
+    order: -1;
+    max-width: 320px;
+    margin: 0 auto;
   }
-
-  .staircase-step:nth-child(2) { margin-left: 14px; }
-  .staircase-step:nth-child(3) { margin-left: 28px; }
-  .staircase-step:nth-child(4) { margin-left: 42px; }
-  .staircase-step:nth-child(5) { margin-left: 56px; }
-
-  /* The riser is drawn for a left-to-right descent; stacked, the indent
-     carries the descent and a vertical stub would point at nothing. */
-  .staircase-riser { display: none; }
 
   .contracts-layout {
     grid-template-columns: 1fr;
@@ -162,37 +165,36 @@ p {
   .pulse { animation: none; }
 }
 
-/* The workspace: a rail of steps beside the step on screen; stacked when narrow. */
+/* The workspace: the four steps as one floating switcher above the step on
+   screen. It wraps to two rows, then one column, as the screen narrows. */
 .workspace {
   display: grid;
-  grid-template-columns: 220px minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr);
   gap: 22px;
   margin-top: 18px;
   align-items: start;
 }
 
 .step-rail {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 4px;
-  position: sticky;
-  top: 108px;
+  padding: 5px;
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid rgba(255, 255, 255, 0.9);
+  border-radius: 16px;
+  box-shadow: 0 1px 2px rgba(22, 34, 43, 0.05), 0 14px 32px -16px rgba(22, 34, 43, 0.2);
 }
 
 @media (max-width: 860px) {
-  .workspace {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
   .step-rail {
-    position: static;
-    flex-direction: row;
-    flex-wrap: wrap;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+}
 
-  .step-rail > button {
-    width: auto !important;
-    flex: 1 1 160px;
+@media (max-width: 480px) {
+  .step-rail {
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 
@@ -225,5 +227,46 @@ textarea {
      third of the screen, so there it scrolls away with the page. */
   .app-header {
     position: static !important;
+  }
+}
+
+/* The bar: frosted, so the ground shows through as the page scrolls under it. */
+.app-header {
+  background: rgba(246, 249, 251, 0.78);
+  -webkit-backdrop-filter: saturate(1.4) blur(14px);
+  backdrop-filter: saturate(1.4) blur(14px);
+}
+
+/* The home hero: the headline beside the staircase; stacked on a phone, where
+   the drawing shrinks and goes below the words. */
+.hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr);
+  gap: 32px;
+  align-items: center;
+}
+
+.hero-title {
+  font-size: 52px;
+}
+
+.hero-art {
+  max-width: 500px;
+  justify-self: end;
+  width: 100%;
+}
+
+@media (max-width: 860px) {
+  .hero {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .hero-title {
+    font-size: 36px;
+  }
+
+  .hero-art {
+    justify-self: center;
+    max-width: 340px;
   }
 }
