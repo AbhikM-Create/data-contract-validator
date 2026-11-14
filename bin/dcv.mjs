@@ -3,6 +3,7 @@
 //
 //   dcv check <contract> <load.csv> [...]           will the target accept this load file?
 //   dcv reconcile <spec> <source.csv> <target.csv>   did the load arrive whole and correct?
+//   dcv change <contract> <before.csv> <after.csv>   was this bulk change allowed?
 //   dcv odcs export|import <file>                    Open Data Contract Standard in and out
 //   dcv pack list | <pack> <object>                  start a migration object from a pack
 //   dcv --version
@@ -16,6 +17,7 @@ import { describeBuild } from '../cli/buildInfo.mjs'
 const COMMANDS = {
   check: () => import('../cli/check.mjs'),
   reconcile: () => import('../cli/reconcile.mjs'),
+  change: () => import('../cli/change.mjs'),
   odcs: () => import('../cli/odcs.mjs'),
   pack: () => import('../cli/pack.mjs'),
   share: () => import('../cli/share.mjs'),
@@ -26,6 +28,7 @@ const HELP = `${describeBuild()}
 Usage:
   dcv check <contract.json> <load.csv> [--key col] [--json] [--junit out.xml] [--rejects fixes.csv] [--evidence pack.html]
   dcv reconcile <spec.json> <source.csv> <target.csv> [--json] [--junit out.xml] [--evidence pack.html]
+  dcv change <contract.json> <before.csv> <after.csv> [--approved file.csv] [--log file.csv] [--json] [--junit out.xml]
   dcv odcs export <contract.json> [--out contract.odcs.yaml]
   dcv odcs import <contract.odcs.yaml> [--out contract.json] [--object name]
   dcv share <object.migration.json> [--out shared.json]

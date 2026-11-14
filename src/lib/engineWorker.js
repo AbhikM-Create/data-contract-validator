@@ -16,6 +16,7 @@ import { inferContract } from './contract.js'
 import { parseCsv, toCsv } from './parseCsv.js'
 import { parseXlsx } from './parseXlsx.js'
 import { defineContract, withRules } from './authoredContract.js'
+import { checkChange } from './changeContract.js'
 import { checkReadiness } from './readiness.js'
 import { createMasker } from './masking.js'
 import { reconcile } from './reconcile.js'
@@ -24,8 +25,9 @@ import { validate } from './validate.js'
 
 // baseline/candidate for Validate; load/source/target for the migration
 // workspace — the load file before a load, and the source and target extracts
-// reconciled after it.
-const files = { baseline: null, candidate: null, load: null, source: null, target: null }
+// reconciled after it; before/after/approved/log for a change check — the two
+// versions of the records, the signer's approved list and the mover's log.
+const files = { baseline: null, candidate: null, load: null, source: null, target: null, before: null, after: null, approved: null, log: null }
 
 // The last readiness check's flagged records stay here, with the rows they
 // point at; the page asks for the fix list only when someone wants it.
@@ -147,6 +149,24 @@ function handle(message) {
     const report = reconcile(message.spec, source.rows, target.rows, {
       sourceColumns: source.columns,
       targetColumns: target.columns,
+      exampleLimit: DRILL_DOWN_LIMIT,
+    })
+    return { report }
+  }
+
+  // A change check: was this bulk change allowed? The approved list and the
+  // change log are optional inputs; without one a contract that needs it comes
+  // back UNVERIFIED with the reason, never passed.
+  if (type === 'change') {
+    const { before, after, approved, log } = files
+    if (!before?.rows.length || !after?.rows.length) return { report: null }
+    const report = checkChange(message.contract, before.rows, after.rows, {
+      beforeColumns: before.columns,
+      afterColumns: after.columns,
+      approved: approved?.rows ?? null,
+      approvedColumns: approved?.columns,
+      changeLog: log?.rows ?? null,
+      logColumns: log?.columns,
       exampleLimit: DRILL_DOWN_LIMIT,
     })
     return { report }

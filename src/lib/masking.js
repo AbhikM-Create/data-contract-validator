@@ -215,3 +215,31 @@ export function suggestTag(column) {
   for (const [tag, pattern] of SUGGEST) if (pattern.test(text)) return tag
   return null
 }
+
+// The change-check report as it may leave the screen (changeContract.js). Each
+// example quotes a record's before, after and approved values for the finding's
+// column; a tagged column's values are masked, the key labels follow the key's
+// own tag (never masked unless Aadhaar), and counts and totals stay as they are.
+//   contract: the normalised contract (its key and renames)
+export function maskChange(report, contract, masker) {
+  if (!report?.steps || !masker?.active) return report
+  const keyColumns = [...(contract?.key?.before ?? []), ...(contract?.key?.after ?? [])]
+  const label = (key) => masker(keyColumns, key)
+  const columnsOf = (column) => (column ? [column, contract?.rename?.[column] ?? column] : [])
+  const steps = report.steps.map((step) => ({
+    ...step,
+    findings: step.findings.map((finding) => ({
+      ...finding,
+      examples: finding.examples.map((example) => {
+        const columns = columnsOf(finding.column)
+        const out = { ...example }
+        if (out.key !== undefined) out.key = label(out.key)
+        for (const field of ['before', 'after', 'approved', 'expected']) {
+          if (out[field] !== undefined && columns.length > 0) out[field] = masker(columns, out[field])
+        }
+        return out
+      }),
+    })),
+  }))
+  return { ...report, steps }
+}

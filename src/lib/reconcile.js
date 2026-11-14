@@ -204,7 +204,7 @@ export function specIssues(rawSpec, sourceColumns, targetColumns) {
 
 // --- keys -------------------------------------------------------------------
 
-function keyOf(row, columns, normalize = []) {
+export function keyOf(row, columns, normalize = []) {
   const parts = []
   for (const column of columns) {
     const value = row[column]
@@ -217,13 +217,13 @@ function keyOf(row, columns, normalize = []) {
   return parts.join(KEY_SEP)
 }
 
-const showKey = (key) => key.split(KEY_SEP).join(' / ')
+export const showKey = (key) => key.split(KEY_SEP).join(' / ')
 
 // Keeps the `limit` entries with the smallest row number. Partitions of a large
 // file are joined in no particular order, so "the first five examples" has to
 // mean first in the FILE — which is also what makes a partitioned run report
 // exactly what an in-memory run reports.
-function keepFirst(list, entry, limit) {
+export function keepFirst(list, entry, limit) {
   if (list.length >= limit && entry.rowNo >= list[list.length - 1].rowNo) return
   let i = list.length
   while (i > 0 && list[i - 1].rowNo > entry.rowNo) i -= 1
@@ -247,7 +247,7 @@ function keepFirst(list, entry, limit) {
 // a false mismatch on every German surname a target system capitalised.
 const fold = (text) => text.toUpperCase().toLowerCase()
 
-function valuesAgree(sourceValue, targetValue, field, sourceReader, targetReader) {
+export function valuesAgree(sourceValue, targetValue, field, sourceReader, targetReader) {
   const sourceBlank = isBlank(sourceValue)
   const targetBlank = isBlank(targetValue)
   if (sourceBlank || targetBlank) return sourceBlank && targetBlank
@@ -273,7 +273,7 @@ function valuesAgree(sourceValue, targetValue, field, sourceReader, targetReader
 // Apply a crosswalk to a source value. Returns { value } or { unmapped: true }.
 // A blank is not translated — blank legacy data is the accuracy step's to
 // judge, not a missing crosswalk row.
-function translate(value, map) {
+export function translate(value, map) {
   if (!map || isBlank(value)) return { value }
   const key = String(value).trim()
   if (!map.has(key)) return { unmapped: true }

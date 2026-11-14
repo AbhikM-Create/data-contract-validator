@@ -6,6 +6,7 @@
 // identifiers.js, usage lines from each command's USAGE, pack contents from
 // src/packs. What only a person knows (the changelog, the glossary) is
 // written here, and must stay true.
+import { USAGE as CHANGE_USAGE } from '../cli/change.mjs'
 import { USAGE as CHECK_USAGE } from '../cli/check.mjs'
 import { USAGE as ODCS_USAGE } from '../cli/odcs.mjs'
 import { USAGE as PACK_USAGE } from '../cli/pack.mjs'
@@ -137,6 +138,7 @@ function helpCentre() {
 const COMMANDS = [
   ['dcv check', CHECK_USAGE, 'Load readiness on a load file: will the target accept it? The contract may be a contract file, an imported ODCS contract or a migration object. --rejects writes the fix list; --reference opens a reference file a rule names; --key sets the record key.'],
   ['dcv reconcile', RECONCILE_USAGE, 'Reconciles a source extract against a target extract by business key, in five steps. The spec may be a migration object. --evidence writes the evidence pack.'],
+  ['dcv change', CHANGE_USAGE, 'Checks a bulk change against its change contract: what may change, and how. Every column the contract does not name must stay the same. --approved is the signer’s approved list, --log the change log; --evidence writes the change record, --custody states who did what.'],
   ['dcv pack', PACK_USAGE, 'Lists the packs, or builds a migration object from one. A value only you know, such as the cutover date, is asked for with --param and never defaulted.'],
   ['dcv share', SHARE_USAGE, 'Writes the copy of a migration object that is safe to send: definitions and run counts, never the sign-off record, owners’ names, file names or record values.'],
   ['dcv odcs', ODCS_USAGE, 'Exports a contract to the Open Data Contract Standard v3.2.0, losslessly, or imports one, listing everything that could not be imported exactly.'],

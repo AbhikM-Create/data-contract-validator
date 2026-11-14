@@ -3,12 +3,14 @@ import AppShell from './components/AppShell.jsx'
 import ErrorBoundary from './components/ErrorBoundary.jsx'
 import { hasWork, loadDraft, saveDraft } from './lib/autosave.js'
 import { contractToJson, parseContractFile } from './lib/contractFile.js'
+import { changeContractToJson, cleanChangeContract, parseChangeContractFile } from './lib/changeContractFile.js'
+import { createChangeRecord } from './lib/changeRecord.js'
 import { deleteContract, listContracts, loadContract, saveContract } from './lib/contractStore.js'
 import { deleteObject, listObjects, loadObject, saveObject } from './lib/objectStore.js'
 import { acceptInvitations, changeRole, createOrganisation, deleteOrganisation, invite, listMembers, listOrganisations, removeMember, revokeInvitation } from './lib/orgStore.js'
 import { can } from './lib/roles.js'
 import {
-  clearFileInWorker, columnMapInWorker, fixListInWorker, parseBytesInWorker, parseFileInWorker, parseTextInWorker, readinessInWorker, reconcileInWorker, validateInWorker,
+  changeInWorker, clearFileInWorker, columnMapInWorker, fixListInWorker, parseBytesInWorker, parseFileInWorker, parseTextInWorker, readinessInWorker, reconcileInWorker, validateInWorker,
 } from './lib/engineClient.js'
 import { createEvidencePack } from './lib/evidencePack.js'
 import { createMasker, maskReconciliation } from './lib/masking.js'
@@ -31,6 +33,7 @@ import { ruleKey } from './lib/rules.js'
 import { DEFAULT_THRESHOLDS } from './lib/validate.js'
 import { useAuth } from './lib/useAuth.js'
 import { go, useRoute } from './routes.js'
+import ChangeScreen from './screens/ChangeScreen.jsx'
 import ContractsScreen from './screens/ContractsScreen.jsx'
 import HistoryScreen from './screens/HistoryScreen.jsx'
 import OrganisationScreen from './screens/OrganisationScreen.jsx'
@@ -109,6 +112,13 @@ export default function App() {
   // Whether the next pack, fix list and export show tagged values in full. A
   // choice per output, never saved; Aadhaar stays masked regardless.
   const [unmaskOutputs, setUnmaskOutputs] = useState(false)
+  // A change check (Change checks screen): its own four files, the contract
+  // being built, and the last run with the inputs it was run on.
+  const [changeFiles, setChangeFiles] = useState({ before: null, after: null, approved: null, log: null })
+  const [changeContract, setChangeContract] = useState(() => newChangeContract())
+  const [changeRun, setChangeRun] = useState(null)
+  const [changeNotice, setChangeNotice] = useState(null)
+  const [changeCustody, setChangeCustody] = useState({})
 
   // Autosave: a moment after the last change, the definitions go to this
   // browser's storage. A failure is said once, never thrown.
@@ -637,6 +647,88 @@ export default function App() {
     }
   }
 
+  // --- change checks -------------------------------------------------------
+  // What a run depends on: the contract and which files were open. A result
+  // whose inputs differ from the current ones reads "Out of date".
+  const changeInputs = (contract = changeContract, files = changeFiles) => JSON.stringify({
+    contract: runnableChange(contract),
+    files: Object.fromEntries(Object.entries(files).map(([role, f]) => [role, f ? [f.name, f.rowCount, f.columns] : null])),
+  })
+
+  const loadChangeFile = async (role, file) => {
+    const refusal = tooLargeToRead(file)
+    if (refusal) { setChangeNotice({ tone: 'error', text: refusal }); return }
+    setChangeNotice(null)
+    setBusy(`Reading ${file.name}…`)
+    try {
+      // Fingerprinted from the exact bytes, as the record names every file.
+      const bytes = await file.arrayBuffer()
+      const [{ file: summary }, sha256] = await Promise.all([parseBytesInWorker(role, bytes, file.name, 'utf-8', {}), sha256Hex(bytes)])
+      setChangeFiles((current) => ({ ...current, [role]: { ...summary, sha256, bytes: bytes.byteLength } }))
+    } catch (error) {
+      setChangeNotice({ tone: 'error', text: error.message })
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  const clearChangeFile = async (role) => {
+    setChangeFiles((current) => ({ ...current, [role]: null }))
+    await clearFileInWorker(role)
+  }
+
+  const runChangeCheck = async () => {
+    setBusy('Checking the change…')
+    try {
+      const { report } = await changeInWorker(runnableChange(changeContract))
+      if (report) setChangeRun({ report, inputs: changeInputs() })
+    } catch (error) {
+      setChangeNotice({ tone: 'error', text: error.message })
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  const downloadChangeContract = () => {
+    const name = (changeContract.name || 'change').trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'change'
+    saveFile(`${name}.change.json`, changeContractToJson(runnableChange(changeContract)), 'application/json')
+    setChangeNotice({ tone: 'info', text: `Saved ${name}.change.json — the contract only; no record from the files is in it. dcv change reads it too.` })
+  }
+
+  const openChangeContract = async (file) => {
+    const opened = parseChangeContractFile(await file.text())
+    if (opened.error) { setChangeNotice({ tone: 'error', text: `${file.name}: ${opened.error}` }); return }
+    setChangeContract({ ...newChangeContract(), ...opened.contract })
+    setChangeNotice({ tone: 'info', text: `Opened the contract from ${file.name}.` })
+  }
+
+  const downloadChangeRecord = async () => {
+    if (!changeRun?.report || changeRun.inputs !== changeInputs()) return
+    try {
+      const files = Object.fromEntries(Object.entries(changeFiles).filter(([, f]) => f).map(([role, f]) => [role, { name: f.name, rows: f.rowCount, bytes: f.bytes, sha256: f.sha256 }]))
+      const record = await createChangeRecord({
+        report: changeRun.report,
+        contract: runnableChange(changeContract),
+        files,
+        custody: changeCustody,
+        generatedBy: `the workspace — data-contract-validator ${VERSION}${BUILD_COMMIT ? ` (${BUILD_COMMIT})` : ''}`,
+      })
+      saveFile(record.fileName, record.html, 'text/html')
+      setChangeNotice({ tone: 'info', text: `Change record ${record.reference} saved to your computer.` })
+    } catch (error) {
+      setChangeNotice({ tone: 'error', text: error.message })
+    }
+  }
+
+  const newChangeCheck = async () => {
+    setChangeContract(newChangeContract())
+    setChangeRun(null)
+    setChangeNotice(null)
+    setChangeCustody({})
+    setChangeFiles({ before: null, after: null, approved: null, log: null })
+    await Promise.all(['before', 'after', 'approved', 'log'].map((role) => clearFileInWorker(role)))
+  }
+
   const runReadiness = async () => {
     setBusy('Checking the load file…')
     try {
@@ -996,6 +1088,27 @@ export default function App() {
         />
       )}
 
+      {route === 'change' && (
+        <ChangeScreen
+          files={changeFiles}
+          contract={changeContract}
+          run={changeRun}
+          stale={Boolean(changeRun) && changeRun.inputs !== changeInputs()}
+          notice={changeNotice}
+          busy={busy}
+          onLoadFile={loadChangeFile}
+          onClearFile={clearChangeFile}
+          onContract={setChangeContract}
+          onRun={runChangeCheck}
+          onDownloadContract={downloadChangeContract}
+          onOpenContract={openChangeContract}
+          onNew={newChangeCheck}
+          custody={changeCustody}
+          onCustody={setChangeCustody}
+          onDownloadRecord={downloadChangeRecord}
+        />
+      )}
+
       {route === 'history' && (
         <HistoryScreen
           runs={runs}
@@ -1030,6 +1143,22 @@ export default function App() {
       </ErrorBoundary>
     </AppShell>
   )
+}
+
+// A change check starts with the safe defaults: nothing added, nothing removed,
+// and — since no column is named yet — nothing may change at all.
+function newChangeContract() {
+  return { name: '', key: [], added: 'none', removed: 'none', fields: {} }
+}
+
+// The contract as it is run and saved: a list being typed ("Travel, ") drops its
+// empty entry, and blank key slots are left out.
+function runnableChange(contract) {
+  const clean = cleanChangeContract(contract)
+  clean.key = Array.isArray(clean.key) ? clean.key.filter(Boolean) : clean.key
+  for (const field of Object.values(clean.fields)) if (field.values) field.values = field.values.filter((v) => v.trim() !== '')
+  if (clean.approved) clean.approved.key = clean.approved.key.filter(Boolean)
+  return clean
 }
 
 // Measured, not guessed. On a register-shaped CSV this engine costs roughly

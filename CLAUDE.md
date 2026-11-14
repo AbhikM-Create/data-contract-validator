@@ -137,6 +137,66 @@ not an extension of it.
 - `normalizeSpec` is idempotent (a crosswalk Map normalised twice once emptied).
 - A crosswalk mapping one legacy value two ways is refused whole.
 
+## Change contracts — was this change allowed? (engine only, from 14 Nov 2026)
+`changeContract.js`. A CHANGE CONTRACT declares, before a bulk change, what
+may change; a CHANGE CHECK reads a before and an after file, matches records by
+key, and sorts every difference. Design and decisions:
+`docs/strategy/11-change-contracts-design.md` (local, not in git).
+- A column the contract does not name is PRESERVED (`others: 'preserve'`, the
+  default): forgetting a column can never let it change silently. Columns in
+  one file only are listed in `notChecked`, never passed.
+- Policies per field: `preserve`, `free`, `oneOf` (values or a reference),
+  `map` (crosswalk), `bounded` (direction, absolute and % limits), `asApproved`;
+  qualifiers `onlyFor: 'approved'` and `when` (judged on the BEFORE record;
+  where it does not hold, the field is preserved). `added`/`removed` default to
+  `none`; `any` and `listed` (the approved file) are declared.
+- Six steps as a descent — keys, coverage, permitted fields, limits,
+  approvals, totals — each naming whose fix (`CHANGE_OWNERS`). Statuses:
+  ALLOWED, NOT_ALLOWED, UNVERIFIED, INVALID. A missing approved file, change
+  log or reference makes its checks UNCHECKED and the result UNVERIFIED —
+  never passed. An unreadable or blank value under `bounded` is `unverified`,
+  never within limits. One fault, one finding: a missed approval reported at
+  the field is not reported again for the record.
+- Same three-part form as `createReconciliation` (observe, joinPartition,
+  finish), so streaming can follow without a rewrite. It reuses
+  reconciliation's `keyOf`, `valuesAgree`, `translate` and `keepFirst`
+  (exported for it; behaviour unchanged).
+- A reconciliation IS a change contract (`toChangeContract`: mapped fields
+  preserved or mapped, nothing added or removed, `others: 'ignore'`).
+  `changeContract.test.js` holds both engines to equal field and join counts on
+  the employee and trial-balance samples, and was seen to fail when the
+  crosswalk was dropped. Reconciliation may become a view over change checks
+  only on that proof.
+- An approved file or change log without the column the contract keys it by
+  (or an `asApproved` value column) is INVALID with its columns — without the
+  refusal every approved record read "not on the approved list".
+- Streaming: `scripts/lib/changeFiles.mjs`, two passes like `reconcileFiles`;
+  the approved file and log are read whole. `streaming.test.js` holds it to the
+  in-memory report at 1, 7 and 64 partitions.
+- `dcv change` (`cli/change.mjs`): `--approved`, `--log`, `--reference`,
+  `--tags`/`--unmask`, `--junit`, `--evidence` with `--custody`; exits 0
+  ALLOWED, 1 NOT_ALLOWED, 2 UNVERIFIED or INVALID. `--json` is
+  `schemas/change-report.schema.json` (version 1).
+- A contract is saved as a file (`changeContractFile.js`): definitions only,
+  cleaned field by field on read; the file form and a bare contract read the
+  same. The approved file and log are inputs, never saved with it.
+- The workspace: the "Change checks" screen (route `change`, primary) — four
+  files (before, after, approved, log), the contract from dropdowns with
+  "every column not listed here must stay exactly as it was" stated and never
+  folded, the report led by the staircase. The `map` policy is shown from a
+  contract file but not authored on screen; tags are CLI-only there.
+- Custody (`changeCustody.js`): who made the change, who exported each file
+  and when, who wrote the contract and the approved list, who ran the check —
+  as typed, unverified. Any of them being the mover makes the check
+  SELF-CHECKED, on screen and on the record's first page; without the export
+  fields the record is a DRAFT.
+- The change record (`changeRecord.js`, `createChangeRecord`): the evidence
+  pack's sibling, same rules (SHA-256 of bytes, contract fingerprinted and
+  printed, CSP, escaping, masking, `NEVER_CLAIM` scan). Refused for INVALID;
+  the workspace offers it only for a current result.
+- Not yet built: change contracts in migration objects and accounts, grouped
+  totals, `map` authoring on screen, contract templates in packs.
+
 ## Load readiness — will the target accept the file?
 A view over `createRuleChecker`, never a second evaluator. Counts RECORDS: a
 record broken by three rules is one rejection with three reasons. With a key,
@@ -264,7 +324,7 @@ reference, and a CSP meta forbidding scripts and requests even if escaping
 failed. `evidencePack.test.js` and `e2e/evidence.spec.js` prove it. Keep both.
 
 ## The CLI and its formats (`dcv`)
-`dcv check`, `dcv reconcile`, `dcv odcs export|import`, `dcv pack`, `dcv share`,
+`dcv check`, `dcv reconcile`, `dcv change`, `dcv odcs export|import`, `dcv pack`, `dcv share`,
 `dcv --version`. Exit
 codes are the contract with a pipeline: 0 passed, 1 a check found something,
 2 could not be completed (incl. "could not confirm"). Options are parsed
@@ -291,7 +351,7 @@ uniqueness and other engines' checks are listed in `notImported` with reasons
 (`schemas/vendor/`), and real examples from the standard are test fixtures.
 
 ## UI
-Screens: Projects (`migrations`), Monitor (`validate`), Contracts, History,
+Screens: Projects (`migrations`), Monitor (`validate`), Change checks (`change`), Contracts, History,
 Organisation (`routes.js`, hash routing —
 a static app needs no server rewrites). `components/AppShell.jsx` carries the
 nav and the trust line, which must stay true ("Files stay on this device.

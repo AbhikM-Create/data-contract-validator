@@ -15,6 +15,8 @@ import { readCsvHeader, streamCsv } from './csvStream.mjs'
 import { decodeFields, encodeFields } from './partitions.mjs'
 import { checkReadinessFile } from './readinessFile.mjs'
 import { reconcileFiles } from './reconcileFiles.mjs'
+import { changeFiles } from './changeFiles.mjs'
+import { checkChange } from '../../src/lib/changeContract.js'
 
 const dir = mkdtempSync(join(tmpdir(), 'dcv-test-'))
 const scratchParent = join(dir, 'scratch')
@@ -334,5 +336,91 @@ describe('a file read under a column map gives the report of the file it stands 
     expect(bad.error).toMatch(/the column matching cannot be used\. "PERNR" is matched to "Employee No", which this file does not have\./)
     const wrong = await checkReadinessFile(CONTRACT, load.path, { key: ['employee_id'], columnMap: { ...load.map, employee_id: 'Client NOPE' } })
     expect(wrong.error).toMatch(/the column matching cannot be used/)
+  })
+})
+
+// --- a change check with every finding planted ---------------------------------
+// A salary revision over 3,000 employees: unapproved revisions, raises over the
+// cap, cuts, approved revisions missing or different, an unreadable salary,
+// people removed and added, duplicate and blank keys, unlogged and logged-but-
+// unchanged records — each planted more than five times.
+const M = 3000
+const staffBefore = ['Emp Code,Name,Basic,CTC']
+const staffAfter = ['Emp Code,Name,Basic,CTC']
+const approvedRows = ['Emp Code,CTC']
+const logRows = ['Emp Code']
+for (let i = 0; i < M; i += 1) {
+  const id = `E${10000 + i}`
+  const basic = 20000 + ((i * 53) % 60000)
+  const ctc = basic * 12
+  staffBefore.push(`${i % 431 === 9 ? '' : id},Name${i},${basic},${ctc}`)
+  if (i % 401 === 13) staffBefore.push(`${id},Dup${i},1,12`) // duplicate key before
+  if (i % 97 === 5) continue // removed
+  const approved = i % 4 === 0
+  let newBasic = basic
+  let newCtc = ctc
+  if (approved) {
+    newBasic = Math.round(basic * 1.1)
+    newCtc = newBasic * 12
+    approvedRows.push(`${id},${newCtc}`)
+    if (i % 103 === 8) { newBasic = basic; newCtc = ctc } // approved, did not happen
+    if (i % 109 === 12) newCtc += 1000 // approved, came out different
+    if (i % 113 === 16) newBasic = Math.round(basic * 1.3) // over the cap
+  } else if (i % 89 === 3) newBasic = basic + 500 // revised without approval
+  if (i % 127 === 7) newBasic = basic - 100 // a cut
+  const shownBasic = i % 139 === 11 ? 'n/a' : String(newBasic) // unreadable
+  if (newBasic !== basic || newCtc !== ctc) { if (i % 151 !== 2) logRows.push(id) } // unlogged when i%151===2
+  else if (i % 157 === 4) logRows.push(id) // logged but unchanged
+  staffAfter.push(`${i % 337 === 21 ? '' : id},Name${i},${shownBasic},${newCtc}`)
+}
+for (let i = 0; i < 7; i += 1) staffAfter.push(`X${i},New${i},30000,360000`) // added
+
+const CHANGE = {
+  name: 'Revision — streaming parity',
+  key: ['Emp Code'],
+  approved: { key: ['Emp Code'] },
+  changeLog: { key: ['Emp Code'] },
+  fields: {
+    Basic: { policy: 'bounded', direction: 'up', maxPercent: 20, onlyFor: 'approved' },
+    CTC: { policy: 'asApproved' },
+  },
+  totals: [{ column: 'CTC', compare: 'delta', max: 1 }],
+}
+const beforePath = write('staff_before.csv', staffBefore)
+const afterPath = write('staff_after.csv', staffAfter)
+const approvedPath = write('approved.csv', approvedRows)
+const logPath = write('change_log.csv', logRows)
+
+describe('streamed change check matches the in-memory engine', () => {
+  const memory = checkChange(CHANGE, parseCsv(staffBefore.join('\n')).rows, parseCsv(staffAfter.join('\n')).rows, {
+    approved: parseCsv(approvedRows.join('\n')).rows,
+    changeLog: parseCsv(logRows.join('\n')).rows,
+  })
+
+  it('the planted change really does break every step', () => {
+    expect(memory.status).toBe('NOT_ALLOWED')
+    const codes = memory.steps.flatMap((s) => s.findings.map((f) => f.code))
+    for (const code of ['blank-key', 'duplicate-key', 'removed-not-allowed', 'added-not-allowed', 'not-on-approved-list', 'out-of-limits', 'unreadable', 'approved-missing', 'approved-different', 'unlogged', 'logged-unchanged', 'total-out-of-limits']) {
+      expect(codes, code).toContain(code)
+    }
+  })
+
+  for (const partitions of [1, 7, 64]) {
+    it(`gives the identical report across ${partitions} partition(s)`, async () => {
+      const outcome = await changeFiles(CHANGE, beforePath, afterPath, { approvedPath, logPath, partitions, tmpDir: scratchParent })
+      expect(outcome.error).toBeUndefined()
+      expect(outcome.report).toEqual(memory)
+    })
+  }
+
+  it('leaves nothing on disk once the run ends', async () => {
+    await changeFiles(CHANGE, beforePath, afterPath, { approvedPath, logPath, partitions: 7, tmpDir: scratchParent })
+    expect(readdirSync(scratchParent)).toEqual([])
+  })
+
+  it('refuses a contract naming a missing column before streaming anything', async () => {
+    const outcome = await changeFiles({ ...CHANGE, key: ['Employee'] }, beforePath, afterPath, { approvedPath, logPath })
+    expect(outcome.report.status).toBe('INVALID')
+    expect(outcome.partitions).toBe(0)
   })
 })
