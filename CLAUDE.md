@@ -368,7 +368,17 @@ Nothing is uploaded: the records and fix lists you download go only to your
 computer, and an account, if you use one, stores only rules, names and
 counts."). It carries no green dot: green is a verdict's colour.
 - `components/Staircase.jsx` is the signature view and leads every report —
-  four layers on Validate, five steps on Migrations. A flat list of verdicts
+  four layers on Validate, five steps on Migrations, six on Change checks.
+- Motion (14 Nov 2026): two animations only — the "still working" pulse, and
+  the DESCENT (`components/descent.js`): the plumb bob drops onto the first
+  step, walks down, and stops on the step that caught the problem, each step
+  settling into its verdict as the bob arrives. It explains, never decorates:
+  once per result per session, under 3 s (a test holds it), played when the
+  drawing scrolls into view, never with reduced motion, and it replays a
+  result already known — never stand-in progress. The static markup is the
+  final state. The home hero walks all five steps in the accent only (no
+  verdict colours: it is the process, not a result). No scroll fades, counters,
+  celebrations or seals. A flat list of verdicts
   hides the one fact that matters: the checks ABOVE the failure passed. Since
   Direction C it is an ISOMETRIC staircase (`isoStair.js`, pure geometry, any
   number of steps) with the logo's plumb bob resting on the step that caught

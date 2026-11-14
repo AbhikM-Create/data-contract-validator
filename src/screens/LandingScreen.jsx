@@ -1,4 +1,6 @@
+import { useRef } from 'react'
 import Staircase from '../components/Staircase.jsx'
+import { useDescent } from '../components/descent.js'
 import { isoStair } from '../components/isoStair.js'
 import { RECON_STEPS } from '../lib/reconcile.js'
 import { LAYERS } from '../lib/validate.js'
@@ -205,29 +207,38 @@ export default function LandingScreen({ onLoadSample, onMigrationExample, onTour
   )
 }
 
-// The hero: the staircase on its own, every step named, the plumb line hanging
-// over the top step. Decorative — the same five steps are words in the report.
+// The hero: the staircase on its own, every step named. Decorative — the same
+// five steps are words in the report. The plumb bob walks down all five once
+// (descent.js) and rests on the last: every load is taken down every check.
+// No verdict colours here, only the accent: this is the process, not a result.
 function HeroStair() {
   const stair = isoStair(RECON_STEPS.length)
-  const [bx, by] = stair.steps[0].rest
+  const last = stair.steps.length - 1
+  const [bx, by] = stair.steps[last].rest
+  const svg = useRef(null)
+  useDescent(svg, { rests: stair.steps.map((s) => s.rest), stopAt: last, beamY: stair.beamY, key: 'home-hero' })
   return (
     <div className="hero-art" aria-hidden="true" style={{ position: 'relative' }}>
-      <svg viewBox={`0 0 ${stair.width} ${stair.height}`} style={{ width: '100%', height: 'auto', display: 'block' }}>
+      <svg ref={svg} viewBox={`0 0 ${stair.width} ${stair.height}`} style={{ width: '100%', height: 'auto', display: 'block' }}>
         <ellipse cx={stair.width / 2} cy={stair.height - 14} rx={stair.width * 0.42} ry={12} style={{ fill: 'var(--floor-shadow)' }} />
         <g strokeWidth="1" strokeLinejoin="round" style={{ stroke: 'var(--face-edge)' }}>
           {stair.steps.map((step, i) => (
-            <g key={i}>
-              <polygon points={step.right} style={{ fill: i === 0 ? 'var(--face-first-right)' : 'var(--face-idle-right)' }} />
-              <polygon points={step.front} style={{ fill: i === 0 ? 'var(--face-first-front)' : 'var(--face-idle-front)' }} />
-              <polygon points={step.top} style={{ fill: i === 0 ? 'var(--face-first-top)' : 'var(--face-idle-top)' }} />
+            <g key={i} data-descent-step={i}>
+              <polygon points={step.right} style={{ fill: 'var(--face-first-right)' }} />
+              <polygon points={step.front} style={{ fill: 'var(--face-first-front)' }} />
+              <polygon points={step.top} style={{ fill: 'var(--face-first-top)' }} />
             </g>
           ))}
         </g>
-        <line x1={bx - 34} y1={stair.beamY} x2={bx + 34} y2={stair.beamY} strokeWidth="3" strokeLinecap="round" style={{ stroke: colors.ink }} />
-        <g className="plumb">
-          <line x1={bx} y1={stair.beamY} x2={bx} y2={by - 19} strokeWidth="2" style={{ stroke: colors.accent }} />
-          <ellipse cx={bx} cy={by + 1} rx="15" ry="5" style={{ fill: tint(colors.accent, '38') }} />
-          <polygon points={`${bx - 9},${by - 19} ${bx + 9},${by - 19} ${bx},${by - 1}`} style={{ fill: colors.accent }} />
+        <g data-descent="carriage">
+          <line x1={bx - 34} y1={stair.beamY} x2={bx + 34} y2={stair.beamY} strokeWidth="3" strokeLinecap="round" style={{ stroke: colors.ink }} />
+          <g className="plumb">
+            <line data-descent="string" x1={bx} y1={stair.beamY} x2={bx} y2={by - 19} strokeWidth="2" style={{ stroke: colors.accent, transformBox: 'fill-box', transformOrigin: 'top' }} />
+            <g data-descent="bob">
+              <ellipse cx={bx} cy={by + 1} rx="15" ry="5" style={{ fill: tint(colors.accent, '38') }} />
+              <polygon points={`${bx - 9},${by - 19} ${bx + 9},${by - 19} ${bx},${by - 1}`} style={{ fill: colors.accent }} />
+            </g>
+          </g>
         </g>
       </svg>
       {stair.steps.map((step, i) => (
