@@ -547,8 +547,8 @@ republish: `npm run build`, `npm run publish:files`, then publish it with the
 printed files (`app.js` and `app-worker.js`) and the same URL.
 The marketing site (brand Phase B) is `npm run build:site`
 (`scripts/build-site.mjs`, styles in `site/site.css`): plain static pages —
-Home, Finance and HR, CAs and auditors, Partners, Packs, Security, Pricing —
-into `dist-site/`, with the built app copied under `app/`. No script on any
+Home, How it works, Finance and HR, CAs and auditors, Partners, Packs,
+Security, Pricing — into `dist-site/`, with the built app copied under `app/`. No script on any
 page, nothing from another origin, a CSP meta. Positioning (14 Nov 2026):
 record assurance — "Whoever changed your records shouldn't be the one who
 checks them"; change checks lead, the migration checks follow, auditors are a
@@ -556,7 +556,16 @@ page of their own, and movers are pitched as "independently checkable", never
 "independently checked". The look is the app's: Direction C in light,
 Blueprint in dark by `prefers-color-scheme` alone (no script, so no picker).
 The hero staircase is drawn from the app's `isoStair.js` as SVG coloured by
-class (a page may carry no `style=`), and so is the mark. The Packs page is generated from
+class (a page may carry no `style=`), and so is the mark. Under it, a facts
+band: four facts, each true of the code (the 5M-row figure is the command-line
+benchmark and says so). How it works carries the three steps, the change
+contract's policies, the four checks, an FAQ and the SAMPLES
+(`scripts/site-samples.mjs`, `buildSamples`): a change record and an evidence
+pack plus fix list, made by the real engine at site-build time from the
+invented examples (`samples/changeSample.js`, pinned by its test; the finance
+example), each banner-marked "A sample" before anything else and published
+with the files and definitions it ran, so the printed `dcv` commands re-run
+it. `site.test.js` holds every published CSV to the SHA-256 in its record. The Packs page is generated from
 `src/packs`, so it cannot drift; the masking table from `SENSITIVITIES`; the
 claim from `STATEMENT_OF_CLAIM`. Every sentence must be true of the code today:
 `scripts/site.test.js` checks titles, links, no script, the draft labels and
