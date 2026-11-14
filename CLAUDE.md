@@ -360,7 +360,14 @@ computer, and an account, if you use one, stores only rules, names and
 counts."). It carries no green dot: green is a verdict's colour.
 - `components/Staircase.jsx` is the signature view and leads every report —
   four layers on Validate, five steps on Migrations. A flat list of verdicts
-  hides the one fact that matters: the checks ABOVE the failure passed.
+  hides the one fact that matters: the checks ABOVE the failure passed. Since
+  Direction C it is an ISOMETRIC staircase (`isoStair.js`, pure geometry, any
+  number of steps) with the logo's plumb bob resting on the step that caught
+  the file (the last step when nothing failed), beside a legend that carries
+  every number, name, verdict and line as words — the drawing is
+  `aria-hidden`, so nothing is said by colour alone. Each legend row is
+  `.staircase-step` (tests count them). Below 760px the drawing goes above the
+  legend.
 - **Two checks, two places — do not re-merge them.** On Validate, "Rules you
   set" (rule by rule, passing rules included — `RuleResults`) and "Compared with
   the file you trust" (the layer cards, drift only) are separate sections with
@@ -417,14 +424,25 @@ counts."). It carries no green dot: green is a verdict's colour.
   title, bar, favicon); the package, the `dcv` command and the tool name in
   every record stay `data-contract-validator`. The mark (`Logo.jsx`,
   `public/favicon.svg`) is a staircase in ink and a plumb line and bob in teal —
-  never green or red. Calm enterprise, light ground, one muted teal for every
-  action (`theme.js`). Green and red appear ONLY on a verdict; verdict colours
+  never green or red. One teal for every action (`theme.js`).
+- Look: Direction C — Isometric (approved 14 Nov 2026; canvas "Plumbstep UI
+  Revamp"). A cool gradient ground (`index.css`, fixed); white cards that FLOAT
+  on it — `panel` carries radius 16 and `elevation.card`, set once in
+  `theme.js`, which most components spread; a frosted, sticky bar
+  (`.app-header`); buttons radius 12, the primary with a teal shadow; the
+  workspace's four steps as one floating switcher above the step on screen
+  (`.step-rail`, a 4/2/1-column grid). The home page leads with the isometric
+  staircase as its hero (`HeroStair` in `LandingScreen.jsx`). Shadows are part
+  of the look now; `backdrop-filter` is used ONLY on the bar — on long tables
+  it would cost real time on modest laptops. Green and red appear ONLY on a verdict; verdict colours
   are pass `#1B7347`, fail `#B3261E`, not confirmed `#8A5300`. Inputs and
   dropdowns take the `control` edge (`#868C93`, 3:1), set once in `index.css`.
 - Type: Geist and Geist Mono, latin, variable, shipped in `src/fonts/` (SIL OFL,
-  `OFL.txt`) — the CSP allows fonts from this origin only. Six sizes:
-  34 display, 22 title, 16 heading, 14 body, 13 small and mono data, 12 label.
-  A new size is a brand change, not a component's choice.
+  `OFL.txt`) — the CSP allows fonts from this origin only. Sizes: 52 hero (the
+  home headline only, 36 on a phone — `.hero-title`), 34 display, 22 title,
+  16 heading, 14 body, 13 small and mono data, 12 label (the smallest
+  anywhere, chips included). A new size is a brand change, not a component's
+  choice.
 - The bar: Projects and Monitor (the routes `migrations` and `validate`) are
   primary; Contracts, History and Organisation sit in a quieter row. Route ids
   are unchanged, so links hold. On a phone the bar scrolls away.

@@ -15,13 +15,21 @@ export default function SignoffForm({ object, files, readiness, recon, onChange 
   const owners = ownersOf(object)
   const exceptions = exceptionsFor(readiness && !readiness.stale ? readiness.report : null, recon && !recon.stale ? recon.report : null, owners)
   const roles = Object.keys(files).filter((role) => files[role])
+  const decided = exceptions.filter((e) => decisionFor(record, e).disposition).length
 
   const save = (patch) => onChange({ signoff: { ...record, ...patch } })
   const setIn = (part, key, value) => save({ [part]: { ...record[part], [key]: value } })
 
   return (
-    <div style={{ ...panel, padding: 14, marginTop: 10 }}>
-      <div style={label}>Sign-off record</div>
+    <div style={{ ...panel, padding: '20px 22px', marginTop: 10 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+        <div style={label}>Sign-off record</div>
+        {exceptions.length > 0 && (
+          <span style={{ fontFamily: sans, fontSize: 12, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', borderRadius: 6, padding: '3px 8px', color: decided === exceptions.length ? colors.ink : colors.warn, background: decided === exceptions.length ? 'rgba(22,34,43,0.06)' : `${colors.warn}17` }}>
+            {decided} of {exceptions.length} decided
+          </span>
+        )}
+      </div>
       <p style={{ fontFamily: sans, fontSize: 13, color: colors.mute, margin: '6px 0 0', lineHeight: 1.5, maxWidth: 760 }}>
         What the people who sign need on one record. Printed at the front of the evidence pack and saved with this object.
         It is a record the team signs, not a certificate: names are as typed, not verified identities.
@@ -59,9 +67,12 @@ export default function SignoffForm({ object, files, readiness, recon, onChange 
           const d = decisionFor(record, e)
           const set = (patch) => setIn('exceptions', e.id, { ...d, ...patch })
           return (
-            <div key={e.id} style={{ borderTop: `1px solid ${colors.panelEdge}`, padding: '8px 0' }}>
-              <div style={{ fontFamily: sans, fontSize: 13, color: colors.ink }}>
-                <span style={{ fontFamily: mono, fontSize: 12, color: colors.mute }}>{e.step} · </span>{e.what}
+            <div key={e.id} style={{ background: colors.panel, borderRadius: 12, padding: '12px 14px', marginBottom: 8, borderWidth: 1, borderStyle: 'solid', borderColor: d.disposition ? 'rgba(220,227,232,0.9)' : `${colors.warn}66`, boxShadow: '0 1px 2px rgba(22,34,43,0.05)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap', alignItems: 'baseline' }}>
+                <div style={{ fontFamily: sans, fontSize: 14, color: colors.ink, minWidth: 0 }}>
+                  <span style={{ fontFamily: mono, fontSize: 12, color: colors.mute }}>{e.step} · </span>{e.what}
+                </div>
+                <span style={{ fontFamily: sans, fontSize: 12, fontWeight: 600, color: d.disposition ? colors.mute : colors.warn }}>{d.disposition ? 'Decided' : 'Needs a decision'}</span>
               </div>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 6 }}>
                 <select aria-label={`decision — ${e.what}`} value={d.disposition ?? ''} onChange={(ev) => set({ disposition: ev.target.value })} style={{ ...input, width: 230, cursor: 'pointer' }}>

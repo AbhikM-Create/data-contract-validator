@@ -1,6 +1,7 @@
 import { colors, mono, sans } from '../theme.js'
 
-// The workspace's steps, as a rail: where you are, and how each step stands.
+// The workspace's steps, as one floating switcher: where you are, and how each
+// step stands.
 // One step is on screen at a time; the rail is how the whole object reads at a
 // glance — set up, checked before the load, proved after it, signed off.
 //
@@ -19,28 +20,29 @@ export default function StepRail({ steps, current, onStep }) {
             onClick={() => onStep(step.id)}
             aria-current={active ? 'step' : undefined}
             style={{
-              display: 'flex', gap: 10, alignItems: 'flex-start', textAlign: 'left', width: '100%',
+              display: 'flex', gap: 11, alignItems: 'center', textAlign: 'left', width: '100%', minWidth: 0,
               background: active ? colors.panel : 'transparent',
-              borderWidth: 1, borderStyle: 'solid', borderColor: active ? colors.panelEdge : 'transparent',
-              borderRadius: 8, padding: '10px 11px', cursor: 'pointer',
+              borderWidth: 1, borderStyle: 'solid', borderColor: active ? 'rgba(220,227,232,0.9)' : 'transparent',
+              boxShadow: active ? '0 1px 2px rgba(22,34,43,0.06), 0 8px 20px -12px rgba(22,34,43,0.3)' : 'none',
+              borderRadius: 12, padding: '10px 12px', cursor: 'pointer', minHeight: 56,
             }}
           >
             <span
               aria-hidden="true"
               style={{
-                width: 22, height: 22, borderRadius: '50%', flexShrink: 0,
+                width: 26, height: 26, borderRadius: '50%', flexShrink: 0,
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontFamily: mono, fontSize: 12,
-                background: active ? colors.accent : 'transparent',
+                fontFamily: mono, fontSize: 12, fontWeight: 600,
+                background: active ? colors.accent : 'rgba(255,255,255,0.7)',
                 color: active ? '#FFFFFF' : colors.mute,
-                border: `1px solid ${active ? colors.accent : colors.faint}`,
+                border: `1px solid ${active ? colors.accent : 'rgba(95,108,118,0.45)'}`,
               }}
             >
               {index + 1}
             </span>
             <span style={{ minWidth: 0 }}>
-              <span style={{ display: 'block', fontFamily: sans, fontSize: 14, fontWeight: 600, color: colors.ink }}>{step.label}</span>
-              <span style={{ display: 'block', fontFamily: sans, fontSize: 12, color: TONE[step.tone] ?? colors.mute, marginTop: 2 }}>{step.status}</span>
+              <span style={{ display: 'block', fontFamily: sans, fontSize: 14, fontWeight: active ? 700 : 600, color: colors.ink }}>{step.label}</span>
+              <span style={{ display: 'block', fontFamily: sans, fontSize: 12, fontWeight: step.tone ? 600 : 400, color: TONE[step.tone] ?? colors.mute, marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{step.status}</span>
             </span>
           </button>
         )

@@ -11,7 +11,7 @@ export default function AppShell({ route, user, authLoading, busy, engineError, 
   const onLanding = route === 'home'
 
   return (
-    <div style={{ background: colors.ground, minHeight: '100vh' }}>
+    <div style={{ minHeight: '100vh' }}>
       {/* First thing a keyboard reaches: past the header and nav to the screen. */}
       <a href="#main" className="skip-link" onClick={(e) => { e.preventDefault(); document.getElementById('main')?.focus() }}>
         Skip to the main content
@@ -19,8 +19,7 @@ export default function AppShell({ route, user, authLoading, busy, engineError, 
       <header
         className="app-header"
         style={{
-          background: colors.panel,
-          borderBottom: `1px solid ${colors.panelEdge}`,
+          borderBottom: '1px solid rgba(220,227,232,0.7)',
           position: 'sticky',
           top: 0,
           zIndex: 10,
@@ -95,14 +94,18 @@ export default function AppShell({ route, user, authLoading, busy, engineError, 
         </div>
       </header>
 
-      <div style={{ background: colors.panelSunk, borderBottom: `1px solid ${colors.panelEdge}` }}>
+      <div>
         <div
           style={{
-            maxWidth: 1080, margin: '0 auto', padding: '7px 24px',
-            display: 'flex', alignItems: 'baseline', gap: 8,
+            maxWidth: 1080, margin: '0 auto', padding: '10px 24px 0',
+            display: 'flex', alignItems: 'flex-start', gap: 8,
           }}
         >
-          <span style={{ fontFamily: sans, fontSize: 12, color: colors.mute, flex: 1, minWidth: 0 }}>
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke={colors.mute} strokeWidth="2" aria-hidden="true" style={{ flexShrink: 0, marginTop: 2 }}>
+            <rect x="5" y="11" width="14" height="10" rx="2" />
+            <path d="M8 11V7a4 4 0 0 1 8 0v4" />
+          </svg>
+          <span style={{ fontFamily: sans, fontSize: 12, color: colors.mute, flex: 1, minWidth: 0, lineHeight: 1.5 }}>
             Files stay on this device. Nothing is uploaded: the records and fix lists you download go only to your
             computer, and an account, if you use one, stores only rules, names and counts.
           </span>
@@ -162,7 +165,7 @@ export default function AppShell({ route, user, authLoading, busy, engineError, 
         {children}
       </main>
 
-      <footer style={{ borderTop: `1px solid ${colors.panelEdge}`, background: colors.panel }}>
+      <footer style={{ borderTop: '1px solid rgba(220,227,232,0.7)' }}>
         <div style={{ maxWidth: 1080, margin: '0 auto', padding: '16px 24px' }}>
           <span style={{ fontFamily: mono, fontSize: 12, color: colors.faint }}>
             {isConfigured

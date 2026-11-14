@@ -1,31 +1,38 @@
 import { CHECK_COPY } from '../copy.js'
 import { chip, colors, mono, panel, sans, statusColor } from '../theme.js'
+import { isoStair } from './isoStair.js'
 
-// The signature view: the four checks drawn as a descent, so the eye lands on
-// the step where the file stopped. A flat list of four verdicts hides the one
-// fact that matters — that the checks ABOVE a failure passed, which is what
-// tells you the kind of problem you have. A file with perfect columns and
-// familiar categories can still be carrying numbers 83x too large; on a
-// staircase, that reads instantly.
+// The signature view: the checks drawn as an isometric staircase, with the
+// plumb bob of the logo resting on the step where the file (or load) stopped.
+// A flat list of verdicts hides the one fact that matters — that the checks
+// ABOVE a failure passed, which is what tells you the kind of problem you have.
 //
-// The steps are joined by a drawn path — a tread across each step and a riser
-// down into the next. Without it the cards float at different heights and
-// read as a ragged list rather than a descent.
-//
-// Any number of steps: the four drift layers, or reconciliation's five. A step
-// is { id, label, status, violations } and may carry its own `question`;
-// `subject` names what came down the stairs — a file, or a load.
+// The drawing is decoration over the legend beside it: every step's number,
+// name, verdict and line are in the legend as words, so nothing is said by
+// colour alone and a screen reader hears it all. Any number of steps: the four
+// drift layers, or reconciliation's five. A step is { id, label, status,
+// violations } and may carry its own `question`; `subject` names what came down
+// the stairs — a file, or a load.
 
-const STEP_DROP = 30
+// Face tints per verdict: top, front, right. The step that caught the file is
+// the strongest; other failures stay quieter so the eye lands on the first.
+const FACES = {
+  lead: ['#FDECEA', '#F0CDC8', '#E2B5AE'],
+  FAIL: ['#FBF2F0', '#ECDCD9', '#DCC6C2'],
+  PASS: ['#EEF7F1', '#D6E6DD', '#BDD2C6'],
+  warn: ['#FBF1DE', '#F0DCB4', '#E2C893'],
+  idle: ['#FFFFFF', '#E3EAEE', '#CDD8DE'],
+}
+const WARN = new Set(['INSUFFICIENT', 'UNCHECKED'])
 
 export default function Staircase({ layers, title = 'How far the file got', note, subject = 'file' }) {
   const firstFailure = layers.findIndex((layer) => layer.status === 'FAIL')
   const passedAbove = firstFailure > 0 ? layers.slice(0, firstFailure).filter((l) => l.status === 'PASS') : []
 
   return (
-    <div style={{ ...panel, padding: '20px 22px 26px', marginTop: 16 }}>
+    <div style={{ ...panel, padding: '22px 24px 24px', marginTop: 16 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 12, flexWrap: 'wrap' }}>
-        <h2 style={{ fontFamily: sans, fontSize: 14, fontWeight: 600, color: colors.ink, margin: 0 }}>{title}</h2>
+        <h2 style={{ fontFamily: sans, fontSize: 16, fontWeight: 650, color: colors.ink, margin: 0 }}>{title}</h2>
         <span style={{ fontFamily: sans, fontSize: 13, color: colors.faint }}>
           {note ?? 'Each check asks something the one before it cannot'}
         </span>
@@ -35,82 +42,45 @@ export default function Staircase({ layers, title = 'How far the file got', note
         {caption(layers, firstFailure, passedAbove, subject)}
       </p>
 
-      <div className="staircase-grid" style={{ marginTop: 26, '--steps': layers.length }}>
-        {layers.map((layer, index) => (
-          <Step
-            key={layer.id}
-            layer={layer}
-            index={index}
-            isLead={index === firstFailure}
-            isAboveFailure={firstFailure >= 0 && index < firstFailure}
-            drop={index * STEP_DROP}
-          />
-        ))}
+      <div className="iso-stair" style={{ marginTop: 18 }}>
+        <ol style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column' }}>
+          {layers.map((layer, index) => (
+            <Step key={layer.id} layer={layer} index={index} isLead={index === firstFailure} isAboveFailure={firstFailure >= 0 && index < firstFailure} />
+          ))}
+        </ol>
+        <div className="iso-drawing">
+          <Drawing layers={layers} lead={firstFailure} />
+        </div>
       </div>
     </div>
   )
 }
 
-function Step({ layer, index, isLead, isAboveFailure, drop }) {
+function Step({ layer, index, isLead, isAboveFailure }) {
   const tone = statusColor[layer.status] ?? colors.faint
   const problems = layer.violations?.length ?? 0
-  // The path runs grey until the step that caught the file, where it turns the
-  // colour of the verdict — so the eye follows the descent straight to it.
-  const pathColor = isLead ? tone : '#C6D0D8'
-
   return (
-    <div className="staircase-step" style={{ marginTop: drop, position: 'relative' }}>
-      {/* the riser: drops from the previous tread down to this one, drawn in
-          the grid gutter so the four steps read as one continuous path */}
-      {index > 0 && (
-        <span
-          className="staircase-riser"
-          aria-hidden="true"
-          style={{
-            position: 'absolute', left: -6, top: -STEP_DROP, width: 3, height: STEP_DROP + 3,
-            background: pathColor, borderRadius: 2,
-          }}
-        />
-      )}
-
-      {/* Absolutely positioned: in the flow it would push this step's tread
-          below the others and break the rhythm the staircase depends on. */}
-      {isLead && (
-        <div
-          style={{
-            position: 'absolute', top: -17, left: 0,
-            fontFamily: sans, fontSize: 12, fontWeight: 700, letterSpacing: '0.08em', color: tone,
-          }}
-        >
-          CAUGHT HERE
-        </div>
-      )}
-
-      {/* the tread, reaching back into the gutter to meet the riser */}
-      <div style={{ height: 3, background: pathColor, borderRadius: 2, marginLeft: index > 0 ? -6 : 0 }} />
-
-      <div
-        style={{
-          border: `1px solid ${isLead ? `${tone}66` : colors.panelEdge}`,
-          background: isLead ? `${tone}0D` : colors.panel,
-          borderRadius: 7,
-          padding: '12px 13px 14px',
-          marginTop: 11,
-          height: 118,
-          display: 'flex',
-          flexDirection: 'column',
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-          <span style={{ fontFamily: mono, fontSize: 12, color: colors.faint }}>{index + 1}</span>
-          <span style={{ fontFamily: sans, fontSize: 14, fontWeight: 600, color: colors.ink }}>{layer.label}</span>
-        </div>
-
-        <div style={{ marginTop: 9 }}>
-          <span style={chip(layer.status)}>{layer.status}</span>
-        </div>
-
-        <p style={{ fontFamily: sans, fontSize: 12, lineHeight: 1.45, color: colors.faint, margin: 'auto 0 0' }}>
+    <li
+      className="staircase-step"
+      style={{
+        display: 'grid', gridTemplateColumns: '26px minmax(0, 1fr) auto', gap: 12, alignItems: 'center',
+        padding: '11px 12px', borderRadius: 12,
+        background: isLead ? `${tone}0F` : 'transparent',
+        borderWidth: 1, borderStyle: 'solid', borderColor: isLead ? `${tone}55` : 'transparent',
+        borderTopColor: isLead ? `${tone}55` : index > 0 ? 'rgba(22,34,43,0.07)' : 'transparent',
+      }}
+    >
+      <span style={{ fontFamily: mono, fontSize: 13, fontWeight: 600, color: isLead ? tone : colors.faint }}>
+        {String(index + 1).padStart(2, '0')}
+      </span>
+      <span style={{ minWidth: 0 }}>
+        {isLead && (
+          <span style={{ display: 'block', fontFamily: sans, fontSize: 12, fontWeight: 700, letterSpacing: '0.08em', color: tone }}>
+            CAUGHT HERE
+          </span>
+        )}
+        <span style={{ display: 'block', fontFamily: sans, fontSize: 15, fontWeight: isLead ? 700 : 600, color: colors.ink }}>{layer.label}</span>
+        <span style={{ display: 'block', fontFamily: sans, fontSize: 13, lineHeight: 1.45, color: colors.mute, marginTop: 1 }}>
           {layer.status === 'FAIL'
             ? `${problems} problem${problems === 1 ? '' : 's'} found`
             : layer.status === 'SKIPPED'
@@ -120,15 +90,54 @@ function Step({ layer, index, isLead, isAboveFailure, drop }) {
               : isAboveFailure
                 ? 'Passed — and let it through'
                 : shortQuestion(layer)}
-        </p>
-      </div>
-    </div>
+        </span>
+      </span>
+      <span style={isLead ? { ...chip(layer.status), background: tone, color: '#FFFFFF', borderColor: tone } : chip(layer.status)}>{layer.status}</span>
+    </li>
+  )
+}
+
+// The drawing. Decorative: the legend says everything it shows.
+function Drawing({ layers, lead }) {
+  const stair = isoStair(layers.length)
+  const restOn = lead >= 0 ? lead : layers.length - 1
+  const [bx, by] = stair.steps[restOn].rest
+  const bobTone = colors.accent
+  return (
+    <svg viewBox={`0 0 ${stair.width} ${stair.height}`} aria-hidden="true" focusable="false">
+      <ellipse cx={stair.width / 2} cy={stair.height - 14} rx={stair.width * 0.42} ry={12} fill="rgba(22,34,43,0.08)" />
+      <g stroke="rgba(22,34,43,0.14)" strokeWidth="1" strokeLinejoin="round">
+        {stair.steps.map((step, i) => {
+          const layer = layers[i]
+          const faces = i === lead ? FACES.lead : layer.status === 'FAIL' ? FACES.FAIL : layer.status === 'PASS' ? FACES.PASS : WARN.has(layer.status) ? FACES.warn : FACES.idle
+          return (
+            <g key={layer.id}>
+              <polygon points={step.right} fill={faces[2]} />
+              <polygon points={step.front} fill={faces[1]} />
+              <polygon points={step.top} fill={faces[0]} stroke={i === lead ? colors.fail : undefined} strokeWidth={i === lead ? 2 : undefined} />
+            </g>
+          )
+        })}
+      </g>
+      <g fontFamily={mono} fontSize="13" fontWeight="600" textAnchor="middle">
+        {stair.steps.map((step, i) => (
+          <text key={layers[i].id} x={step.label[0]} y={step.label[1] + 4} fill={i === lead ? colors.fail : statusColor[layers[i].status] ?? colors.faint}>
+            {String(i + 1).padStart(2, '0')}
+          </text>
+        ))}
+      </g>
+      {/* the plumb line and its bob, resting on the step that caught it */}
+      <line x1={bx - 34} y1={stair.beamY} x2={bx + 34} y2={stair.beamY} stroke={colors.ink} strokeWidth="3" strokeLinecap="round" />
+      <line x1={bx} y1={stair.beamY} x2={bx} y2={by - 19} stroke={bobTone} strokeWidth="2" />
+      <ellipse cx={bx} cy={by + 1} rx="15" ry="5" fill={lead >= 0 ? 'rgba(179,38,30,0.22)' : 'rgba(31,111,139,0.2)'} />
+      <polygon points={`${bx - 9},${by - 19} ${bx + 9},${by - 19} ${bx},${by - 1}`} fill={bobTone} />
+    </svg>
   )
 }
 
 function shortQuestion(layer) {
   const plain = layer.question ?? CHECK_COPY[layer.id]?.plain ?? ''
-  return plain.length > 52 ? `${plain.slice(0, 49)}…` : plain
+  return plain.length > 64 ? `${plain.slice(0, 61)}…` : plain
 }
 
 const COUNT_WORDS = ['no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven']
