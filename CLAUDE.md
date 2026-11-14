@@ -139,7 +139,7 @@ not an extension of it.
 - `normalizeSpec` is idempotent (a crosswalk Map normalised twice once emptied).
 - A crosswalk mapping one legacy value two ways is refused whole.
 
-## Change contracts — was this change allowed? (engine only, from 14 Nov 2026)
+## Change contracts — was this change allowed? (from 14 Nov 2026)
 `changeContract.js`. A CHANGE CONTRACT declares, before a bulk change, what
 may change; a CHANGE CHECK reads a before and an after file, matches records by
 key, and sorts every difference. Design and decisions:
@@ -466,8 +466,9 @@ counts."). It carries no green dot: green is a verdict's colour.
   16 heading, 14 body, 13 small and mono data, 12 label (the smallest
   anywhere, chips included). A new size is a brand change, not a component's
   choice.
-- The bar: Projects and Monitor (the routes `migrations` and `validate`) are
-  primary; Contracts, History and Organisation sit in a quieter row. Route ids
+- The bar: Projects, Monitor and Change checks (the routes `migrations`,
+  `validate` and `change`) are primary; Contracts, History and Organisation
+  sit in a quieter row. Route ids
   are unchanged, so links hold. On a phone the bar scrolls away.
 - `DEFAULT_THRESHOLDS` / `THRESHOLD_FIELDS` drive the threshold UI, so a new
   threshold needs no UI change.
@@ -536,15 +537,22 @@ republish: `npm run build`, `npm run publish:files`, then publish it with the
 printed files (`app.js` and `app-worker.js`) and the same URL.
 The marketing site (brand Phase B) is `npm run build:site`
 (`scripts/build-site.mjs`, styles in `site/site.css`): plain static pages —
-Home, For partners, For finance and HR, Packs, Security and privacy, Pricing —
+Home, Finance and HR, CAs and auditors, Partners, Packs, Security, Pricing —
 into `dist-site/`, with the built app copied under `app/`. No script on any
-page, nothing from another origin, a CSP meta. The Packs page is generated from
+page, nothing from another origin, a CSP meta. Positioning (14 Nov 2026):
+record assurance — "Whoever changed your records shouldn't be the one who
+checks them"; change checks lead, the migration checks follow, auditors are a
+page of their own, and movers are pitched as "independently checkable", never
+"independently checked". The look is the app's: Direction C in light,
+Blueprint in dark by `prefers-color-scheme` alone (no script, so no picker).
+The hero staircase is drawn from the app's `isoStair.js` as SVG coloured by
+class (a page may carry no `style=`), and so is the mark. The Packs page is generated from
 `src/packs`, so it cannot drift; the masking table from `SENSITIVITIES`; the
 claim from `STATEMENT_OF_CLAIM`. Every sentence must be true of the code today:
 `scripts/site.test.js` checks titles, links, no script, the draft labels and
 the `NEVER_CLAIM` scan (a negated "never a certificate" still trips it — keep
 the word off the page); `e2e/site.spec.js` runs axe on every page at 1280 and
-375 px. Pricing reads "Free while in pilot"; contact goes to the GitHub issues.
+375 px, in light and in dark. Pricing reads "Free while in pilot"; contact goes to the GitHub issues.
 Docs and trust (Phase C, `scripts/site-docs.mjs`) are pages under `docs/`:
 help centre, command line, one reference page per pack, changelog, legal.
 Facts the code knows are read from it — rule sentences from `describeRule`,

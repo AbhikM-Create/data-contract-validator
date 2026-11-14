@@ -30,8 +30,11 @@ async function serve(page) {
   })
 }
 
-for (const width of [1280, 375]) {
-  test(`every page at ${width} px: accessible, no sideways scroll, nothing refused`, async ({ page }) => {
+// Light is Direction C; dark is Blueprint, chosen by the system setting alone
+// (the site runs no script), so each width is swept in both.
+for (const [width, scheme] of [[1280, 'light'], [375, 'light'], [1280, 'dark'], [375, 'dark']]) {
+  test(`every page at ${width} px, ${scheme}: accessible, no sideways scroll, nothing refused`, async ({ page }) => {
+    await page.emulateMedia({ colorScheme: scheme })
     await page.setViewportSize({ width, height: 900 })
     await serve(page)
     const errors = watchErrors(page)
@@ -54,4 +57,20 @@ test('the bar marks the page you are on, and the home link goes home', async ({ 
   await page.getByRole('banner').getByRole('link', { name: 'Plumbstep home' }).click()
   await expect(page).toHaveURL(`${ORIGIN}/index.html`)
   await expect(page.getByRole('link', { name: 'Open the workspace' }).first()).toHaveAttribute('href', 'app/index.html')
+})
+
+test('dark follows the system setting: the page ground and the mark change with it', async ({ page }) => {
+  await serve(page)
+  const look = async (scheme) => {
+    await page.emulateMedia({ colorScheme: scheme })
+    await page.goto(`${ORIGIN}/index.html`)
+    return page.evaluate(() => ({
+      ground: getComputedStyle(document.body).backgroundColor,
+      mark: getComputedStyle(document.querySelector('.brand .ink')).stroke,
+    }))
+  }
+  const light = await look('light')
+  const dark = await look('dark')
+  expect(dark.ground).not.toBe(light.ground)
+  expect(dark.mark).not.toBe(light.mark)
 })
