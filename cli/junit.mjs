@@ -69,3 +69,22 @@ export function readinessJunit(report, { seconds = 0, build, file } = {}) {
   }))
   return suite(name, cases, seconds, props)
 }
+
+// dcv change: one test case per step, as reconcile. Sentences and counts only —
+// a JUnit file is read in CI logs, so no record value goes into it.
+export function changeJunit(report, { seconds = 0, build, files } = {}) {
+  const name = `change: ${report.name ?? 'change check'}`
+  const props = { tool: build?.name, version: build?.version, commit: build?.commit, before: files?.before, after: files?.after, status: report.status }
+  if (report.status === 'INVALID') {
+    return suite(name, [{ name: 'contract', failure: { message: 'The contract cannot run against these files', type: 'INVALID', detail: report.issues.join('\n') } }], seconds, props)
+  }
+  const cases = report.steps.map((step, i) => ({
+    name: `${i + 1} ${step.label} — ${step.question}`,
+    ...(step.status === 'FAIL'
+      ? { failure: { message: step.findings.map((f) => f.message).join(' '), type: step.findings.map((f) => f.code).join(','), detail: step.findings.map((f) => `${f.code}${f.column ? ` [${f.column}]` : ''}: ${f.message}`).join('\n') } }
+      : step.status === 'UNCHECKED'
+        ? { failure: { message: step.reason ?? 'Could not be checked', type: 'UNCHECKED', detail: step.question } }
+        : step.status === 'SKIPPED' ? { skipped: step.reason ?? 'not configured' } : {}),
+  }))
+  return suite(name, cases, seconds, props)
+}

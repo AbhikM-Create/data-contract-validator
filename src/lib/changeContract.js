@@ -123,6 +123,30 @@ export function normalizeContract(raw) {
   }
 }
 
+const headerOf = (rows) => [...new Set(rows.flatMap((row) => Object.keys(row)))]
+
+// An approved file or change log that lacks the column the contract keys it by
+// would key every row as blank: every approved revision would then read "not on
+// the approved list" — a wrong reason, not a refusal. So it is refused, with
+// the columns it does have. Given and empty is a list of nothing, not an error.
+function inputIssues(contract, options) {
+  const issues = []
+  const lacks = (what, columns, wanted) => {
+    const missing = wanted.filter((column) => !columns.includes(column))
+    if (missing.length > 0) issues.push(`The ${what} has no column ${missing.map((c) => `"${c}"`).join(', ')}, which the contract names (it has ${columns.length ? columns.map((c) => `"${c}"`).join(', ') : 'no columns'}).`)
+  }
+  if (Array.isArray(options.approved) && contract.approved && (options.approved.length > 0 || options.approvedColumns)) {
+    const columns = options.approvedColumns ?? headerOf(options.approved)
+    const valueColumns = contract.fields.filter((f) => f.policy === 'asApproved').map((f) => f.approvedColumn ?? f.after)
+    lacks('approved file', columns, [...new Set([...contract.approved.key, ...valueColumns])])
+  }
+  if (Array.isArray(options.changeLog) && contract.changeLog && (options.changeLog.length > 0 || options.logColumns)) {
+    const columns = options.logColumns ?? headerOf(options.changeLog)
+    lacks('change log', columns, contract.changeLog.key.length ? contract.changeLog.key : contract.key.after)
+  }
+  return issues
+}
+
 const needsApproved = (contract) => contract.fields.some((f) => f.policy === 'asApproved' || f.onlyFor === 'approved')
   || contract.added === 'listed' || contract.removed === 'listed'
 
@@ -187,7 +211,7 @@ function stepOf(id, status, findings, detail = {}) {
 }
 
 // createChangeCheck(contract, { beforeColumns, afterColumns, approved, changeLog, references, exampleLimit })
-//   -> { issues, contract, observe, joinPartition, finish }
+//   -> { issues, contract, columnsNeeded, observe, joinPartition, finish }
 //
 // The same three-part form as createReconciliation, so a file too large to hold
 // can be partitioned by key on disk later: observe each row of each file, join
@@ -196,13 +220,14 @@ function stepOf(id, status, findings, detail = {}) {
 //
 //   approved   rows of the approved file (the signer's), or null
 //   changeLog  rows of the mover's change log, or null
+//   approvedColumns, logColumns  their headers (read from the rows if not given)
 //   references { name: [values] } for oneOf policies that name a reference
 export function createChangeCheck(rawContract, options = {}) {
   const contract = rawContract?.readers ? rawContract : normalizeContract(rawContract)
   const limit = Number.isInteger(options.exampleLimit) && options.exampleLimit > 0 ? options.exampleLimit : EXAMPLES
   const beforeColumns = options.beforeColumns ?? null
   const afterColumns = options.afterColumns ?? null
-  const issues = contractIssues(contract, beforeColumns, afterColumns)
+  const issues = [...contractIssues(contract, beforeColumns, afterColumns), ...inputIssues(contract, options)]
   const { readers } = contract
 
   // The fields the check compares: the ones named, plus — unless the contract
@@ -248,6 +273,15 @@ export function createChangeCheck(rawContract, options = {}) {
     if (f.policy === 'oneOf' && f.reference && references[f.reference]) {
       referenceSets.set(f.reference, new Set(references[f.reference].map((v) => fold(String(v).trim(), f.ignoreCase))))
     }
+  }
+
+  // What a partition entry must carry: the key, every compared field, and any
+  // column a condition reads. A caller that spills records to disk between
+  // observe() and joinPartition() writes these and nothing else.
+  const conditionColumns = fields.flatMap((f) => (f.when ? [f.when.column, ...(f.when.targetIsColumn ? [f.when.target] : [])] : []))
+  const columnsNeeded = {
+    before: [...new Set([...contract.key.before, ...fields.map((f) => f.before), ...conditionColumns])],
+    after: [...new Set([...contract.key.after, ...fields.map((f) => f.after)])],
   }
 
   const sides = { before: newSide(contract), after: newSide(contract) }
@@ -466,7 +500,7 @@ export function createChangeCheck(rawContract, options = {}) {
 
   function finish() {
     if (issues.length > 0) {
-      return { status: 'INVALID', issues, steps: CHANGE_STEPS.map((s) => stepOf(s.id, 'SKIPPED', [], { reason: 'The contract could not run.' })), counts: null, fields: [], totals: [], notChecked: [] }
+      return { status: 'INVALID', name: contract.name, headline: 'This change check cannot run as set up.', issues, steps: CHANGE_STEPS.map((s) => stepOf(s.id, 'SKIPPED', [], { reason: 'The contract could not run.' })), counts: null, fields: [], totals: [], notChecked: [] }
     }
 
     // Approved records that appear in neither file.
@@ -479,7 +513,12 @@ export function createChangeCheck(rawContract, options = {}) {
       }
     }
 
-    const byStep = (id) => [...findings.values()].filter((f) => f.step === id).map((f) => ({ ...f, owner: CHANGE_OWNERS[id], message: sentence(f) }))
+    // Sorted by code, then column, so a report reads the same however its
+    // records were partitioned (findings are met in partition order).
+    const order = (x, y) => (x.code === y.code ? String(x.column ?? '').localeCompare(String(y.column ?? '')) : x.code.localeCompare(y.code))
+    // An approved record in neither file has no row; its sort place is the end.
+    const shown = (e) => (e.rowNo === Number.MAX_SAFE_INTEGER ? (({ rowNo: _r, ...rest }) => rest)(e) : e)
+    const byStep = (id) => [...findings.values()].filter((f) => f.step === id).sort(order).map((f) => ({ ...f, examples: f.examples.map(shown), owner: CHANGE_OWNERS[id], message: sentence(f) }))
     const keyFindings = []
     for (const side of ['before', 'after']) {
       const s = sides[side]
@@ -491,25 +530,28 @@ export function createChangeCheck(rawContract, options = {}) {
     const totalFindings = totals.filter((t) => t.status === 'FAIL').map((t) => ({ step: 'totals', code: 'total-out-of-limits', column: t.column, count: 1, examples: [], owner: CHANGE_OWNERS.totals, message: t.message }))
     const totalsUnchecked = totals.some((t) => t.status === 'UNCHECKED')
 
-    const status = (stepFindings, unchecked = false) => (stepFindings.length > 0 ? 'FAIL' : unchecked ? 'UNCHECKED' : 'PASS')
+    const stepStatus = (stepFindings, unchecked = false) => (stepFindings.length > 0 ? 'FAIL' : unchecked ? 'UNCHECKED' : 'PASS')
     const fieldUnverified = fieldStats.some((s) => s.unverified > 0 || s.unmapped > 0)
     const approvalsUnchecked = approvedNeeded && !approvedRows
     const steps = [
-      stepOf('keys', status(keyFindings), keyFindings),
-      stepOf('coverage', status(byStep('coverage')), byStep('coverage')),
-      stepOf('permitted', status(byStep('permitted'), contract.changeLog && !logRows), byStep('permitted'), contract.changeLog && !logRows ? { reason: 'The contract asks for the change log, and none was given: unlogged changes could not be checked.' } : {}),
-      stepOf('limits', status(byStep('limits').filter((f) => f.code === 'out-of-limits'), fieldUnverified), byStep('limits')),
+      stepOf('keys', stepStatus(keyFindings), keyFindings),
+      stepOf('coverage', stepStatus(byStep('coverage')), byStep('coverage')),
+      stepOf('permitted', stepStatus(byStep('permitted'), contract.changeLog && !logRows), byStep('permitted'), contract.changeLog && !logRows ? { reason: 'The contract asks for the change log, and none was given: unlogged changes could not be checked.' } : {}),
+      stepOf('limits', stepStatus(byStep('limits').filter((f) => f.code === 'out-of-limits'), fieldUnverified), byStep('limits')),
       approvedNeeded
-        ? stepOf('approvals', status(byStep('approvals'), approvalsUnchecked), byStep('approvals'), approvalsUnchecked ? { reason: 'The contract depends on the approved file, and none was given: approvals could not be checked.' } : {})
+        ? stepOf('approvals', stepStatus(byStep('approvals'), approvalsUnchecked), byStep('approvals'), approvalsUnchecked ? { reason: 'The contract depends on the approved file, and none was given: approvals could not be checked.' } : {})
         : stepOf('approvals', 'SKIPPED', [], { reason: 'Nothing in this contract depends on an approved list.' }),
       contract.totals.length === 0
         ? stepOf('totals', 'SKIPPED', [], { reason: 'The contract declares no totals.' })
-        : stepOf('totals', status(totalFindings, totalsUnchecked), totalFindings),
+        : stepOf('totals', stepStatus(totalFindings, totalsUnchecked), totalFindings),
     ]
     const failed = steps.some((s) => s.status === 'FAIL')
     const unchecked = steps.some((s) => s.status === 'UNCHECKED') || counts.unverified > 0
+    const status = failed ? 'NOT_ALLOWED' : unchecked ? 'UNVERIFIED' : 'ALLOWED'
     return {
-      status: failed ? 'NOT_ALLOWED' : unchecked ? 'UNVERIFIED' : 'ALLOWED',
+      status,
+      name: contract.name,
+      headline: headlineFor(status, steps, counts),
       issues: [],
       steps,
       counts: {
@@ -526,7 +568,7 @@ export function createChangeCheck(rawContract, options = {}) {
     }
   }
 
-  return { issues, contract, observe, joinPartition, finish }
+  return { issues, contract, columnsNeeded, observe, joinPartition, finish }
 }
 
 // checkChange(contract, beforeRows, afterRows, options) -> report. The check run
@@ -543,7 +585,7 @@ export function checkChange(rawContract, beforeRows, afterRows, options = {}) {
     const out = []
     rows.forEach((row, i) => {
       const key = check.observe(side, row)
-      if (key !== null) out.push({ key, row, rowNo: i + 2 })
+      if (key !== null) out.push({ key, row, rowNo: i + 1 }) // as reconcile(): the record's place among data rows
     })
     return out
   }
@@ -653,6 +695,21 @@ function judgeTotal(t, sides, contract) {
 }
 
 const round = (n) => Math.round(n * 100) / 100
+
+const plural = (n, word) => `${n.toLocaleString('en-US')} ${word}${n === 1 ? '' : 's'}`
+
+// One sentence for the person signing: what changed, and whether that was
+// allowed. Counts and step names only — never a record value.
+function headlineFor(status, steps, counts) {
+  const changed = counts.changed === 0 ? 'No record changed' : `${plural(counts.changed, 'record')} changed`
+  if (status === 'ALLOWED') return counts.changed === 0 && counts.added === 0 && counts.removed === 0 ? `${changed}, and nothing was added or removed.` : `${changed}, all as the contract allows.`
+  if (status === 'UNVERIFIED') {
+    const open = steps.filter((s) => s.status === 'UNCHECKED').map((s) => s.label)
+    return `${changed}. Nothing broke the contract, but not everything could be checked${open.length ? ` (${open.join(', ')})` : ''} — this is not an approval.`
+  }
+  const failing = steps.filter((s) => s.status === 'FAIL').map((s) => s.label)
+  return `${changed}; ${plural(counts.withViolation, 'record')} broke the contract. Caught at: ${failing.join(', ')}.`
+}
 
 function sentence(f) {
   const n = f.count

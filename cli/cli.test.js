@@ -316,3 +316,134 @@ describe('dcv odcs', () => {
     expect(r.err).toMatch(/NOT imported — 1 item\(s\)/)
   })
 })
+
+describe('dcv change', () => {
+  const changeSchema = schema('change-report.schema.json')
+  // A salary revision: Basic may rise by up to 20% for the approved list only;
+  // everything else must stay as it was. Invented people and amounts.
+  const revision = file('revision.json', JSON.stringify({
+    name: 'Salary revision',
+    key: ['Emp Code'],
+    approved: { key: ['Emp Code'] },
+    fields: { Basic: { policy: 'bounded', direction: 'up', maxPercent: 20, onlyFor: 'approved' } },
+  }))
+  const before = file('before.csv', 'Emp Code,Name,Basic\nE1,Asha Rao,50000\nE2,Vikram Shah,61000\nE3,Meera Iyer,47000\n')
+  const allowed = file('after-ok.csv', 'Emp Code,Name,Basic\nE1,Asha Rao,55000\nE2,Vikram Shah,61000\nE3,Meera Iyer,47000\n')
+  const broken = file('after-bad.csv', 'Emp Code,Name,Basic\nE1,Asha Rao,65000\nE2,Vikram Shah,64000\nE3,Meera Iyer,47000\n')
+  const approved = file('approved.csv', 'Emp Code\nE1\n')
+  const tags = file('tags.json', JSON.stringify({ Basic: 'pay' }))
+
+  it('exits 0 and matches the schema when the change was allowed', () => {
+    const r = dcv('change', revision, before, allowed, '--approved', approved, '--json')
+    expect(r.code).toBe(0)
+    const report = JSON.parse(r.out)
+    expect(errors(changeSchema, report)).toEqual([])
+    expect(report.status).toBe('ALLOWED')
+    expect(report.files).toEqual({ before: 'before.csv', after: 'after-ok.csv', approved: 'approved.csv' })
+  })
+
+  it('exits 1 when the change broke the contract, naming each step that caught it', () => {
+    const r = dcv('change', revision, before, broken, '--approved', approved, '--json')
+    expect(r.code).toBe(1)
+    const report = JSON.parse(r.out)
+    expect(errors(changeSchema, report)).toEqual([])
+    expect(report.status).toBe('NOT_ALLOWED')
+    const codes = report.steps.flatMap((s) => s.findings.map((f) => f.code))
+    expect(codes).toEqual(expect.arrayContaining(['out-of-limits', 'not-on-approved-list']))
+  })
+
+  it('exits 2, never 0, when the approved file was not given (UNVERIFIED)', () => {
+    const r = dcv('change', revision, before, allowed, '--json')
+    expect(r.code).toBe(2)
+    const report = JSON.parse(r.out)
+    expect(errors(changeSchema, report)).toEqual([])
+    expect(report.status).toBe('UNVERIFIED')
+  })
+
+  it('exits 2 with every reason when the contract cannot run (INVALID)', () => {
+    const bad = file('bad-change.json', JSON.stringify({ key: ['Nope'], fields: { Basic: { policy: 'whatever' } } }))
+    const r = dcv('change', bad, before, allowed, '--json')
+    expect(r.code).toBe(2)
+    const report = JSON.parse(r.out)
+    expect(errors(changeSchema, report)).toEqual([])
+    expect(report.status).toBe('INVALID')
+    expect(report.issues.length).toBeGreaterThan(1)
+  })
+
+  it('is caught by the schema when a field disappears', () => {
+    const report = JSON.parse(dcv('change', revision, before, broken, '--approved', approved, '--json').out)
+    delete report.counts.withViolation
+    expect(errors(changeSchema, report)).not.toEqual([])
+  })
+
+  it('masks a tagged column in what it prints, and shows it only with --unmask', () => {
+    const masked = dcv('change', revision, before, broken, '--approved', approved, '--tags', tags, '--json')
+    expect(masked.out).not.toMatch(/65000|64000|61000/)
+    expect(masked.out).toMatch(/\[masked\]/)
+    const terminal = dcv('change', revision, before, broken, '--approved', approved, '--tags', tags)
+    expect(terminal.out).not.toMatch(/65000|64000/)
+    const shown = dcv('change', revision, before, broken, '--approved', approved, '--tags', tags, '--unmask', '--json')
+    expect(shown.out).toMatch(/65000/)
+  })
+
+  it('prints the six steps as a descent, then the headline', () => {
+    const r = dcv('change', revision, before, broken, '--approved', approved)
+    for (const label of ['Keys', 'Coverage', 'Permitted fields', 'Limits', 'Approvals', 'Totals']) expect(r.out).toContain(label)
+    expect(r.out.trim().split('\n').at(-1)).toMatch(/broke the contract/)
+  })
+
+  it('writes JUnit with sentences and counts, never a record value or key', () => {
+    const out = join(dir, 'change.xml')
+    expect(dcv('change', revision, before, broken, '--approved', approved, '--junit', out).code).toBe(1)
+    const xml = readFileSync(out, 'utf8')
+    expect(xml).toMatch(/<testsuite[^>]*tests="6"/)
+    expect(xml).not.toMatch(/65000|64000|Asha|Vikram|\bE[12]\b/)
+  })
+
+  it('refuses a --reference name no policy uses, and an unknown option', () => {
+    const r = dcv('change', revision, before, allowed, '--approved', approved, '--reference', 'chart=before.csv')
+    expect(r.code).toBe(2)
+    expect(r.err).toMatch(/no policy in the contract uses/)
+    expect(dcv('change', revision, before, allowed, '--evidnce', 'x.html').code).toBe(2)
+  })
+})
+
+describe('dcv change reads the workspace file', () => {
+  it('gives the same answer from a saved contract file as from the bare contract', async () => {
+    const { changeContractToJson } = await import('../src/lib/changeContractFile.js')
+    const bare = { key: ['Emp Code'], fields: { Basic: { policy: 'free' } } }
+    const saved = file('saved.change.json', changeContractToJson(bare))
+    const plain = file('plain.change.json', JSON.stringify(bare))
+    const b = file('b2.csv', 'Emp Code,Basic\nE1,1\n')
+    const a = file('a2.csv', 'Emp Code,Basic\nE1,2\n')
+    const one = JSON.parse(dcv('change', saved, b, a, '--json').out)
+    const two = JSON.parse(dcv('change', plain, b, a, '--json').out)
+    expect(one.status).toBe('ALLOWED')
+    expect({ ...one, generatedAt: null }).toEqual({ ...two, generatedAt: null })
+  })
+})
+
+describe('dcv change --evidence', () => {
+  it('writes the change record, self-checked when the mover exported a file, masked by --tags', () => {
+    const contract = file('rec.change.json', JSON.stringify({ name: 'Revision', key: ['Emp Code'], fields: { Basic: { policy: 'bounded', maxPercent: 20 } } }))
+    const b = file('rb.csv', 'Emp Code,Basic\nE1,50000\n')
+    const a = file('ra.csv', 'Emp Code,Basic\nE1,65000\n')
+    const custody = file('custody.json', JSON.stringify({ mover: 'Bureau', after: { by: 'mover', at: '2026-11-12' } }))
+    const tags = file('rtags.json', JSON.stringify({ Basic: 'pay' }))
+    const out = join(dir, 'record.html')
+    const r = dcv('change', contract, b, a, '--evidence', out, '--custody', custody, '--tags', tags)
+    expect(r.code).toBe(1)
+    expect(r.out).toMatch(/Change record CR-/)
+    const html = readFileSync(out, 'utf8')
+    expect(html).toMatch(/Self-checked\./)
+    expect(html).toMatch(/DRAFT/) // the before file's exporter is not stated
+    expect(html).not.toMatch(/65000/)
+    expect(html).toMatch(/dcv change/)
+  })
+
+  it('refuses --custody without --evidence', () => {
+    const contract = file('rec2.change.json', JSON.stringify({ key: ['Emp Code'] }))
+    const b = file('rb2.csv', 'Emp Code\nE1\n')
+    expect(dcv('change', contract, b, b, '--custody', b).code).toBe(2)
+  })
+})

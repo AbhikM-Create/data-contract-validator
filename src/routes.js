@@ -10,6 +10,7 @@ import { useEffect, useState } from 'react'
 export const ROUTES = [
   { id: 'migrations', label: 'Projects', primary: true, blurb: 'Check a migration object before and after each load, and sign it off' },
   { id: 'validate', label: 'Monitor', primary: true, blurb: 'Check a feed against a file you trust, after go-live' },
+  { id: 'change', label: 'Change checks', primary: true, blurb: 'Check that a bulk change did only what was allowed' },
   { id: 'contracts', label: 'Contracts', blurb: 'Author the rules a file must obey' },
   { id: 'history', label: 'History', blurb: 'Runs you have saved' },
   { id: 'organisation', label: 'Organisation', blurb: 'The people who share your migration objects, and their roles' },

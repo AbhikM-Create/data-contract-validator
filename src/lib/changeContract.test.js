@@ -238,6 +238,22 @@ describe('the contract', () => {
     expect(r.issues[0]).toMatch(/no key column "Missing"/)
   })
 
+  it('refuses an approved file or change log without the column it is keyed by — never a wrong reason for every record', () => {
+    // Keyed by "Employee" instead of "Emp Code": without the refusal every
+    // approved revision would read "not on the approved list".
+    const wrongHeader = APPROVED.map((row) => ({ Employee: row['Emp Code'], CTC: row.CTC }))
+    const r = checkChange(REVISION, STAFF, revised(GOOD), { approved: wrongHeader })
+    expect(r.status).toBe('INVALID')
+    expect(r.issues.join(' ')).toMatch(/approved file has no column "Emp Code".*it has "Employee", "CTC"/)
+    // The approved value column for asApproved is needed too.
+    const noCtc = checkChange(REVISION, STAFF, revised(GOOD), { approved: APPROVED.map((row) => ({ 'Emp Code': row['Emp Code'] })) })
+    expect(noCtc.issues.join(' ')).toMatch(/no column "CTC"/)
+    const logged = { ...AI_RUN, changeLog: { key: ['Txn ID'] } }
+    expect(checkChange(logged, TXNS, TXNS, { changeLog: [{ Txn: 'T1' }] }).issues.join(' ')).toMatch(/change log has no column "Txn ID"/)
+    // Given with the right header: runs as before.
+    expect(checkChange(REVISION, STAFF, revised(GOOD), { approved: APPROVED }).status).toBe('ALLOWED')
+  })
+
   it('normalising twice changes nothing — a crosswalk survives as a Map', () => {
     const once = normalizeContract({ key: ['id'], fields: { g: { policy: 'map', map: { a: 'b' } } } })
     const twice = normalizeContract({ ...once, fields: Object.fromEntries(once.fields.map((f) => [f.before, f])) })

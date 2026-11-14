@@ -1,0 +1,481 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:data-contract-validator:schema:change-report:1",
+  "title": "Change check report (dcv change --json)",
+  "description": "Version 1. Fields may be ADDED within a version; removing or renaming one bumps it. Examples quote records from the files; values in tagged columns are masked unless --unmask.",
+  "type": "object",
+  "required": [
+    "$schema",
+    "tool",
+    "generatedAt",
+    "files",
+    "status",
+    "name",
+    "headline",
+    "issues",
+    "steps",
+    "counts",
+    "fields",
+    "totals",
+    "notChecked"
+  ],
+  "properties": {
+    "$schema": {
+      "const": "urn:data-contract-validator:schema:change-report:1"
+    },
+    "tool": {
+      "$ref": "#/$defs/tool"
+    },
+    "generatedAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "files": {
+      "type": "object",
+      "required": [
+        "before",
+        "after"
+      ],
+      "properties": {
+        "before": {
+          "type": "string"
+        },
+        "after": {
+          "type": "string"
+        },
+        "approved": {
+          "type": "string"
+        },
+        "log": {
+          "type": "string"
+        }
+      }
+    },
+    "partitions": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "status": {
+      "enum": [
+        "ALLOWED",
+        "NOT_ALLOWED",
+        "UNVERIFIED",
+        "INVALID"
+      ]
+    },
+    "name": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "headline": {
+      "type": "string"
+    },
+    "issues": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Why the contract could not run; non-empty only when status is INVALID."
+    },
+    "steps": {
+      "type": "array",
+      "minItems": 6,
+      "maxItems": 6,
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "label",
+          "question",
+          "status",
+          "findings"
+        ],
+        "properties": {
+          "id": {
+            "enum": [
+              "keys",
+              "coverage",
+              "permitted",
+              "limits",
+              "approvals",
+              "totals"
+            ]
+          },
+          "label": {
+            "type": "string"
+          },
+          "question": {
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "PASS",
+              "FAIL",
+              "SKIPPED",
+              "UNCHECKED"
+            ]
+          },
+          "reason": {
+            "type": "string"
+          },
+          "findings": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/finding"
+            }
+          }
+        }
+      }
+    },
+    "counts": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "object",
+          "required": [
+            "matched",
+            "unchanged",
+            "changed",
+            "allowedOnly",
+            "withViolation",
+            "unverified",
+            "added",
+            "removed",
+            "addedAllowed",
+            "removedAllowed",
+            "approvedMissing",
+            "approvedDifferent",
+            "unlogged",
+            "loggedUnchanged",
+            "beforeRows",
+            "afterRows",
+            "outOfScope",
+            "blankKeys",
+            "duplicateKeys"
+          ],
+          "properties": {
+            "outOfScope": {
+              "type": "object",
+              "required": [
+                "before",
+                "after"
+              ],
+              "properties": {
+                "before": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "after": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              }
+            },
+            "blankKeys": {
+              "type": "object",
+              "required": [
+                "before",
+                "after"
+              ],
+              "properties": {
+                "before": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "after": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              }
+            },
+            "duplicateKeys": {
+              "type": "object",
+              "required": [
+                "before",
+                "after"
+              ],
+              "properties": {
+                "before": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "after": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              }
+            }
+          },
+          "additionalProperties": {
+            "oneOf": [
+              {
+                "type": "integer",
+                "minimum": 0
+              },
+              {
+                "type": "object",
+                "required": [
+                  "before",
+                  "after"
+                ],
+                "properties": {
+                  "before": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "after": {
+                    "type": "integer",
+                    "minimum": 0
+                  }
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "fields": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "before",
+          "after",
+          "policy",
+          "implicit",
+          "compared",
+          "unchanged",
+          "allowed",
+          "notAllowed",
+          "outOfLimits",
+          "unmapped",
+          "unverified",
+          "approvedMissing",
+          "approvedDifferent"
+        ],
+        "properties": {
+          "before": {
+            "type": "string"
+          },
+          "after": {
+            "type": "string"
+          },
+          "policy": {
+            "enum": [
+              "preserve",
+              "free",
+              "oneOf",
+              "map",
+              "bounded",
+              "asApproved"
+            ]
+          },
+          "implicit": {
+            "type": "boolean",
+            "description": "A column the contract does not name, preserved by default."
+          },
+          "compared": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "unchanged": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "allowed": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "notAllowed": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "outOfLimits": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "unmapped": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "unverified": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "approvedMissing": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "approvedDifferent": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      }
+    },
+    "totals": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "column",
+          "compare",
+          "status",
+          "message"
+        ],
+        "properties": {
+          "column": {
+            "type": "string"
+          },
+          "compare": {
+            "enum": [
+              "equal",
+              "delta"
+            ]
+          },
+          "before": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "after": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "change": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "status": {
+            "enum": [
+              "PASS",
+              "FAIL",
+              "UNCHECKED"
+            ]
+          },
+          "message": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "notChecked": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Columns in one file only: listed, never passed."
+    }
+  },
+  "$defs": {
+    "tool": {
+      "type": "object",
+      "required": [
+        "name",
+        "version",
+        "commit"
+      ],
+      "properties": {
+        "name": {
+          "const": "data-contract-validator"
+        },
+        "version": {
+          "type": "string",
+          "pattern": "^\\d+\\.\\d+\\.\\d+"
+        },
+        "commit": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "finding": {
+      "type": "object",
+      "required": [
+        "step",
+        "code",
+        "column",
+        "count",
+        "owner",
+        "message",
+        "examples"
+      ],
+      "properties": {
+        "step": {
+          "enum": [
+            "keys",
+            "coverage",
+            "permitted",
+            "limits",
+            "approvals",
+            "totals"
+          ]
+        },
+        "code": {
+          "enum": [
+            "blank-key",
+            "duplicate-key",
+            "added-not-allowed",
+            "removed-not-allowed",
+            "changed-not-allowed",
+            "logged-unchanged",
+            "not-on-approved-list",
+            "unlogged",
+            "missing-reference",
+            "out-of-limits",
+            "unmapped",
+            "unreadable",
+            "approved-different",
+            "approved-missing",
+            "approved-not-found",
+            "total-out-of-limits"
+          ]
+        },
+        "column": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "owner": {
+          "type": "string",
+          "description": "Whose fix it is."
+        },
+        "message": {
+          "type": "string"
+        },
+        "examples": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "key"
+            ],
+            "properties": {
+              "rowNo": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "key": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

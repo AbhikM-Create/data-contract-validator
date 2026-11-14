@@ -115,6 +115,7 @@ p {
   .staircase-step:nth-child(3) { margin-left: 28px; }
   .staircase-step:nth-child(4) { margin-left: 42px; }
   .staircase-step:nth-child(5) { margin-left: 56px; }
+  .staircase-step:nth-child(6) { margin-left: 70px; }
 
   /* The riser is drawn for a left-to-right descent; stacked, the indent
      carries the descent and a vertical stub would point at nothing. */

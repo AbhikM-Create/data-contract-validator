@@ -29,6 +29,7 @@ const SCREENS = [
   ['sign in', '/#/signin'],
   ['organisation', '/#/organisation'],
   ['migrations (empty)', '/#/migrations'],
+  ['change checks (empty)', '/#/change'],
 ]
 
 for (const [name, url] of SCREENS) {
