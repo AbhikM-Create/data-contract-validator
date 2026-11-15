@@ -7,7 +7,9 @@ import { NEVER_CLAIM } from '../src/lib/signoff.js'
 import { describeRule } from '../src/lib/rules.js'
 import { USAGE as CHECK_USAGE } from '../cli/check.mjs'
 import { USAGE as RECONCILE_USAGE } from '../cli/reconcile.mjs'
+import { createHash } from 'node:crypto'
 import { buildSite, PAGES } from './build-site.mjs'
+import { buildSamples, SAMPLES } from './site-samples.mjs'
 import { ARTIFACT_TITLE, ENTRY, publishSite } from './publish-site.mjs'
 
 // The marketing site (brand Phases B and C, the docs under docs/): every page builds, every link inside the
@@ -16,9 +18,10 @@ import { ARTIFACT_TITLE, ENTRY, publishSite } from './publish-site.mjs'
 
 let out
 let html
-beforeAll(() => {
+beforeAll(async () => {
   out = mkdtempSync(join(tmpdir(), 'plumbstep-site-'))
   buildSite({ out })
+  await buildSamples(out)
   html = Object.fromEntries(PAGES.map((p) => [p.file, readFileSync(join(out, p.file), 'utf8')]))
 })
 afterAll(() => rmSync(out, { recursive: true, force: true }))
@@ -79,6 +82,37 @@ describe('the marketing site', () => {
       for (const object of pack.objects) expect(packs).toContain(`<h3>${object.name}</h3>`)
       if (pack.status === 'draft') expect(packs).toMatch(new RegExp(`id="${pack.id}"[\\s\\S]*?Draft — not yet run on real exports`))
     }
+  })
+
+  it('a sample record says it is a sample before anything else, runs nothing, and names every file it ships by the SHA-256 of its bytes', () => {
+    const sha = (file) => createHash('sha256').update(readFileSync(join(out, file))).digest('hex')
+    for (const sample of SAMPLES) {
+      const record = readFileSync(join(out, sample.record), 'utf8')
+      const front = record.slice(0, record.indexOf('</header>'))
+      expect(front.indexOf('A sample.'), sample.id).toBeGreaterThan(-1)
+      expect(front.indexOf('A sample.'), sample.id).toBeLessThan(front.indexOf('<h1>'))
+      expect(record).not.toMatch(/<script/i)
+      expect(record).toMatch(/Content-Security-Policy" content="default-src 'none'/)
+      // Re-checkable: every data file published beside it is the one it fingerprinted.
+      for (const input of sample.inputs.filter((f) => f.endsWith('.csv'))) expect(record, `${sample.id}: ${input}`).toContain(sha(input))
+      expect(text(record)).toMatch(/dcv (change|check|reconcile) /)
+    }
+  })
+
+  it('the samples tell the story their examples pin: not allowed, not ready, did not reconcile', () => {
+    const record = (id) => text(readFileSync(join(out, SAMPLES.find((s) => s.id === id).record), 'utf8'))
+    expect(record('salary-revision')).toMatch(/Not allowed/)
+    expect(record('salary-revision')).toMatch(/30%, above the allowed 20%/)
+    expect(record('trial-balance')).toMatch(/Not ready[\s\S]*Did not reconcile/)
+    // Pay and identifiers are tagged in the salary sample, so their values never appear.
+    expect(readFileSync(join(out, SAMPLES[0].record), 'utf8')).not.toMatch(/67600|50100099999999/)
+  })
+
+  it('the home page carries the facts band, and How it works links every sample and answers its questions', () => {
+    expect(html['index.html']).toMatch(/class="facts-band"/)
+    expect(text(html['index.html'])).toMatch(/5 million rows\s+reconciled in about 2 minutes on the command line/)
+    for (const sample of SAMPLES) for (const file of [sample.record, ...sample.inputs]) expect(html['how.html']).toContain(`href="${file}"`)
+    expect(html['how.html'].match(/<details>/g).length).toBeGreaterThanOrEqual(5)
   })
 
   it('copies the app under app/ when one is given', () => {
