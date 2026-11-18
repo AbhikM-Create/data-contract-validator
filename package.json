@@ -69,7 +69,7 @@
     "test:e2e": "playwright test"
   },
   "dependencies": {
-    "papaparse": "^5.7.0",
+    "papaparse": "^5.7.1",
     "yaml": "^2.9.1"
   },
   "devDependencies": {
