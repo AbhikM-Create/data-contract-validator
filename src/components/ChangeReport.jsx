@@ -69,6 +69,14 @@ export default function ChangeReport({ report, stale }) {
 
           <Fields fields={report.fields} />
 
+          {report.ignored?.length > 0 && (
+            <section style={{ ...panel, padding: '14px 16px', marginTop: 10 }}>
+              <h4 style={{ fontFamily: sans, fontSize: 16, fontWeight: 600, color: colors.ink, margin: 0 }}>Not compared, as the contract says</h4>
+              <p style={{ fontFamily: sans, fontSize: 14, color: colors.mute, margin: '8px 0 0' }}>
+                The contract ignores columns it does not name, so whether these changed was not looked at: {report.ignored.map((c) => `"${c}"`).join(', ')}.
+              </p>
+            </section>
+          )}
           {report.notChecked.length > 0 && (
             <section style={{ ...panel, padding: '14px 16px', marginTop: 10 }}>
               <h4 style={{ fontFamily: sans, fontSize: 16, fontWeight: 600, color: colors.ink, margin: 0 }}>Not checked</h4>

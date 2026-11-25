@@ -82,7 +82,7 @@ test('signed out: the page says where the work lives and what an account adds â€
   await page.goto('/#/signin')
   await expect(page.getByText('This device only')).toBeVisible()
   for (const title of ['Without an account', 'An account also keeps', 'An account never keeps']) await expect(page.getByText(title, { exact: true })).toBeVisible()
-  await expect(page.getByText('Your files, or any record in them')).toBeVisible()
+  await expect(page.getByText('Your files, or the rows in them')).toBeVisible()
   await expect(page.getByText(/The files an object was checked against: open them again on each device/)).toBeVisible()
   // The trust line, on every screen, word for word.
   await expect(page.getByText(/Files stay on this device\. Nothing is uploaded/)).toBeVisible()

@@ -163,7 +163,7 @@ export default function MigrationsScreen(props) {
             </select>
           )}
           {signedIn && (
-            <button onClick={onSaveToAccount} disabled={empty} title="Keeps this object’s rules, mapping and run counts in your account — never a record from your files" style={{ ...secondaryButton, opacity: empty ? 0.45 : 1, cursor: empty ? 'default' : 'pointer' }}>
+            <button onClick={onSaveToAccount} disabled={empty} title="Keeps this object’s rules, mapping and run counts in your account — never your files" style={{ ...secondaryButton, opacity: empty ? 0.45 : 1, cursor: empty ? 'default' : 'pointer' }}>
               Save to account
             </button>
           )}

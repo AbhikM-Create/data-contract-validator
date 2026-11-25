@@ -116,6 +116,7 @@ export function buildChangeRecord(input) {
   const fields = shown.fields.map((f) => `<tr><td class="mono">${h(f.before === f.after ? f.before : `${f.before} → ${f.after}`)}</td><td>${f.implicit ? 'not named, so must stay the same' : h(POLICY_WORDS[f.policy] ?? f.policy)}</td><td class="num">${fmt(f.compared)}</td><td class="num">${fmt(f.unchanged)}</td><td class="num">${fmt(f.allowed)}</td><td class="num">${fmt(f.notAllowed)}</td><td class="num">${fmt(f.outOfLimits)}</td><td class="num">${fmt(f.unverified)}</td></tr>`).join('')
   const notCovered = [
     ...shown.notChecked,
+    ...(shown.ignored?.length ? [`Not compared, as the contract says (it ignores columns it does not name): ${shown.ignored.map((c) => `"${c}"`).join(', ')}.`] : []),
     ...shown.steps.filter((s) => s.status === 'UNCHECKED' || s.status === 'SKIPPED').map((s) => `${s.label}: ${s.reason ?? 'not judged.'}`),
   ]
 

@@ -92,6 +92,68 @@ export function cleanFormat(format) {
 }
 
 // --- readers ------------------------------------------------------------------
+// --- when two cells may be compared as numbers -----------------------------------
+//
+// numbersComparable(rawA, rawB) -> true when two cells that both read as numbers
+// may be judged EQUAL OR NOT by their numeric values. When false, equality is a
+// question about the text: the numbers would hide a real difference.
+//
+// - An identifier written as digits with a leading zero (00123, 011001) is a
+//   code, not a quantity: 00123 and 123 are different ledger codes, PINs or
+//   cost centres, and a load that strips the zero has changed the record.
+// - Beyond 15 significant digits a double cannot hold every value: 18-digit
+//   bank account numbers ending …678 and …679 are the same double. A changed
+//   account number reading as "unchanged" is the failure this product exists
+//   to catch (review 15 Nov 2026, finding 1).
+// - A percent sign on one side only, or two different currency symbols, means
+//   the two cells do not say the same thing: 5% is not 5, ₹100 is not $100.
+//   A symbol on one side only is formatting (₹100 and 100) and still compares.
+const LEADING_ZERO_CODE = /^[+-]?0\d/
+const SIGNIFICANT = /\d/g
+const SYMBOLS = /\p{Sc}/gu
+
+function significantDigits(text) {
+  // Digits of the mantissa without leading zeros; an exponent does not count.
+  const mantissa = text.split(/[eE]/)[0]
+  const digits = (mantissa.match(SIGNIFICANT) ?? []).join('').replace(/^0+/, '')
+  return digits.length
+}
+
+export function numbersComparable(rawA, rawB) {
+  const a = String(rawA).trim()
+  const b = String(rawB).trim()
+  if (LEADING_ZERO_CODE.test(a) || LEADING_ZERO_CODE.test(b)) return false
+  if (significantDigits(a) > 15 || significantDigits(b) > 15) return false
+  if (a.includes('%') !== b.includes('%')) return false
+  const sa = a.match(SYMBOLS)
+  const sb = b.match(SYMBOLS)
+  if (sa && sb && sa.join('') !== sb.join('')) return false
+  return true
+}
+
+// Two numbers read from cells are equal within an absolute tolerance — the one
+// the author declared, else none. The only allowance beyond it is a few units in
+// the last place of a double, so that a tolerance of 0.01 still holds at 100.02
+// against 100.01; it never reaches 1 below 15 significant digits, so a changed
+// 13- or 14-digit number is never "the same" (the old relative 1e-12 did reach 1
+// from 1e12 up — review finding 1).
+export function numbersEqual(a, b, tolerance = 0) {
+  const ulps = Math.max(Math.abs(a), Math.abs(b)) * Number.EPSILON * 4
+  return Math.abs(a - b) <= tolerance + ulps
+}
+
+// A running total that does not depend on row order (Neumaier compensation, as
+// the aggregate rule already sums). Summed naively, a million amounts in two
+// orders differed by 0.13 — a control total that "does not tie" on identical
+// records (review 15 Nov 2026, finding 8). addCompensated keeps the lost low
+// bits in `carry`; totalOf reads the sum with them.
+export function addCompensated(acc, value) {
+  const t = acc.sum + value
+  acc.carry = (acc.carry ?? 0) + (Math.abs(acc.sum) >= Math.abs(value) ? (acc.sum - t) + value : (value - t) + acc.sum)
+  acc.sum = t
+}
+export const totalOf = (acc) => acc.sum + (acc.carry ?? 0)
+
 // A reader turns a cell into a number, a date (epoch ms) or a boolean, or null.
 
 // What the rules have always used. A contract that declares no format reads

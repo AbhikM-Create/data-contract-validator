@@ -4,7 +4,9 @@ import { DEFAULT_THRESHOLDS } from './validate.js'
 
 // Autosave of what a person AUTHORED in this tab — the migration object, the
 // rules open on Contracts, the thresholds — to the browser's own storage, so a
-// refresh or a closed tab loses nothing. Never a file, never a record.
+// refresh or a closed tab loses nothing. Never a file and never its rows —
+// but rules and mappings keep any values written into them (a crosswalk, a
+// list of allowed values), and the trust line says so.
 //
 // The boundary is the existing one: the object goes through
 // migrationObjectToJson (rules, spec, formats, crosswalks, runs rebuilt field by

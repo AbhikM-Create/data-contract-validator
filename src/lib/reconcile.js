@@ -14,7 +14,7 @@
 // A step that isn't configured is SKIPPED, never PASS.
 
 import { isBlank } from './contract.js'
-import { createReader, formatIssue } from './formats.js'
+import { addCompensated, createReader, formatIssue, numbersComparable, numbersEqual, totalOf } from './formats.js'
 import { conditionHolds } from './rules.js'
 
 export const RECON_STEPS = [
@@ -95,6 +95,9 @@ export function normalizeSpec(raw) {
       map,
       tolerance: Number.isFinite(Number(field?.tolerance)) ? Math.abs(Number(field.tolerance)) : 0,
       ignoreCase: field?.ignoreCase === true,
+      // Declared, never inferred: compare the two cells as text — an account
+      // number, a code, anything that only looks like a number or a date.
+      compareAs: field?.compareAs === 'text' ? 'text' : null,
     }
   })
   // A control total is a SUM of an amount (the default) or a COUNT of records —
@@ -252,22 +255,28 @@ export function valuesAgree(sourceValue, targetValue, field, sourceReader, targe
   const targetBlank = isBlank(targetValue)
   if (sourceBlank || targetBlank) return sourceBlank && targetBlank
 
+  const sa = String(sourceValue).trim()
+  const sb = String(targetValue).trim()
+  const asText = () => (field.ignoreCase ? fold(sa) === fold(sb) : sa === sb)
+
+  // A field declared "compare as text" — account numbers, codes, anything that
+  // only looks like a number or a date — is never read as either.
+  if (field.compareAs === 'text') return asText()
+
   const a = sourceReader.number(sourceValue)
   const b = targetReader.number(targetValue)
   if (a !== null && b !== null) {
-    // A relative epsilon so that floating-point noise in a large number is not
-    // a mismatch even when the author asked for an exact match.
-    const epsilon = Math.max(Math.abs(a), Math.abs(b)) * 1e-12
-    return Math.abs(a - b) <= field.tolerance + epsilon
+    // Numbers only when the numbers can tell the two cells apart (formats.js):
+    // a zero-led code, a value past a double's precision, or a different unit
+    // mark is judged by its exact text instead.
+    return numbersComparable(sourceValue, targetValue) ? numbersEqual(a, b, field.tolerance) : sa === sb
   }
 
   const da = sourceReader.date(sourceValue)
   const db = targetReader.date(targetValue)
   if (da !== null && db !== null) return da === db
 
-  const sa = String(sourceValue).trim()
-  const sb = String(targetValue).trim()
-  return field.ignoreCase ? fold(sa) === fold(sb) : sa === sb
+  return asText()
 }
 
 // Apply a crosswalk to a source value. Returns { value } or { unmapped: true }.
@@ -323,11 +332,11 @@ function addToTotals(side, spec, sideName, row) {
       const translated = translate(raw, map)
       label = isBlank(raw) ? '(blank)' : translated.unmapped ? String(raw).trim() : String(translated.value).trim()
     }
-    const entry = acc.groups.get(label) ?? { sum: 0, count: 0 }
+    const entry = acc.groups.get(label) ?? { sum: 0, carry: 0, count: 0 }
     if (total.fn === 'count') entry.sum += 1
     else {
       const value = spec.readers[sideName].number(row[total[sideName]])
-      if (value !== null) entry.sum += value
+      if (value !== null) addCompensated(entry, value)
       else if (!isBlank(row[total[sideName]])) acc.unreadable += 1
     }
     entry.count += 1
@@ -379,11 +388,44 @@ function indexPartition(entries, side, limit) {
 //
 // A row in an entry needs only the columns in columnsNeeded — the key and the
 // mapped fields — which is what a caller writes to disk between steps 1 and 2.
+// Every field a spec may carry. A field the engine does not know is refused,
+// never ignored: "mappings" for "mapping" silently removed the accuracy step and
+// the run read PASS (review 15 Nov 2026, the fail-closed fixes). The CLI already
+// refuses an unknown option; the file that defines the check is held to the same.
+const SPEC_FIELDS = {
+  spec: ['name', 'key', 'mapping', 'totals', 'scope', 'formats'],
+  key: ['source', 'target', 'normalize'],
+  mapping: ['source', 'target', 'map', 'tolerance', 'ignoreCase', 'compareAs', 'mapKind'],
+  totals: ['fn', 'source', 'target', 'groupBy'],
+  groupBy: ['source', 'target', 'map', 'mapKind'],
+  scope: ['source', 'target'],
+}
+
+export function unknownSpecFields(raw) {
+  if (!raw || typeof raw !== 'object' || raw.readers) return []
+  const issues = []
+  const check = (value, part, where) => {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return
+    for (const name of Object.keys(value)) {
+      if (!SPEC_FIELDS[part].includes(name)) issues.push(`"${name}" is not a field of ${where} — the spec has ${SPEC_FIELDS[part].map((f) => `"${f}"`).join(', ')}. A misspelt field would silently remove a check, so it is refused.`)
+    }
+  }
+  check(raw, 'spec', 'a reconciliation spec')
+  check(raw.key, 'key', 'the key')
+  check(raw.scope, 'scope', 'the scope')
+  ;(Array.isArray(raw.mapping) ? raw.mapping : []).forEach((field, i) => check(field, 'mapping', `mapping field ${i + 1}`))
+  ;(Array.isArray(raw.totals) ? raw.totals : []).forEach((total, i) => {
+    check(total, 'totals', `control total ${i + 1}`)
+    check(total?.groupBy, 'groupBy', `the grouping of control total ${i + 1}`)
+  })
+  return issues
+}
+
 export function createReconciliation(rawSpec, options = {}) {
   const thresholds = { ...DEFAULT_RECON_THRESHOLDS, ...(options.thresholds ?? {}) }
   const limit = Number.isInteger(options.exampleLimit) && options.exampleLimit > 0 ? options.exampleLimit : EXAMPLES
   const spec = normalizeSpec(rawSpec)
-  const issues = specIssues(spec, options.sourceColumns ?? [], options.targetColumns ?? [])
+  const issues = [...unknownSpecFields(rawSpec), ...specIssues(spec, options.sourceColumns ?? [], options.targetColumns ?? [])]
   const sides = { source: newSide(spec), target: newSide(spec) }
   const join = { expected: 0, matched: 0, missing: 0, extra: 0, rowsWithDifference: 0, rowsUnverified: 0, missingExamples: [], extraExamples: [] }
   const fieldStats = spec.mapping.map((field) => ({
@@ -656,11 +698,11 @@ function totalsStep(spec, sides, thresholds, limit) {
     const groups = labels.map((label) => {
       const a = s.groups.get(label) ?? { sum: 0, count: 0 }
       const b = t.groups.get(label) ?? { sum: 0, count: 0 }
-      const difference = b.sum - a.sum
+      const difference = totalOf(b) - totalOf(a)
       return {
         group: label,
-        source: a.sum,
-        target: b.sum,
+        source: totalOf(a),
+        target: totalOf(b),
         difference,
         sourceCount: a.count,
         targetCount: b.count,

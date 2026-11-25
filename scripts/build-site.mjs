@@ -163,7 +163,7 @@ const POLICY_ROWS = [
 ]
 
 const FAQ = [
-  ['Do my files leave my computer?', 'No. The workspace reads them in your browser, and the dcv command reads them from your disk. There is no server that receives them. An account, if you use one, keeps rules, names and counts — never a record.'],
+  ['Do my files leave my computer?', 'No. The workspace reads them in your browser, and the dcv command reads them from your disk. There is no server that receives them. What you set up — rules and mappings, with any values written into them — is kept in your browser, and in your account if you use one.'],
   ['Is it AI?', 'No. Every check is a rule you can read, and the same files and rules give the same answer every time. That is what lets someone else re-check the record.'],
   ['Does it replace my audit, or my CA?', 'No. It gives no opinion. It shows what changed, whether that was allowed under the rules you set, and whose fix each difference is. People decide; the record says who decided what.'],
   ['What if I do not have an approved list or a change log?', 'Run without them. Any part of the contract that depends on them is reported as not confirmed — never as allowed — so the gap is visible.'],
@@ -404,8 +404,9 @@ const security = () => `<section class="hero"><div class="wrap">
 <thead><tr><th scope="col">What</th><th scope="col">Where it goes</th><th scope="col">Record values in it?</th></tr></thead>
 <tbody>
 <tr><td>The files you open</td><td>Read in your browser’s memory, or streamed from disk by <code>dcv</code></td><td class="no">Never leave your machine</td></tr>
-<tr><td>A saved contract</td><td>A file you download, or your account</td><td class="no">No — rules, a name, its format</td></tr>
-<tr><td>A migration object</td><td>A file you download, or your account</td><td class="no">No — definitions, typed sign-off, run counts</td></tr>
+<tr><td>A saved contract</td><td>A file you download, or your account</td><td class="no">Only values written into a rule, such as a list of allowed values</td></tr>
+<tr><td>A migration object</td><td>A file you download, or your account</td><td class="no">Only values written into its definitions — a crosswalk, a key map, a list of allowed values; run counts, never rows</td></tr>
+<tr><td>Your set-up, as you work</td><td>This browser’s storage, so a refresh loses nothing</td><td class="no">As a migration object</td></tr>
 <tr><td>A change contract</td><td>A file you download</td><td class="no">No — what may change, nothing else; the approved list and change log are never saved with it</td></tr>
 <tr><td>Shared definitions</td><td>A file you send to someone</td><td class="no">No — and no sign-off, owners or file names</td></tr>
 <tr><td>The evidence pack and the change record</td><td>Files built on your machine, handed to you</td><td class="yes">Yes, as evidence — sensitive columns masked</td></tr>
@@ -425,7 +426,7 @@ const security = () => `<section class="hero"><div class="wrap">
 <section><div class="wrap">
 <h2>Accounts, if you use one</h2>
 <ul class="plain spaced">
-<li>Everything works without an account. An account saves contracts, run summaries and migration objects — rules, names and counts, never a record.</li>
+<li>Everything works without an account; your set-up is kept in this browser. An account saves contracts, run summaries and migration objects — rules, mappings, names and counts, never your files. A crosswalk or a list of allowed values keeps the values written in it.</li>
 <li>Each row is visible only to its owner, or to members of its organisation by role, enforced by the database’s row-level security and tested on a real Postgres.</li>
 <li>The app and these pages load no script or font from anywhere else; a Content-Security-Policy forbids it.</li>
 </ul>

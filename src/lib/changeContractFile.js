@@ -45,6 +45,7 @@ function cleanField(raw) {
   const out = { policy: POLICIES.includes(f.policy) ? f.policy : 'preserve' }
   if (number(f.tolerance) !== undefined) out.tolerance = f.tolerance
   if (f.ignoreCase === true) out.ignoreCase = true
+  if (f.compareAs === 'text') out.compareAs = 'text'
   if (Array.isArray(f.values)) out.values = f.values.map((v) => String(v))
   if (text(f.reference)) out.reference = text(f.reference)
   const map = object(f.map)

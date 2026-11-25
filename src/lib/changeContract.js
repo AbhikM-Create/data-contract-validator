@@ -22,7 +22,7 @@
 // two to equal counts on the samples).
 
 import { isBlank } from './contract.js'
-import { createReader, formatIssue } from './formats.js'
+import { addCompensated, createReader, formatIssue, numbersEqual, totalOf } from './formats.js'
 import { keepFirst, keyOf, showKey, translate, valuesAgree } from './reconcile.js'
 import { conditionHolds } from './rules.js'
 
@@ -86,6 +86,7 @@ export function normalizeContract(raw) {
       policy,
       tolerance: Math.abs(num(f?.tolerance) ?? 0) || 0,
       ignoreCase: f?.ignoreCase === true,
+      compareAs: f?.compareAs === 'text' ? 'text' : null,
       values: Array.isArray(f?.values) ? f.values.map((v) => String(v).trim()) : null,
       reference: f?.reference ? String(f.reference) : null,
       map: asMap(f?.map),
@@ -236,6 +237,14 @@ export function createChangeCheck(rawContract, options = {}) {
   const keyColumns = new Set(contract.key.before)
   const fields = [...contract.fields]
   const notCompared = []
+  // Columns the contract chose not to compare (others: 'ignore'): the author
+  // asked for it, so they leave the status alone — but they are listed, and
+  // the headline says how many, so no reader takes "no change" to cover them.
+  const ignored = []
+  if (contract.others === 'ignore' && beforeColumns && afterColumns) {
+    const all = new Set([...beforeColumns, ...afterColumns.filter((c) => !Object.values(contract.rename).includes(c))])
+    for (const column of all) if (!named.has(column) && !keyColumns.has(column) && !contract.key.after.includes(column)) ignored.push(column)
+  }
   if (contract.others === 'preserve' && beforeColumns && afterColumns) {
     const inAfter = new Set(afterColumns)
     for (const column of beforeColumns) {
@@ -288,7 +297,6 @@ export function createChangeCheck(rawContract, options = {}) {
   const counts = { matched: 0, unchanged: 0, changed: 0, allowedOnly: 0, withViolation: 0, unverified: 0, added: 0, removed: 0, addedAllowed: 0, removedAllowed: 0, approvedMissing: 0, approvedDifferent: 0, unlogged: 0, loggedUnchanged: 0 }
   const fieldStats = fields.map((f) => ({ before: f.before, after: f.after, policy: f.policy, implicit: Boolean(f.implicit), compared: 0, unchanged: 0, allowed: 0, notAllowed: 0, outOfLimits: 0, unmapped: 0, unverified: 0, approvedMissing: 0, approvedDifferent: 0, examples: [] }))
   const findings = new Map() // code -> { step, code, column, count, examples }
-  const seenAfterKeys = new Set()
   const approvedSeen = new Set()
 
   const note = (stepId, code, column, entry) => {
@@ -330,7 +338,6 @@ export function createChangeCheck(rawContract, options = {}) {
         if (approved.has(key)) approvedSeen.add(key)
         continue
       }
-      seenAfterKeys.add(key)
       counts.matched += 1
       judgeRecord(key, b, a)
     }
@@ -523,7 +530,7 @@ export function createChangeCheck(rawContract, options = {}) {
     for (const side of ['before', 'after']) {
       const s = sides[side]
       if (s.blankKeys > 0) keyFindings.push({ step: 'keys', code: 'blank-key', column: null, count: s.blankKeys, examples: [], owner: CHANGE_OWNERS.keys, message: `${s.blankKeys} record${s.blankKeys === 1 ? '' : 's'} in the ${side} file ha${s.blankKeys === 1 ? 's' : 've'} no key, so ${s.blankKeys === 1 ? 'it was' : 'they were'} set aside, not checked.` })
-      if (s.duplicateKeys > 0) keyFindings.push({ step: 'keys', code: 'duplicate-key', column: null, count: s.duplicateKeys, examples: s.duplicateExamples.map((e) => ({ ...e, key: showKey(e.key) })), owner: CHANGE_OWNERS.keys, message: `${s.duplicateKeys} key${s.duplicateKeys === 1 ? '' : 's'} appear more than once in the ${side} file (${s.duplicateRows} records), so ${s.duplicateKeys === 1 ? 'it was' : 'they were'} set aside, not guessed at.` })
+      if (s.duplicateKeys > 0) keyFindings.push({ step: 'keys', code: 'duplicate-key', column: null, count: s.duplicateKeys, examples: s.duplicateExamples.map((e) => ({ ...e, key: showKey(e.key) })), owner: CHANGE_OWNERS.keys, message: `${s.duplicateKeys} key${s.duplicateKeys === 1 ? ' appears' : 's appear'} more than once in the ${side} file (${s.duplicateRows} records), so ${s.duplicateKeys === 1 ? 'it was' : 'they were'} set aside, not guessed at.` })
     }
 
     const totals = contract.totals.map((t) => judgeTotal(t, sides, contract))
@@ -546,12 +553,15 @@ export function createChangeCheck(rawContract, options = {}) {
         : stepOf('totals', stepStatus(totalFindings, totalsUnchecked), totalFindings),
     ]
     const failed = steps.some((s) => s.status === 'FAIL')
-    const unchecked = steps.some((s) => s.status === 'UNCHECKED') || counts.unverified > 0
+    // A column in one file only could not be compared: the contract says every
+    // column it does not name must stay as it was, and nothing checked that one.
+    // Never passed (review 15 Nov 2026, finding 7: a deleted column read ALLOWED).
+    const unchecked = steps.some((s) => s.status === 'UNCHECKED') || counts.unverified > 0 || notCompared.length > 0
     const status = failed ? 'NOT_ALLOWED' : unchecked ? 'UNVERIFIED' : 'ALLOWED'
     return {
       status,
       name: contract.name,
-      headline: headlineFor(status, steps, counts),
+      headline: headlineFor(status, steps, counts, { notCompared: notCompared.length, ignored: ignored.length, compared: fieldStats.length }),
       issues: [],
       steps,
       counts: {
@@ -565,6 +575,7 @@ export function createChangeCheck(rawContract, options = {}) {
       fields: fieldStats.map(({ examples: _e, ...s }) => s),
       totals,
       notChecked: notCompared,
+      ignored,
     }
   }
 
@@ -628,14 +639,14 @@ function fold(text, ignoreCase) {
 }
 
 function newSide(contract) {
-  return { rows: 0, outOfScope: 0, blankKeys: 0, duplicateKeys: 0, duplicateRows: 0, duplicateExamples: [], totals: contract.totals.map(() => ({ sum: 0, unreadable: 0 })) }
+  return { rows: 0, outOfScope: 0, blankKeys: 0, duplicateKeys: 0, duplicateRows: 0, duplicateExamples: [], totals: contract.totals.map(() => ({ sum: 0, carry: 0, unreadable: 0 })) }
 }
 
 function addToTotals(side, contract, sideName, row) {
   contract.totals.forEach((t, i) => {
     const column = sideName === 'after' ? (contract.rename[t.column] ?? t.column) : t.column
     const value = contract.readers[sideName].number(row[column])
-    if (value !== null) side.totals[i].sum += value
+    if (value !== null) addCompensated(side.totals[i], value)
     else if (!isBlank(row[column])) side.totals[i].unreadable += 1
   })
 }
@@ -679,13 +690,17 @@ export function outsideBounds(f, before, after) {
 function judgeTotal(t, sides, contract) {
   const before = sides.before.totals[contract.totals.indexOf(t)]
   const after = sides.after.totals[contract.totals.indexOf(t)]
-  const base = { column: t.column, compare: t.compare, before: round(before.sum), after: round(after.sum), change: round(after.sum - before.sum) }
+  const sumBefore = totalOf(before)
+  const sumAfter = totalOf(after)
+  const base = { column: t.column, compare: t.compare, before: round(sumBefore), after: round(sumAfter), change: round(sumAfter - sumBefore) }
   if (before.unreadable > 0 || after.unreadable > 0) {
     return { ...base, status: 'UNCHECKED', message: `The total of "${t.column}" could not be judged: ${before.unreadable + after.unreadable} value${before.unreadable + after.unreadable === 1 ? '' : 's'} could not be read as numbers, and are never summed as zero.` }
   }
-  const delta = after.sum - before.sum
+  const delta = sumAfter - sumBefore
   if (t.compare === 'equal') {
-    const ok = Math.abs(delta) <= t.tolerance + Math.max(Math.abs(before.sum), Math.abs(after.sum)) * 1e-12
+    // Within the declared tolerance only: the old relative 1e-12 of the total
+    // let a real difference of 1 or more pass on totals from 1e12 up.
+    const ok = numbersEqual(sumBefore, sumAfter, t.tolerance)
     return { ...base, status: ok ? 'PASS' : 'FAIL', message: ok ? `The total of "${t.column}" is unchanged.` : `The total of "${t.column}" changed by ${round(delta)}; the contract says it must not.` }
   }
   const low = t.min !== null && delta < t.min
@@ -700,15 +715,33 @@ const plural = (n, word) => `${n.toLocaleString('en-US')} ${word}${n === 1 ? '' 
 
 // One sentence for the person signing: what changed, and whether that was
 // allowed. Counts and step names only — never a record value.
-function headlineFor(status, steps, counts) {
-  const changed = counts.changed === 0 ? 'No record changed' : `${plural(counts.changed, 'record')} changed`
-  if (status === 'ALLOWED') return counts.changed === 0 && counts.added === 0 && counts.removed === 0 ? `${changed}, and nothing was added or removed.` : `${changed}, all as the contract allows.`
+function headlineFor(status, steps, counts, columns = {}) {
+  // With columns ignored by the contract, "no record changed" would claim more
+  // than was looked at: say what was compared (finding 8).
+  const scope = columns.ignored > 0 ? ` in the ${plural(columns.compared, 'column')} compared` : ''
+  // A contract that ignores every column it does not name, and names none,
+  // compared no value at all: say that, not "no change in 0 columns".
+  const nothingCompared = columns.ignored > 0 && columns.compared === 0
+  const changed = nothingCompared
+    ? 'No column was compared'
+    : counts.changed === 0 ? `No change found${scope}` : `${plural(counts.changed, 'record')} changed${scope}`
+  const notCompared = columns.ignored > 0
+    ? nothingCompared
+      ? ` The contract ignores the ${plural(columns.ignored, 'column')} it does not name, and names none: only records added or removed were checked.`
+      : ` ${plural(columns.ignored, 'column')} ${columns.ignored === 1 ? 'was' : 'were'} not compared, as the contract says.`
+    : ''
+  if (status === 'ALLOWED') {
+    const body = counts.changed === 0 && counts.added === 0 && counts.removed === 0 ? `${changed}, and nothing was added or removed.` : `${changed}, all as the contract allows.`
+    return body + notCompared
+  }
   if (status === 'UNVERIFIED') {
     const open = steps.filter((s) => s.status === 'UNCHECKED').map((s) => s.label)
-    return `${changed}. Nothing broke the contract, but not everything could be checked${open.length ? ` (${open.join(', ')})` : ''} — this is not an approval.`
+    if (columns.notCompared > 0) open.push(`${plural(columns.notCompared, 'column')} in one file only`)
+    return `${changed}. Nothing broke the contract, but not everything could be checked${open.length ? ` (${open.join(', ')})` : ''} — this is not an approval.${notCompared}`
   }
   const failing = steps.filter((s) => s.status === 'FAIL').map((s) => s.label)
-  return `${changed}; ${plural(counts.withViolation, 'record')} broke the contract. Caught at: ${failing.join(', ')}.`
+  const broke = counts.withViolation > 0 ? `${plural(counts.withViolation, 'record')} broke the contract` : 'the change broke the contract'
+  return `${changed}; ${broke}. Caught at: ${failing.join(', ')}.${notCompared}`
 }
 
 function sentence(f) {

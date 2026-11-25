@@ -13,7 +13,7 @@
 // the two to identical reports.
 
 import { closeSync, openSync, statSync, writeSync } from 'node:fs'
-import Papa from 'papaparse'
+import { csvRows } from '../../src/lib/parseCsv.js'
 import { createReadinessCheck } from '../../src/lib/readiness.js'
 import { RULE_KINDS, ruleKey } from '../../src/lib/rules.js'
 import { readCsvHeader, streamCsv } from './csvStream.mjs'
@@ -87,7 +87,7 @@ export async function checkReadinessFile(contract, path, options = {}) {
   let written = 0
   const flushRejects = () => {
     if (batch.length === 0) return
-    writeSync(fd, `${Papa.unparse(batch, { header: false })}\n`)
+    writeSync(fd, csvRows(batch))
     written += batch.length
     batch = []
   }
@@ -98,7 +98,7 @@ export async function checkReadinessFile(contract, path, options = {}) {
       if (!flag || !options.rejectsPath) return
       if (fd === null) {
         fd = openSync(options.rejectsPath, 'w', 0o600)
-        writeSync(fd, `${Papa.unparse([[...columns, '_row', '_readiness', '_reasons', '_owner']], { header: false })}\n`)
+        writeSync(fd, csvRows([[...columns, '_row', '_readiness', '_reasons', '_owner']]))
       }
       batch.push([
         // The fix list leaves the machine's screen: tagged values masked
