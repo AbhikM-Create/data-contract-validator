@@ -297,7 +297,6 @@ export function createChangeCheck(rawContract, options = {}) {
   const counts = { matched: 0, unchanged: 0, changed: 0, allowedOnly: 0, withViolation: 0, unverified: 0, added: 0, removed: 0, addedAllowed: 0, removedAllowed: 0, approvedMissing: 0, approvedDifferent: 0, unlogged: 0, loggedUnchanged: 0 }
   const fieldStats = fields.map((f) => ({ before: f.before, after: f.after, policy: f.policy, implicit: Boolean(f.implicit), compared: 0, unchanged: 0, allowed: 0, notAllowed: 0, outOfLimits: 0, unmapped: 0, unverified: 0, approvedMissing: 0, approvedDifferent: 0, examples: [] }))
   const findings = new Map() // code -> { step, code, column, count, examples }
-  const seenAfterKeys = new Set()
   const approvedSeen = new Set()
 
   const note = (stepId, code, column, entry) => {
@@ -339,7 +338,6 @@ export function createChangeCheck(rawContract, options = {}) {
         if (approved.has(key)) approvedSeen.add(key)
         continue
       }
-      seenAfterKeys.add(key)
       counts.matched += 1
       judgeRecord(key, b, a)
     }
