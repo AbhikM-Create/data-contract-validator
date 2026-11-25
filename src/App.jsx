@@ -358,7 +358,7 @@ export default function App() {
     }
     setMigrationCloudId(saved.id)
     setMigrationDirty(false)
-    setMigrationNotice({ tone: 'good', text: `Saved “${saved.name}” to ${where ? `“${where.name}”` : 'your account'} — its rules, mapping and ${count(migration.runs.length, 'check')} as counts, never a record from your files. ${where ? 'Every member can open it; they open the files on their own machine.' : 'Open it from any device you sign in on; open the files there again.'}` })
+    setMigrationNotice({ tone: 'good', text: `Saved “${saved.name}” to ${where ? `“${where.name}”` : 'your account'} — its rules, mapping and ${count(migration.runs.length, 'check')} as counts — your files stay on this device. ${where ? 'Every member can open it; they open the files on their own machine.' : 'Open it from any device you sign in on; open the files there again.'}` })
     refreshObjects()
   }
 

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { defineContract, withRules } from './authoredContract.js'
 import { inferContract } from './contract.js'
-import { describeRule, evaluateRules } from './rules.js'
+import { checkRules, describeRule, evaluateRules } from './rules.js'
 import { validate } from './validate.js'
 
 const rows = [
@@ -103,9 +103,20 @@ describe('WHEN conditions', () => {
     expect(violations[0].message).toContain('the 3 rows the condition applies to')
   })
 
-  it('does not test rows whose condition value is blank', () => {
+  it('does not test rows whose condition value is blank — and says the rule checked nothing', () => {
     const data = [{ end: '', is_current: '' }]
-    expect(fire(rule, data)).toHaveLength(0)
+    const found = fire(rule, data)
+    // Not a failure: the row was not tested. But a rule that tested no row is
+    // not a pass either (review 15 Nov 2026, B G1).
+    expect(found.filter((v) => v.code !== 'rule:never-applied')).toHaveLength(0)
+    expect(found.map((v) => v.code)).toEqual(['rule:never-applied'])
+  })
+
+  it('a condition that holds for no record (a typo) is not confirmed, never a silent pass', () => {
+    const typo = { ...rule, when: { column: 'is_current', op: '=', target: 'yes-typo' } }
+    const outcomes = checkRules([typo], rows)
+    expect(outcomes[0].status).toBe('UNCHECKED')
+    expect(outcomes[0].violation.message).toMatch(/held for none of the \d+ records, so it checked nothing/)
   })
 
   it('supports a column as the condition target', () => {

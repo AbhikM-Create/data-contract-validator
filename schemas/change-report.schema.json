@@ -370,8 +370,17 @@
     },
     "notChecked": {
       "type": "array",
-      "items": { "type": "string" },
-      "description": "Columns in one file only: listed, never passed."
+      "items": {
+        "type": "string"
+      },
+      "description": "Columns in one file only: listed, never passed — any makes the status UNVERIFIED."
+    },
+    "ignored": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Columns the contract chose not to compare (others: \"ignore\"): listed, never counted as unchanged. Added within version 1."
     }
   },
   "$defs": {

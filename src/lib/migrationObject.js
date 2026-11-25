@@ -89,6 +89,7 @@ export function cleanSpec(spec) {
         const tolerance = Number(field.tolerance)
         if (Number.isFinite(tolerance) && tolerance > 0) clean.tolerance = tolerance
         if (field.ignoreCase) clean.ignoreCase = true
+        if (field.compareAs === 'text') clean.compareAs = 'text'
         const map = cleanMap(field.map)
         if (map) clean.map = map
         // What the crosswalk IS (shareDefinitions.js): a code list may be

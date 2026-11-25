@@ -35,7 +35,8 @@ export function parseCsv(csvText) {
   }
 
   const rows = []
-  for (const raw of parsed.data) {
+  for (const [i, raw] of parsed.data.entries()) {
+    if (holdsUnnamedValue(raw, fields)) return { rows: [], columns, errors: [unnamedColumnError(i + 2)] }
     const row = cleanRow(raw, fields)
     if (row) rows.push(row)
   }
@@ -86,6 +87,26 @@ export function readHeader(rawFields, renamedHeaders) {
   return { fields, columns, error: null }
 }
 
+// A column with no header cannot be named by any rule or contract, so its values
+// would be checked by nothing — a change contract's "every column not named
+// must stay the same" could not cover it (review 15 Nov 2026, C F-7: it was
+// dropped without a word). A trailing comma on every line makes an unnamed,
+// EMPTY column, which is harmless and stays silent; one that holds a value is
+// refused with the line, so a person names it or removes it.
+export function holdsUnnamedValue(raw, fields) {
+  if (!raw || typeof raw !== 'object') return false
+  const named = new Set(fields.map((field) => field.raw))
+  for (const [key, value] of Object.entries(raw)) {
+    if (named.has(key) || key === '__parsed_extra') continue
+    if (value !== null && value !== undefined && String(value).trim() !== '') return true
+  }
+  return false
+}
+
+export function unnamedColumnError(line) {
+  return readError(`a column has no header but holds a value on line ${line} — name the column, or remove it, so it can be checked`)
+}
+
 // cleanRow(parsedRow, fields) -> { column: trimmed value } | null
 //
 // null for a row with nothing in it: a line of commas is not a record.
@@ -123,8 +144,22 @@ export function readErrorFor(reason) {
 // toCsv(fields, rows) -> CSV text, quoting whatever needs quoting. The other
 // direction of the same library, kept here so this stays the one module that
 // knows about it. rows are arrays, in the order of fields.
+//
+// A cell a spreadsheet would run as a formula (=, +, -, @, tab or carriage
+// return first) is written with a leading apostrophe, which a spreadsheet shows
+// as text. A fix list exists to be opened by a data owner, and a record value
+// such as =HYPERLINK(…) must not become a live formula there (review 15 Nov
+// 2026, C F-10). Plain numbers are left alone: -500 is an amount, not a formula.
+const FORMULA = /^(?![+-]?(\d[\d,]*)?(\.\d+)?$)[=+\-@\t\r]/
+
+// csvRows(rows) -> CSV lines with no header, guarded the same way: the fix list
+// a large file streams out in batches is written by this, not by Papa directly.
+export function csvRows(rows) {
+  return `${Papa.unparse(rows, { header: false, escapeFormulae: FORMULA })}\n`
+}
+
 export function toCsv(fields, rows) {
-  return `${Papa.unparse({ fields, data: rows })}\n`
+  return `${Papa.unparse({ fields, data: rows }, { escapeFormulae: FORMULA })}\n`
 }
 
 // Reads a File/Blob from an <input type="file"> or a drop, entirely in-browser.

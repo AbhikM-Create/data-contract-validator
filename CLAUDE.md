@@ -82,6 +82,11 @@ in the drift checks; the contract object is the interface.
   A file cell is read by the file's declared format; a literal the author typed
   by the canonical one.
 - A blank is "not applicable" for every kind except `notNull`.
+- A rule with a `when` that held for NO record is UNCHECKED (`rule:never-applied`,
+  "its condition held for none of the N records"), never a silent PASS — a
+  typo in the condition value read exactly like a rule that held (review of
+  15 Nov 2026, B G1). A correct file with no such records reads "not
+  confirmed" too; that is the price of never passing what was not tested.
 - A malformed rule, or one over a column the file lacks, is UNCHECKED with the
   reason (`rule:invalid`, `rule:missing-column`) — never a silent PASS.
 - Numeric/date ranges and orderings FAIL a value that cannot be read that way;
@@ -131,7 +136,10 @@ not an extension of it.
   Groups are the values as written: a group spelled differently on the two
   sides shows as a broken total until a group crosswalk joins them.
 - An unconfigured step is SKIPPED, never PASS; a spec naming a missing column,
-  an unknown key option or an unknown format is INVALID, with every reason.
+  an unknown key option or an unknown format is INVALID, with every reason —
+  and so is a FIELD the spec does not have (`unknownSpecFields`): "mappings"
+  for "mapping" silently removed the accuracy step and read PASS. A spec built
+  by the workspace or `runnableSpec` carries only known fields.
 - A matched record with a field that could not be compared (no crosswalk entry)
   is `rowsUnverified`, never "fully matched".
 - Examples are the first K IN THE FILE (`keepFirst`); the CLIs keep 5, the
@@ -146,7 +154,13 @@ key, and sorts every difference. Design and decisions:
 `docs/strategy/11-change-contracts-design.md` (local, not in git).
 - A column the contract does not name is PRESERVED (`others: 'preserve'`, the
   default): forgetting a column can never let it change silently. Columns in
-  one file only are listed in `notChecked`, never passed.
+  one file only are listed in `notChecked`, never passed: any of them makes the
+  result UNVERIFIED, and the headline says how many (a deleted column read
+  ALLOWED, exit 0 — review of 15 Nov 2026, finding 7). Columns a contract
+  ignores by choice (`others: 'ignore'`) are listed in `ignored` and leave the
+  status alone, but the headline says "No change found in the N columns
+  compared … M columns were not compared, as the contract says" — never "No
+  record changed".
 - Policies per field: `preserve`, `free`, `oneOf` (values or a reference),
   `map` (crosswalk), `bounded` (direction, absolute and % limits), `asApproved`;
   qualifiers `onlyFor: 'approved'` and `when` (judged on the BEFORE record;
@@ -225,10 +239,36 @@ disagreement surfaces instead of a guess.
   (stored value positive); `parseXlsx` keeps it as `25000 Cr` with a note, so
   dropping the format can never read a credit as a debit (a silent wrong
   answer, pinned in `parseXlsx.test.js` and `formats.test.js`).
+- A column with NO HEADER that holds a value is refused with its line
+  (`holdsUnnamedValue`, both readers): nothing could name it, so nothing would
+  check it. An empty unnamed column (a trailing comma on every line) is
+  harmless and stays silent.
 - UTF-8 is decoded strictly and refused with the likely cause, never repaired
   (`decodeBytes`, and a strict streaming decoder in `csvStream.mjs`).
 - `parseNumber`: a comma must be a well-formed thousands separator; "1,5" is
   unreadable, not 15.
+- **Exact comparison (review of 15 Nov 2026, findings 1 and 3).** Two cells
+  that both read as numbers are judged equal by their numbers only when the
+  numbers can tell them apart (`numbersComparable`, `formats.js`): a zero-led
+  code (`00123`), a value past 15 significant digits (an 18-digit bank account),
+  a `%` on one side only, or two different currency symbols are compared by
+  their exact TEXT. Equality allows the declared tolerance and a few units in a
+  double's last place (`numbersEqual`) — never a relative 1e-12, which let a
+  changed 13–18-digit account number read "unchanged". `valuesAgree`
+  (reconciliation and change checks) and rule `=`/`!=` both use it; ordering
+  still reads numbers. A mapping field or change-contract field may declare
+  `compareAs: 'text'` (the "compare as text" box on the spec builder).
+  `exactComparison.test.js` failed 9 of 11 on the old code.
+- **Dates nobody declared (finding 8).** Undeclared, only YEAR-FIRST dates are
+  read (`2024-03-01`, `2024/03/01`, an optional time and zone); `01/03/2024` is
+  not read as a date at all (it was read month-first). A time with no zone is
+  UTC, never this machine's local time, so a file gives one answer in Mumbai
+  and in a UTC pipeline. Monitor cannot declare a pattern yet (a known gap), so
+  a day-first column there is text and freshness is skipped, not guessed.
+- **Totals (finding 8).** Reconciliation and change-check totals are summed with
+  Neumaier compensation (`addCompensated`/`totalOf`, as the aggregate rule
+  already did), so the same records in another order tie; a change-check total
+  "must not move" allows only its declared tolerance. `datesAndTotals.test.js`.
 - Reconciliation reads each side by its own format; a crosswalked value by the
   target's. A guessed day/month order would make a swap in flight read correct.
 - Key options `stripLeadingZeros` (all-digit keys only) and `ignoreCase`
@@ -310,6 +350,10 @@ module before adding any store.
   reports and asserts none of their values leaves (with an unmasked control).
 - JUnit output carries sentences and counts, never an example record (CI logs
   are widely read).
+- Every CSV the tool writes (`toCsv`: the fix list, exported findings,
+  `--rejects`) writes a cell a spreadsheet would run as a formula (=, +, -, @,
+  tab, CR first) with a leading apostrophe; plain numbers such as -500 are left
+  alone (review C F-10).
 - Temp partitions hold company data: `dcv-<pid>-*`, owner-only, 0600, deleted on
   exit and Ctrl-C, and every run sweeps dirs whose process is dead.
 
@@ -365,8 +409,11 @@ Organisation (`routes.js`, hash routing —
 a static app needs no server rewrites). `components/AppShell.jsx` carries the
 nav and the trust line, which must stay true ("Files stay on this device.
 Nothing is uploaded: the records and fix lists you download go only to your
-computer, and an account, if you use one, stores only rules, names and
-counts."). It carries no green dot: green is a verdict's colour.
+computer. What you set up — rules and mappings, with any values written into
+them — is kept in this browser, and in your account if you use one."). Since
+the review of 15 Nov 2026 it no longer says "only rules, names and counts": a
+crosswalk, a key map or a value list is a record value, and both the account
+and the browser draft keep it. It carries no green dot: green is a verdict's colour.
 - `components/Staircase.jsx` is the signature view and leads every report —
   four layers on Validate, five steps on Migrations, six on Change checks.
 - Motion (14 Nov 2026): two animations only — the "still working" pulse, and

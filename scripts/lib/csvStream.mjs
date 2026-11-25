@@ -12,7 +12,7 @@ import { Transform } from 'node:stream'
 import Papa from 'papaparse'
 import { columnMapIssues, createRenamer, mappedColumns } from '../../src/lib/columnMap.js'
 import { decodeBytes } from '../../src/lib/formats.js'
-import { cleanRow, isMisaligned, misalignedRowError, readErrorFor, readHeader } from '../../src/lib/parseCsv.js'
+import { cleanRow, holdsUnnamedValue, isMisaligned, misalignedRowError, readErrorFor, readHeader, unnamedColumnError } from '../../src/lib/parseCsv.js'
 import { looksLikeWorkbook } from '../../src/lib/fileKind.js'
 
 // The same refusal decodeBytes gives a page upload, so a file is refused in
@@ -158,6 +158,11 @@ export function streamCsv(path, onRow, encoding = 'utf-8', columnMap = null) {
         }
         if (results.errors.some(isMisaligned)) {
           settle(resolve, { rows, error: misalignedRowError(seen + 1) })
+          parser.abort()
+          return
+        }
+        if (holdsUnnamedValue(results.data, fields)) {
+          settle(resolve, { rows, error: unnamedColumnError(seen + 1) })
           parser.abort()
           return
         }

@@ -28,7 +28,7 @@ export default function SavedObjects({ objects, loading, openId, signedIn, onOpe
         <p style={{ fontFamily: sans, fontSize: 13, color: colors.faint, margin: '10px 0 0' }}>Loading…</p>
       ) : objects.length === 0 ? (
         <p style={{ fontFamily: sans, fontSize: 13, color: colors.faint, lineHeight: 1.55, margin: '10px 0 0', maxWidth: 560 }}>
-          Nothing saved to your account yet. “Save to account” keeps this object’s rules, mapping and run counts — never a record from your files.
+          Nothing saved to your account yet. “Save to account” keeps this object’s rules, mapping and run counts — never your files.
         </p>
       ) : (
         <ul style={{ listStyle: 'none', padding: 0, margin: '10px 0 0' }}>

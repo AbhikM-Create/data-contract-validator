@@ -97,6 +97,10 @@ export default function SpecBuilder({ spec, sourceColumns, targetColumns, sugges
               <input type="checkbox" checked={Boolean(field.ignoreCase)} onChange={(e) => setField(i, { ignoreCase: e.target.checked || undefined })} />
               <span style={{ fontFamily: sans, fontSize: 12, color: colors.mute }}>ignore case</span>
             </label>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 5, cursor: 'pointer' }} title="Account numbers, codes: compare the two values letter for letter, never as numbers or dates">
+              <input type="checkbox" checked={field.compareAs === 'text'} onChange={(e) => setField(i, { compareAs: e.target.checked ? 'text' : undefined })} />
+              <span style={{ fontFamily: sans, fontSize: 12, color: colors.mute }}>compare as text</span>
+            </label>
             <Crosswalk what={`${field.source || 'field'} to ${field.target || 'field'}`} map={field.map} kind={field.mapKind} onKind={(mapKind) => setField(i, { mapKind })} onFile={(file) => onCrosswalk({ field: i }, file)} onClear={() => setField(i, { map: undefined, mapKind: undefined })} />
             <Remove onClick={() => removeField(i)} />
           </Row>

@@ -29,10 +29,14 @@ const BOOL_FALSE = new Set(['false', 'no', 'n', 'f'])
 // Dates must LOOK like dates (separators, or an ISO timestamp) — a bare integer
 // such as 20260913 or 1757 stays numeric. Otherwise every id column in the world
 // gets read as a date and the freshness layer starts inventing cadences.
+//
+// Undeclared, only YEAR-FIRST dates are read — 2024-03-01, 2024/03/01, with an
+// optional time and zone. 01/03/2024 is 1 March or 3 January, and nothing says
+// which, so it is NOT read as a date at all: it was read month-first, against
+// the stated rule (review 15 Nov 2026, finding 8). A file in that form declares
+// its pattern (formats.js) and is read exactly.
 const DATE_PATTERNS = [
-  /^\d{4}-\d{2}-\d{2}([T ]\d{2}:\d{2}(:\d{2})?(\.\d+)?(Z|[+-]\d{2}:?\d{2})?)?$/,
-  /^\d{4}\/\d{2}\/\d{2}([T ]\d{2}:\d{2}(:\d{2})?)?$/,
-  /^\d{1,2}\/\d{1,2}\/\d{4}([T ]\d{1,2}:\d{2}(:\d{2})?)?$/,
+  /^(\d{4})[-/](\d{2})[-/](\d{2})(?:[T ](\d{2}):(\d{2})(?::(\d{2})(?:\.(\d+))?)?(Z|[+-]\d{2}:?\d{2})?)?$/,
 ]
 
 export function isBlank(value) {
@@ -76,12 +80,20 @@ export function parseNumber(raw) {
 export function parseDate(raw) {
   if (isBlank(raw)) return null
   const text = String(raw).trim()
-  if (!DATE_PATTERNS.some((pattern) => pattern.test(text))) return null
-  // A bare YYYY-MM-DD is parsed by JS as UTC midnight; the slash forms are parsed
-  // as local. Normalising to UTC keeps a cadence from wobbling by a timezone
-  // offset when a file mixes the two.
-  const ms = Date.parse(/^\d{4}-\d{2}-\d{2}$/.test(text) ? `${text}T00:00:00Z` : text)
-  return Number.isNaN(ms) ? null : ms
+  const m = DATE_PATTERNS[0].exec(text)
+  if (!m) return null
+  const [, y, mo, d, hh = '0', mi = '0', ss = '0', frac = '', zone] = m
+  // A time with no zone is read as UTC, never as this machine's local time:
+  // the same file must give the same answer in Mumbai and in a UTC pipeline
+  // (it did not — review finding 8). A zone written in the value is honoured.
+  const ms = Date.UTC(Number(y), Number(mo) - 1, Number(d), Number(hh), Number(mi), Number(ss), Number(`0.${frac || '0'}`) * 1000)
+  const check = new Date(ms)
+  if (check.getUTCFullYear() !== Number(y) || check.getUTCMonth() !== Number(mo) - 1 || check.getUTCDate() !== Number(d)) return null
+  if (Number(hh) > 23 || Number(mi) > 59 || Number(ss) > 59) return null
+  if (!zone || zone === 'Z') return ms
+  const sign = zone[0] === '-' ? -1 : 1
+  const [zh, zm] = [Number(zone.slice(1, 3)), Number(zone.slice(-2))]
+  return ms - sign * (zh * 60 + zm) * 60000
 }
 
 export function parseBoolean(raw) {

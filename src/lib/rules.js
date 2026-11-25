@@ -28,7 +28,7 @@
 // at the end. Both run inside createRuleChecker, the one evaluator.
 
 import { isBlank } from './contract.js'
-import { DEFAULT_READER } from './formats.js'
+import { DEFAULT_READER, numbersComparable } from './formats.js'
 import { IDENTIFIERS, IDENTIFIER_NAMES, isIdentifier } from './identifiers.js'
 
 export const RULE_KINDS = {
@@ -190,10 +190,18 @@ function describeCondition(when) {
 // declared format, a literal the author typed by the canonical one. A file in
 // 1.234,56 notation compared with a bound typed as 400000 must read each in its
 // own notation, or one of them is wrong.
-function coerce(left, right, leftReader = DEFAULT_READER, rightReader = DEFAULT_READER) {
+//
+// For equality, two numbers are judged by their numbers only when the numbers
+// can tell them apart (formats.js numbersComparable): "011001" is not the PIN
+// 11001, and two 18-digit account numbers a double cannot hold are not equal
+// because their doubles are. Ordering still reads numbers.
+function coerce(left, right, leftReader = DEFAULT_READER, rightReader = DEFAULT_READER, equality = false) {
   const leftNumber = leftReader.number(left)
   const rightNumber = rightReader.number(right)
-  if (leftNumber !== null && rightNumber !== null) return [leftNumber, rightNumber]
+  if (leftNumber !== null && rightNumber !== null) {
+    if (equality && !numbersComparable(left, right)) return [String(left).trim(), String(right).trim()]
+    return [leftNumber, rightNumber]
+  }
 
   const leftDate = leftReader.date(left)
   const rightDate = rightReader.date(right)
@@ -203,7 +211,7 @@ function coerce(left, right, leftReader = DEFAULT_READER, rightReader = DEFAULT_
 }
 
 export function compare(rawLeft, rawRight, op, leftReader, rightReader) {
-  const [left, right] = coerce(rawLeft, rawRight, leftReader, rightReader)
+  const [left, right] = coerce(rawLeft, rawRight, leftReader, rightReader, op === '=' || op === '!=')
   switch (op) {
     case '=': return left === right
     case '!=': return left !== right
@@ -688,6 +696,13 @@ export function createRuleChecker(rules, { keepFailures = Infinity, columns = nu
       return states.map((state) => {
         if (state.problem) return uncheckedOutcome(state.rule, state.problem, state.code)
         if (state.groups) return aggregateOutcome(state)
+        // A rule whose condition held for no record tested nothing: reading it
+        // as PASS made "status = actve" (a typo) look exactly like a rule that
+        // held (review 15 Nov 2026, B G1). Not confirmed, with the reason, so a
+        // person sees it and decides — never a silent pass.
+        if (state.rule.when && state.applicable === 0 && rowCount > 0) {
+          return uncheckedOutcome(state.rule, `its condition held for none of the ${plural(rowCount, 'record')}, so it checked nothing — check the condition's column and value`, 'rule:never-applied')
+        }
         return {
           rule: state.rule,
           status: state.failing > 0 ? 'FAIL' : 'PASS',

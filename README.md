@@ -123,15 +123,21 @@ pattern, another tool's check — is listed with the reason, never dropped.
 
 ## What is stored, and what never is
 
-**Your files are never uploaded.** Without an account nothing is stored at all.
-Signed in (optional, Supabase), two things are saved to your account:
+**Your files are never uploaded.** What you set up — rules and mappings — is
+kept in this browser's storage, so a refresh loses nothing. Signed in (optional,
+Supabase), your account keeps:
 
 - **contracts** — the rules you wrote, their name and declared format; never the
-  inferred profile of a file (value lists are made of real values);
+  inferred profile of a file;
 - **run summaries** — which layer caught what, as counts; never messages or
-  examples, which quote real values.
+  examples, which quote real values;
+- **migration objects** you save to it — rules, mapping, formats, column
+  matching, tags, typed sign-off and run counts;
+- **organisations** — their members, roles and invitations.
 
-Migration objects are files you keep. Each boundary is enforced in one module
+Definitions can hold record values someone wrote into them: a list of allowed
+values, a crosswalk, a key map. Those are kept wherever the definition is kept;
+the rows of your files never are. Migration objects are also files you keep. Each boundary is enforced in one module
 and proved by a test that feeds real values in and checks none comes out.
 
 ## Security

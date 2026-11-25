@@ -306,3 +306,39 @@ describe('a reconciliation, run as a change contract, finds exactly what reconci
     })
   }
 })
+
+// Review of 15 Nov 2026, findings 7 and 8: a column the check could not compare
+// read ALLOWED, exit 0; and with others: 'ignore' the headline said "No record
+// changed" about columns it never looked at. Both failed on the old code.
+describe('what a change check could not compare', () => {
+  const before = [{ Emp: 'E1', CTC: '500000', Old: 'x' }]
+
+  it('a column deleted by the change makes the result UNVERIFIED, never ALLOWED', () => {
+    const after = [{ Emp: 'E1', CTC: '500000' }]
+    const r = checkChange({ key: 'Emp' }, before, after)
+    expect(r.status).toBe('UNVERIFIED')
+    expect(r.notChecked.join(' ')).toMatch(/"Old" is in the before file only/)
+    expect(r.headline).toMatch(/1 column in one file only/)
+    expect(r.headline).toMatch(/this is not an approval/)
+  })
+
+  it('a column added by the change is not passed either', () => {
+    const after = [{ Emp: 'E1', CTC: '500000', Old: 'x', New: 'y' }]
+    expect(checkChange({ key: 'Emp' }, before, after).status).toBe('UNVERIFIED')
+  })
+
+  it('ignored columns are listed, and the headline says what was compared', () => {
+    const after = [{ Emp: 'E1', CTC: '999', Old: 'x' }]
+    const r = checkChange({ key: 'Emp', others: 'ignore', fields: { Old: { policy: 'preserve' } } }, before, after)
+    expect(r.status).toBe('ALLOWED')
+    expect(r.ignored).toEqual(['CTC'])
+    expect(r.headline).toBe('No change found in the 1 column compared, and nothing was added or removed. 1 column was not compared, as the contract says.')
+    expect(r.headline).not.toMatch(/No record changed/)
+  })
+
+  it('a coverage failure says the change broke the contract, not "0 records"', () => {
+    const r = checkChange({ key: 'Emp' }, before, [...before, { Emp: 'E2', CTC: '1', Old: 'x' }])
+    expect(r.headline).toMatch(/the change broke the contract\. Caught at: Coverage/)
+    expect(r.headline).not.toMatch(/0 records broke/)
+  })
+})

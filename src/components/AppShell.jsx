@@ -111,7 +111,8 @@ export default function AppShell({ route, user, authLoading, busy, engineError, 
           </svg>
           <span style={{ fontFamily: sans, fontSize: 12, color: colors.mute, flex: 1, minWidth: 0, lineHeight: 1.5 }}>
             Files stay on this device. Nothing is uploaded: the records and fix lists you download go only to your
-            computer, and an account, if you use one, stores only rules, names and counts.
+            computer. What you set up — rules and mappings, with any values written into them — is kept in this
+            browser, and in your account if you use one.
           </span>
         </div>
       </div>

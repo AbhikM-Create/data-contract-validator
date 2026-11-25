@@ -15,14 +15,14 @@ const ACCESS = [
       'Check a load file, reconcile a load, monitor a feed',
       'Packs, examples and the guided tour',
       'Download the fix list and the sign-off record',
-      'Your work kept in this browser',
+      'Your set-up kept in this browser: rules and mappings, with any values written into them',
     ],
   },
   {
     title: 'An account also keeps',
     items: [
-      'Migration objects you save to it: rules, mapping, formats, column matching, tags and run counts, on every device you sign in from',
-      'Your contracts: the rules you wrote, their names and declared formats',
+      'Migration objects you save to it: rules, mapping, formats, column matching, tags and run counts, on every device you sign in from. A crosswalk or a list of allowed values keeps the values written in it',
+      'Your contracts: the rules you wrote (with any values in them), their names and declared formats',
       'Run summaries of feed checks: which step caught what, as counts',
       'Organisations: the people who share your objects, each with a role',
     ],
@@ -30,7 +30,7 @@ const ACCESS = [
   {
     title: 'An account never keeps',
     items: [
-      'Your files, or any record in them',
+      'Your files, or the rows in them',
       'Report messages and examples, because they quote real values',
       'The files an object was checked against: open them again on each device, and the app confirms by fingerprint that they are the ones',
     ],
